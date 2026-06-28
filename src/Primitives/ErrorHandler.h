@@ -42,7 +42,7 @@ using Location = std::source_location;
         << '\n' << '\n' << "FATAL ERROR"
         << '\n' << "    " << errorLocation.file_name() << ':'
         << errorLocation.line()
-        << '\n' << "    " << errorMessage << std::endl;
+        << '\n' << "    " << errorMessage << '\n' << '\n' << std::endl;
 
     std::abort();
 }
