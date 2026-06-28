@@ -16,14 +16,15 @@ This document provides a comprehensive reference for configuring the Turblyze so
   - [2. physicalProperties](#2-physicalproperties)
   - [3. initialConditions](#3-initialconditions)
   - [4. boundaryConditions](#4-boundaryconditions)
-  - [5. numericalSchemes](#5-numericalschemes)
-  - [6. SIMPLE](#6-simple)
-  - [7. linearSolvers](#7-linearsolvers)
-  - [8. turbulence](#8-turbulence)
-  - [9. constraints](#9-constraints-optional)
-  - [10. forces](#10-forces-optional)
-  - [11. output](#11-output)
-  - [12. parallelism](#12-parallelism-optional)
+  - [5. time](#5-time-optional)
+  - [6. numericalSchemes](#6-numericalschemes)
+  - [7. SIMPLE](#7-simple)
+  - [8. linearSolvers](#8-linearsolvers)
+  - [9. turbulence](#9-turbulence)
+  - [10. constraints](#10-constraints-optional)
+  - [11. forces](#11-forces-optional)
+  - [12. output](#12-output)
+  - [13. parallelism](#13-parallelism-optional)
 
 ## Overview
 
@@ -107,7 +108,7 @@ initialConditions
 - `k` and `omega` are only used when `model` is not `Laminar`
 - When omitted, they are auto-computed from initial velocity using
   `turbulenceIntensity` and `hydraulicDiameter` from the `turbulence`
-  section (see [turbulence](#8-turbulence)):
+  section (see [turbulence](#9-turbulence)):
   - `l = 0.07 * hydraulicDiameter`
   - `k = 1.5 * (I * |U|)^2`
   - `omega = sqrt(k) / (C_mu^0.25 * l)`
@@ -177,16 +178,16 @@ boundaryConditions
   conditions for `k`, `omega`, and `nut` on wall patches. They must be
   configured as a complete triplet on a given wall patch (all three) or
   omitted entirely; a partial set is a fatal configuration error.
-- `fixedGradient`: **⚠️ Not selectable from case files** — the
+- `fixedGradient`: **⚠️ Not selectable from case files**: the
   `BCType::fixedGradient` storage and evaluation paths exist in the solver, but
   `BCLoader` does not parse it.
   ```cpp
-  // Example syntax (NOT FUNCTIONAL - for future reference only):
+  // Example syntax (NOT FUNCTIONAL):
   // k { walls  { type fixedGradient; gradient 100; } }
   // p { outlet { type fixedGradient; gradient 0.5; } }
   ```
 
-**Note**: Using `fixedGradient` — or any unrecognized type — in a case file is a
+**Note**: Using `fixedGradient`, or any unrecognized type, in a case file is a
 fatal configuration error. `BCLoader` aborts with
 `Unknown boundary condition type '...' for field '...' on patch '...'. Valid types: ...`
 rather than falling back silently. Case-file support for `fixedGradient` is
@@ -195,11 +196,52 @@ planned for future work.
 **Calculated values:** For `k` and `omega` boundary conditions, `value`
 can be set to `calculated` instead of a numeric value. The solver will
 compute the value from `turbulenceIntensity` and `hydraulicDiameter`
-(see [turbulence](#8-turbulence)):
+(see [turbulence](#9-turbulence)):
 - `k = 1.5 * (I * |U|)^2`
 - `omega = sqrt(k) / (C_mu^0.25 * 0.07 * D_h)`
 
-### 5. numericalSchemes
+### 5. time (Optional)
+Controls the transient solve. When this section is omitted, or `timeScheme` is `steadyState`, the solver runs the steady SIMPLE algorithm and every other key
+in this section is ignored. Any other `timeScheme` switches to the transient (URANS) path, which runs a transient solve with a fixed number of SIMPLE outer correctors per step.
+
+```cpp
+time
+{
+    // Options: steadyState, implicitEuler, CrankNicolson
+    timeScheme          implicitEuler;
+
+    timeStep            0.1;        // Time step size [s]
+    totalTime           10;         // Total simulated time [s]
+    writingIntervals    1;          // Write output every N steps (>= 1, default 1)
+    nOuterCorrectors    20;         // SIMPLE outer correctors per step (>= 1, default 20)
+    CrankNicolsonCoeff  0.5;        // Crank-Nicolson coefficient [0, 1], default 0.5
+}
+```
+
+**Time Scheme Options:**
+- `steadyState`: No time term; the run is a steady SIMPLE solve (default).
+- `implicitEuler`: First-order backward Euler, fully implicit.
+- `CrankNicolson`: Second-order trapezoidal. Blended toward implicit Euler by
+  `CrankNicolsonCoeff`: `1.0` is pure Crank-Nicolson and
+  `0.0` collapses to implicit Euler; values around `0.5`-`0.9` trade accuracy
+  for stability.
+
+**Notes**:
+- `timeStep` and `totalTime` are **required** and must be positive whenever a
+  transient scheme is selected. The number of steps is
+  `round(totalTime / timeStep)` (at least one).
+- `writingIntervals` (default `1`) writes VTK output every N steps; the initial
+  condition (t = 0) and the final step are always written. Must be `>= 1`.
+- `nOuterCorrectors` (default `50`) is the fixed number of SIMPLE outer
+  correctors performed each time step, with no per-step convergence check.
+  Must be `>= 1`. The `SIMPLE.numIterations`/`convergenceTolerance` keys only
+  govern the steady path.
+- `CrankNicolsonCoeff` (default `1.0`) is consumed only by `CrankNicolson`; it
+  must lie in `[0, 1]`.
+- Transient output is written as a ParaView `.pvd` time series, see
+  [output](#12-output).
+
+### 6. numericalSchemes
 Selects discretization schemes.
 
 **Per-Equation Format** (recommended):
@@ -232,8 +274,9 @@ An unknown name is rejected at startup.
 - `CentralDifference`: Second-order central difference (accurate, may oscillate)
 - `SecondOrderUpwind`: Second-order upwind (balance of accuracy and stability)
 
-### 6. SIMPLE
-SIMPLE algorithm parameters.
+### 7. SIMPLE
+SIMPLE algorithm parameters. These govern the steady-state path; for the
+transient path see [time](#5-time-optional).
 
 ```cpp
 SIMPLE
@@ -254,7 +297,7 @@ SIMPLE
 
 **Non-orthogonal correctors** (`nNonOrthogonalCorrectors`, optional, default `0`): number of pressure-correction re-solves per SIMPLE iteration, matching simpleFoam's non-orthogonal pressure corrector loop. Because p' restarts from zero every iteration, its first solve carries no non-orthogonal correction; each corrector recomputes grad(p') and re-solves with the explicit correction term. Use `0` for orthogonal (hexahedral) meshes and `1`–`2` for tetrahedral or polyhedral meshes. Each corrector adds one pressure solve per iteration.
 
-### 7. linearSolvers
+### 8. linearSolvers
 Linear solver settings for each field.
 
 ```cpp
@@ -296,21 +339,21 @@ linearSolvers
 
 Recognized keys per section:
 
-- `solver` — `BiCGSTAB` (non-symmetric matrices: U, k, omega) or `PCG`
+- `solver`: `BiCGSTAB` (non-symmetric matrices: U, k, omega) or `PCG`
   (SPD matrices: p). Optional; defaults to `BiCGSTAB` for U/k/omega and `PCG`
   for p.
-- `preconditioner` — parsed for forward compatibility but not yet consumed;
+- `preconditioner`: parsed for forward compatibility but not yet consumed;
   the Eigen solvers currently use Jacobi (diagonal) unconditionally.
   Optional; defaults to `Jacobi`.
-- `tolerance` — relative residual tolerance used by Eigen's iterative
+- `tolerance`: relative residual tolerance used by Eigen's iterative
   solvers (`|r| / |b|`).
-- `maxIter` — iteration cap before the solver gives up.
+- `maxIter`: iteration cap before the solver gives up.
 
 Algorithm/equation pairing is not validated. Picking `PCG` for a
 non-symmetric equation will compile and run but will not converge to the
 correct solution.
 
-### 8. turbulence
+### 9. turbulence
 Turbulence model configuration.
 
 ```cpp
@@ -336,7 +379,7 @@ turbulence
 - Wall distance is computed using meshWave iterative propagation method
   (not configurable)
 
-### 9. constraints (Optional)
+### 10. constraints (Optional)
 Solution field constraints.
 
 ```cpp
@@ -357,7 +400,7 @@ constraints
 }
 ```
 
-### 10. forces (Optional)
+### 11. forces (Optional)
 Aerodynamic force and coefficient reporting on one wall patch.
 
 ```cpp
@@ -381,10 +424,14 @@ forces
   referenceArea`.
 - Pressure loads are integrated with the face projected area vector. Friction
   loads use the model-provided wall shear stress and face contact area.
-- Output is written next to the configured VTK volume file as
-  `<name>_forces.txt`.
+- **Steady runs** write a single summary next to the configured VTK volume file
+  as `<name>_forces.txt`.
+- **Transient runs** additionally write a per-time-step history as
+  `<name>_forces.csv` with columns
+  `time,pressureDrag,frictionDrag,totalDrag,pressureLift,frictionLift,totalLift,Cd,Cl`
+  (one row per step, including t = 0), and still print the final-step summary.
 
-### 11. output
+### 12. output
 Output configuration.
 
 ```cpp
@@ -408,7 +455,13 @@ output
   face-based topology. This can produce larger files and may make some
   downstream ParaView filters slower than native tetra/hex/wedge/pyramid
   output.
-- Output is written at the end of the simulation only
+- **Steady runs** write output once, at the end of the simulation.
+- **Transient runs** write a ParaView time series instead: a `<name>.pvd`
+  collection file alongside one indexed `<name>_NNNNNN.vtu` volume file (and its
+  `<name>_NNNNNN_boundary.vtp` sibling) per written step, where `NNNNNN` is the
+  zero-padded step index. The t = 0 initial condition and the final step are
+  always written; intermediate steps follow `time.writingIntervals`. Open the
+  `.pvd` in ParaView to animate the series.
 - `debug` (default: `false`): When `true`, enables verbose
   console output including mesh geometry details, boundary
   condition summaries, solver configuration, per-equation
@@ -419,7 +472,7 @@ output
   `false`, only essential output is shown (phase headers, iteration residuals,
   convergence status, flow statistics, and error/warning messages).
 
-### 12. parallelism (Optional)
+### 13. parallelism (Optional)
 Shared-memory parallelism settings.
 
 ```cpp
@@ -434,4 +487,4 @@ parallelism
 - Sets the thread count for all OpenMP loops (matrix assembly, gradient
   reconstruction, cell-update sweeps, turbulence transport) and Eigen's
   sparse solvers
-- Section can appear anywhere in the case file — parsing is order-independent
+- Section can appear anywhere in the case file, since parsing is order-independent

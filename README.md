@@ -11,12 +11,14 @@ SPDX-License-Identifier: Apache-2.0
 
 <p align="center">3D Incompressible CFD Solver</p>
 
-A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SST turbulence modeling. The solver reads Fluent `.msh` meshes, solves steady-state incompressible flow, and exports results to VTK format for visualization in ParaView.
+A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SST turbulence modeling. The solver reads Fluent `.msh` meshes, solves steady-state or transient (URANS) incompressible flow, and exports results to VTK format for visualization in ParaView.
 
 ## Features
 
 ### Core Capabilities
 - **3D Incompressible Flow**: Solves momentum equations with the pressure correction via the SIMPLE algorithm
+
+- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson time schemes using a fixed number of SIMPLE outer correctors per step. Selected by the `time` case section; transient runs write a ParaView `.pvd` time series
 
 - **Collocated Grid**: Uses Rhie-Chow face-velocity interpolation to prevent pressure checkerboarding
 
@@ -66,8 +68,8 @@ brew install cmake eigen vtk libomp
 ```
 
 > **Note (OpenMP setup)**: The `CMakeLists.txt` is tailored to two configurations:
-> - **Linux with GCC/Clang** — OpenMP ships with the compiler; nothing to do.
-> - **Apple Silicon macOS with AppleClang + Homebrew `libomp`** — the build
+> - **Linux with GCC/Clang**: OpenMP ships with the compiler; nothing to do.
+> - **Apple Silicon macOS with AppleClang + Homebrew `libomp`**: the build
 >   wires in `-Xpreprocessor -fopenmp` and the libomp path
 >   `/opt/homebrew/opt/libomp` (hardcoded). Run `brew install libomp` first.
 >
@@ -118,18 +120,19 @@ The solver uses a case file system (default file: `defaultCase`). This allows ru
 The default `defaultCase` file contains:
 - **Mesh**: `../inputFiles/sphere.msh` (sphere in a channel)
 - **Boundary Conditions**:
-  - Inlet: Fixed velocity (0, 0, -20.0) m/s, zero gradient pressure
+  - Inlet: Fixed velocity (0, 0, -0.043821) m/s, zero gradient pressure
   - Outlet: Zero gradient velocity, fixed pressure (0 Pa)
   - Walls (`sphere`, `wall1`–`wall4`): No-slip velocity, zero gradient pressure; `kWallFunction`, `omegaWallFunction`, `nutWallFunction` for turbulence
+- **Time**: Transient simulation, implicit-Euler stepping (timeStep 0.1 s, totalTime 200 s, 20 outer correctors per step)
 - **Discretization**: Second-Order Upwind convection scheme for momentum and Upwind convection scheme for turbulence equations. Least-squares for gradients computation
 - **SIMPLE Parameters**: αU = 0.7, αp = 0.3, αk = 0.5, αω = 0.5, tolerance = 1e-3 (scaled residuals), max iterations = 500
-- **Turbulence**: Enabled by default with k-omega SST model
-- **Output**: `../outputFiles/sphere.vtu` (plus `sphere_boundary.vtp`, and `sphere_forces.txt` when forces are enabled)
+- **Turbulence**: `Laminar` (k-omega SST is available via `model kOmegaSST`)
+- **Output**: `../outputFiles/sphere.vtu` (plus `sphere_boundary.vtp`, and `sphere_forces.txt` when forces are enabled).
 
 ### Flow Physics
 - **Fluid Properties**: Air (ρ = 1.225 kg/m³, μ = 1.7894e-5 Pa·s)
-- **Flow Type**: Flow over a sphere at 20 m/s
-- **Turbulence Inlet Conditions**: Turbulence intensity 5%, hydraulic diameter 0.01 m
+- **Flow Type**: Low-Reynolds laminar flow over a sphere
+- **Turbulence Inlet Conditions** (when k-omega SST is enabled): Turbulence intensity 5%, hydraulic diameter 0.01 m
 
 ## Input/Output
 
@@ -151,6 +154,10 @@ The default `defaultCase` file contains:
   Turblyze's face topology. This is more robust for mixed/polyhedral meshes,
   but files can be larger and some ParaView filters may run slower than with
   native tetra/hex/wedge/pyramid cells.
+- **Transient runs**: output is written as a ParaView `.pvd` time series, one
+  indexed `<name>_NNNNNN.vtu` (and `_boundary.vtp` sibling) per written step.
+  Open the `.pvd` file in ParaView to load and animate all steps together. The
+  write cadence is set by `time.writingIntervals`; the initial condition and the final step are always written.
 
 ### ParaView Visualization
 1. Open the `.vtu` file in ParaView
@@ -249,7 +256,7 @@ Browsable HTML API documentation is generated from the Doxygen comments in the s
 doxygen Doxyfile
 ```
 
-Output is written to `docs/doxygen/html/`. Open `docs/doxygen/html/index.html` in a browser to navigate classes, call graphs, and collaboration diagrams. The `docs/doxygen/` tree is generated and is not tracked in git — regenerate it locally after pulling changes.
+Output is written to `docs/doxygen/html/`. Open `docs/doxygen/html/index.html` in a browser to navigate classes, call graphs, and collaboration diagrams. The `docs/doxygen/` tree is generated and is not tracked in git, so regenerate it locally after pulling changes.
 
 Requires `doxygen` and (for diagrams) `graphviz`:
 ```bash
@@ -283,7 +290,7 @@ For developers wanting to extend the solver, see `docs/DEVELOPER_GUIDE.md` for:
 
 Directions under consideration for future development, aspirational, not commitments. This list will evolve over time.
 
-- [ ] Transient (unsteady) solver: PISO / PIMPLE pressure-velocity coupling
+- [ ] Dedicated PISO pressure-velocity coupling for transient runs
 - [ ] Fully-coupled implicit solver
 - [ ] Additional turbulence models
 - [ ] Additional mesh formats (e.g. OpenFOAM polyMesh, CGNS)
@@ -291,7 +298,7 @@ Directions under consideration for future development, aspirational, not commitm
 
 ## License and Support
 
-Turblyze is released under the **Apache License 2.0** — see the [`LICENSE`](LICENSE)
+Turblyze is released under the **Apache License 2.0**, see the [`LICENSE`](LICENSE)
 file for the full text. Every source file carries an SPDX
 `Apache-2.0` identifier.
 

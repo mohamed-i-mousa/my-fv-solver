@@ -33,7 +33,7 @@ The drag agreement is within acceptable tolerance for this steady-RANS sphere ca
 > computed by `scripts/forcesStats.py` over the per-iteration force history from
 > the original verification run, retained as the committed artifact
 > `results/sphereForcesHistory.csv`. The current solver writes only a converged
-> `<case>_forces.txt` summary, not a per-iteration history — see `runGuide.md`.
+> `<case>_forces.txt` summary, not a per-iteration history, see `runGuide.md`.
 
 ## Files
 

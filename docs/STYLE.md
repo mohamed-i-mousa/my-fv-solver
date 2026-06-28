@@ -50,9 +50,9 @@ then `@file`/`@brief`/`@details` and (for a class header) `@class`:
  *****************************************************************************/
 ```
 
-Every file opens with the centred identity banner — the project name,
+Every file opens with the centred identity banner (the project name,
 `3D incompressible CFD solver`, a `Copyright (C) 2025-2026 Mohamed Mousa` line,
-and the machine-readable `SPDX-License-Identifier: Apache-2.0` on its own line —
+and the machine-readable `SPDX-License-Identifier: Apache-2.0` on its own line)
 followed by a `---` divider before the Doxygen tags. `@file`, `@brief`,
 `@class`, `@details`, `@param`, `@return`, and `@note` are the complete set of
 Doxygen tags used in this codebase.
@@ -70,19 +70,19 @@ banners**. The label is centred in a field of `*`:
   characters** total (never exceed 80).
 - After the `// ` prefix, 76 columns remain. With
   `stars = 76 - len(label) - 2`, split them `left = (stars + 1) / 2` and
-  `right = stars - left` — so on an odd split the **extra `*` goes before the
+  `right = stars - left`, so on an odd split the **extra `*` goes before the
   label**.
 - A blank line precedes and follows every banner.
 
 ### Headers banner
 
 The first banner in every file (after `#pragma once` in a header) is `Headers`.
-It groups the includes with `//` sub-comments — only the groups that apply, in
+It groups the includes with `//` sub-comments, only the groups that apply, in
 this order:
 ```cpp
 // ********************************** Headers *********************************
 
-// Implementation header        (.cpp only — the matching .h)
+// Implementation header        (.cpp only, the matching .h)
 #include "MeshReader.h"
 
 // Standard library headers
@@ -108,7 +108,7 @@ After `Headers`, banner each top-level definition and each member group:
 // *************************** concept CellFieldType **************************
 // ******************************* namespace VTK ******************************
 ```
-Each definition gets its own banner — a `concept` that constrains a class is
+Each definition gets its own banner: a `concept` that constrains a class is
 banner-separated from the `class` it precedes.
 
 Inside a class, the canonical member-group labels are:
@@ -154,7 +154,7 @@ brace and may carry several mid-section banners (`Special Member Functions`,
 `Setter Methods`, `Accessor Methods`, …) under a single `public:`.
 
 A `.cpp` reuses the **same** group names as its header, but only for the
-sections it actually defines — typically `Special Member Functions` plus
+sections it actually defines, typically `Special Member Functions` plus
 `Private Methods`; inline accessors and data members never reappear in the
 `.cpp`.
 
@@ -172,7 +172,7 @@ to be public *to*):
 
 All documentation lives in **headers only**. Source files have no Doxygen on method implementations.
 
-**In headers (.h)** — use `///` for all method and function declarations:
+**In headers (.h)**: use `///` for all method and function declarations:
 ```cpp
 /// Calculate boundary face value for a scalar field
 [[nodiscard]] Scalar boundaryFaceValue
@@ -200,14 +200,14 @@ Use multiple `///` lines only when a non-obvious invariant or formula genuinely 
 [[nodiscard]] static Scalar secondMoment(Scalar a, Scalar b, Scalar c);
 ```
 
-Do not add trailing periods to `///` method or function doc comments — they are labels, not
+Do not add trailing periods to `///` method or function doc comments, since they are labels, not
 sentences. Full prose sentences on member-variable comments may end with a period when
 explaining a non-obvious constraint. Do not use `@param`, `@return`, or `@note` tags on
-individual method declarations — the function signature and name already carry that information.
+individual method declarations, since the function signature and name already carry that information.
 The full `/** @brief … @param … @return */` Doxygen form is reserved for the file-level
 `@file`/`@class` block at the top of each header.
 
-**In source files (.cpp)** — no Doxygen on implementations; use inline `//` comments only where logic needs explanation:
+**In source files (.cpp)**: no Doxygen on implementations; use inline `//` comments only where logic needs explanation:
 ```cpp
 // CASE 1: Face is "Triangle" (numNodes == 3)
 if (numNodes == 3)
@@ -235,7 +235,7 @@ void addPatch(BoundaryPatch patch);
 
 ## Const Correctness
 
-`const` by default (Core Guidelines Con.1–Con.4): local variables, write-once data members, and non-mutating member functions — including private and protected helpers.
+`const` by default (Core Guidelines Con.1–Con.4): local variables, write-once data members, and non-mutating member functions, including private and protected helpers.
 
 **By-value function parameters are never `const`.** Con.1's Exceptions section settles this: "Function parameters passed by value are rarely mutated, but also rarely declared `const`" and marks `void g(const int i)` as pedantic.
 Top-level const on a by-value parameter is invisible to callers (it is not part of the signature) and only adds noise:
@@ -278,7 +278,7 @@ else
 ## Error Handling
 Two macros from `ErrorHandler.h` for all error reporting:
 
-**Fatal errors** (unrecoverable — prints message with file/line and aborts):
+**Fatal errors** (unrecoverable, prints message with file/line and aborts):
 ```cpp
 FatalError
 (
@@ -287,7 +287,7 @@ FatalError
 );
 ```
 
-**Warnings** (non-fatal — prints message with file/line and continues):
+**Warnings** (non-fatal, prints message with file/line and continues):
 ```cpp
 Warning
 (
@@ -315,7 +315,7 @@ return phi[face.ownerCell()];
 Lines should not exceed 80 characters. Break long lines using the Allman-style parameter formatting, string concatenation with `+`, or continuation on the next line.
 
 ## Character Literals
-Use `'\n'`, `':'`, `' '`, etc. for single characters — not `"\n"`, `":"`, `" "`.
+Use `'\n'`, `':'`, `' '`, etc. for single characters, not `"\n"`, `":"`, `" "`.
 Single-character string literals carry an unnecessary null terminator and are
 less semantically precise:
 ```cpp
@@ -334,26 +334,26 @@ std::cerr << "\n" << "Error: " << msg << "\n";
 - **Type aliases**: PascalCase (e.g., `VectorField`, `ScalarField`)
 - **Enum class names**: PascalCase (e.g., `Field`, `BCType`, `PatchType`)
 - **Enumerators**: lowerCamelCase (e.g., `Field::Ux`, `BCType::fixedValue`,
-  `PatchType::wall`). Avoid `ALL_CAPS` — it collides with preprocessor macros
+  `PatchType::wall`). Avoid `ALL_CAPS`, since it collides with preprocessor macros
   (C++ Core Guidelines Enum.5). Prefer `enum class` over plain `enum` (Enum.3).
 
 ### Intent-revealing aliases
 
 Prefer the foundation aliases over bare standard-library types when the *role*
-of the value is meaningful — they signal intent to the reader (the compiler
+of the value is meaningful, since they signal intent to the reader (the compiler
 still sees the underlying type, so they are documentation, not type safety):
 
-- **`Integer.h`** — `Index` (addresses an element) and `Count` (a size or
+- **`Integer.h`**: `Index` (addresses an element) and `Count` (a size or
   quantity), both `std::size_t`; plus `IndexList`/`CountList` and the
   `IndexListRef` (`std::span<const Index>`) view.
-- **`StringTypes.h`** — owned text `Name` / `Token` / `FilePath` / `Message`
+- **`StringTypes.h`**: owned text `Name` / `Token` / `FilePath` / `Message`
   (all `std::string`) and their borrowed `std::string_view` views with the
   `*Ref` suffix (`NameRef`, `TokenRef`, `FilePathRef`, `MessageRef`).
-- **`MeshContainers.h`** — owning `NodeList`/`FaceList`/`CellList`/`PatchList`
+- **`MeshContainers.h`**: owning `NodeList`/`FaceList`/`CellList`/`PatchList`
   and the borrowed `*Ref` span views (`FaceListRef`, `MutableFaceListRef`, …).
 
 The `*Ref` suffix marks a non-owning view in the name. Domain-narrow aliases
-(`FaceIndex`, `PatchName`) are intentionally **not** used — a single `Index` /
+(`FaceIndex`, `PatchName`) are intentionally **not** used, since a single `Index` /
 `Name` keeps the vocabulary small. Local aliases (e.g. `Face::OptionalIndex`,
 `CaseReader::EntryMap`) live next to the class that needs them.
 
@@ -364,11 +364,11 @@ The `*Ref` suffix marks a non-owning view in the name. Domain-narrow aliases
 Always declare special members in this order inside the class `public` section:
 
 ```cpp
-/// Copy constructor and assignment — <reason>
+/// Copy constructor and assignment - <reason>
 ClassName(const ClassName&) = delete;
 ClassName& operator=(const ClassName&) = delete;
 
-/// Move constructor and assignment — <reason>
+/// Move constructor and assignment - <reason>
 ClassName(ClassName&&) = delete;
 ClassName& operator=(ClassName&&) = delete;
 
@@ -377,9 +377,9 @@ ClassName& operator=(ClassName&&) = delete;
 ```
 
 The brief reason on the `///` comment documents *why* the operation is restricted:
-- `Not copyable (const T& members)` — reference members cannot be rebound
-- `Not movable (const T& members)` — same
-- `Not movable (self-referential Eigen solver)` — unsafe default move
+- `Not copyable (const T& members)`, reference members cannot be rebound
+- `Not movable (const T& members)`, same
+- `Not movable (self-referential Eigen solver)`, unsafe default move
 
 ### Choosing the right rule
 
@@ -388,7 +388,7 @@ The brief reason on the `///` comment documents *why* the operation is restricte
 | `const T&` or `T&` reference | `= delete` | `= delete` | `= default` (noexcept) |
 | `std::unique_ptr<T>` | `= delete` | `= default` | `= default` (noexcept) |
 | Eigen iterative solver | `= delete` | `= delete` | `= default` (noexcept) |
-| No non-trivial members | *(declare none — rule of zero)* | | |
+| No non-trivial members | *(declare none, rule of zero)* | | |
 
 **Rule of zero**: If the compiler-generated defaults are correct, declare nothing.
 Applies to value-only classes (`Face`, `Cell`, `BoundaryData`).
@@ -417,7 +417,7 @@ internalField_(Mesh::cellCount(), T{})
 
 Initializer list order must match member declaration order exactly.
 Members absent from the list are initialized in declaration order before
-the listed ones — omitting a member is not an order violation, but all
+the listed ones. Omitting a member is not an order violation, but all
 *listed* members must appear in the same relative sequence as their declarations.
 
 ## Stream Output Alignment

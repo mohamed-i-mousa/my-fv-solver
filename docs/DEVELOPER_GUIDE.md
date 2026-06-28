@@ -31,7 +31,7 @@ following the OpenFOAM convention.
 - **`src/Primitives/`**: foundation types with no mesh-specific semantics
   - `Scalar.h`, `Vector.h/.cpp`, `Tensor.h/.cpp`, `OptionalRef.h`,
     `ErrorHandler.h`, `Logger.h/.cpp`
-- **`src/Mesh/`**: mesh topology — geometric entities and mesh I/O
+- **`src/Mesh/`**: mesh topology, geometric entities and mesh I/O
   - `BoundaryPatch.h`, `Face.h/.cpp`, `Cell.h/.cpp`, `Mesh.h`,
     `MeshReader.h/.cpp`, `MeshChecker.h/.cpp`, `MeshCreator.h/.cpp`
 - **`src/Fields/`**: typed field containers and field identity used by all layers
@@ -41,11 +41,15 @@ following the OpenFOAM convention.
     `BoundaryConditionsLoader.h/.cpp`
 - **`src/Schemes/`**: discretization schemes, grouped by family
   - `ConvectionSchemes/`: `ConvectionSchemes.h` (abstract base) plus one
-    header/implementation pair per concrete scheme — `UpwindScheme.h/.cpp`,
+    header/implementation pair per concrete scheme: `UpwindScheme.h/.cpp`,
     `CentralDifferenceScheme.h/.cpp`, `SecondOrderUpwindScheme.h/.cpp`
   - `GradientSchemes/`: `GradientScheme.h/.cpp` (abstract base),
     `LeastSquares.h/.cpp` (least-squares gradient scheme)
   - `Interpolation/`: `LinearInterpolation.h`
+  - `TimeSchemes/`: `TimeScheme.h/.cpp` (abstract base + runtime selection)
+    plus one header per scheme: `SteadyState.h`, `ImplicitEuler.h`,
+    `CrankNicolson.h`, each reporting the d/dt contribution to the implicit
+    diagonal and explicit source
 - **`src/LinearSystem/`**: algebraic system assembly and solving
   - `Matrix.h/.cpp`, `LinearSolvers.h`, `TransportEquation.h`
 - **`src/Solver/`**: SIMPLE pressure–velocity algorithm and field constraints
@@ -66,7 +70,7 @@ following the OpenFOAM convention.
   - `CaseReader.h/.cpp`, `CaseConfiguration.h/.cpp`
 - **`src/Application/`**: top-level orchestration and solver assembly
   - `CFDApplication.h/.cpp`, `SolverSetup.h/.cpp`
-- **`src/main.cpp`**: command-line entry point — creates `CFDApplication` and
+- **`src/main.cpp`**: command-line entry point, creates `CFDApplication` and
   starts the simulation workflow
 
 
@@ -147,7 +151,7 @@ Notes:
 - `nutWallFunction`: Wall function for turbulent viscosity
 
 **Value Storage**:
-- Scalar-only — one `scalarValue_`, one `scalarGradient_`; there is no
+- Scalar-only: one `scalarValue_`, one `scalarGradient_`; there is no
   vector storage (velocity BCs are registered per component)
 - Validated getters: `fixedScalarValue()`, `fixedScalarGradient()`
 
@@ -156,9 +160,9 @@ Notes:
 
 **Key Features**:
 1. **Direct Patch Lookup**: `Face::patch()` returns an `OptionalRef<BoundaryPatch>` linked at startup via `BoundaryConditions::linkFaces()`
-2. **Per-Component Velocity BCs**: velocity has no vector BC type — it is registered as three independent scalar BCs under `Field::Ux/Uy/Uz`. `BCLoader` splits the case file's `U` vector at registration (`setFixedValue(patch, Field::Ux, value.x())`, etc.)
+2. **Per-Component Velocity BCs**: velocity has no vector BC type: it is registered as three independent scalar BCs under `Field::Ux/Uy/Uz`. `BCLoader` splits the case file's `U` vector at registration (`setFixedValue(patch, Field::Ux, value.x())`, etc.)
 3. **Robust Retrieval**: `fieldBC()` with comprehensive error handling
-4. **Boundary Value Calculation**: `boundaryFaceValue()` resolves a face value for any field — every field (`Ux`, `Uy`, `Uz`, `p`, `pCorr`, `k`, `omega`, `nut`) is scalar
+4. **Boundary Value Calculation**: `boundaryFaceValue()` resolves a face value for any field: every field (`Ux`, `Uy`, `Uz`, `p`, `pCorr`, `k`, `omega`, `nut`) is scalar
 
 ### BC Evaluation Logic
 **Scalar Boundary Values**:
@@ -191,7 +195,7 @@ services (`faceGradient`, `limitGradient`, `fieldGradient`, plus the private
 virtual operation, `cellGradient`. The base constructor is `protected` and the
 destructor is `virtual`; copy/move are deleted (it holds `const Mesh&` and
 `const BoundaryConditions&` references, now `protected` so derived overrides can
-read them). `fieldGradient` is a template method — it loops `cellGradient()`
+read them). `fieldGradient` is a template method: it loops `cellGradient()`
 (dispatched through the vtable) then applies `limitGradient()`, so it needs no
 changes when a new scheme is added.
 
@@ -205,7 +209,7 @@ is the only concrete scheme today. It owns the least-squares-specific
 error. To add another scheme (e.g. Green–Gauss), derive a new `final` class,
 override `cellGradient`, and add one branch to the factory.
 
-#### Cell Gradient Computation (`cellGradient` — `LeastSquares`)
+#### Cell Gradient Computation (`cellGradient` in `LeastSquares`)
 **Method**: Weighted least-squares gradient reconstruction
 
 **Algorithm**:
@@ -324,10 +328,19 @@ struct ConvectionTerm
     const ConvectionSchemes& scheme;     // Convection discretization
 };
 
+struct TransientTerm
+{
+    const TimeScheme& scheme;            // d(phi)/dt discretization
+    Scalar deltaT;                       // Time step size
+    const ScalarField& phiOld;           // Field at previous time step (phi^n)
+    const ScalarField* oldDdt;           // Stored old time derivative (CN; nullptr otherwise)
+};
+
 struct TransportEquation
 {
     Field field;                        // Ux, Uy, Uz, p, pCorr, k, omega, nut
     ScalarField& phi;                   // Current field values (mutable for zero-copy solve)
+    std::optional<TransientTerm> transient = std::nullopt;  // d/dt term (nullopt = steady)
     std::optional<ConvectionTerm> convection = std::nullopt;
     const FaceFluxField& GammaFace;      // Face-based diffusion coefficient
     const ScalarField& source;          // Explicit source term
@@ -345,6 +358,11 @@ struct TransportEquation
 - Internal faces: assembles diffusion and convection with non-orthogonal correction
 - Boundary faces: handles fixedValue, zeroGradient, noSlip, and wall function types
 - Deferred-correction for CDS/SOU added to RHS
+- Transient term (when `eq.transient` is set): a per-cell pass adds the time
+  scheme's `V/Δt`-based contribution to the diagonal and the corresponding
+  explicit source from `phi^n` (and, for Crank-Nicolson, the stored old time
+  derivative). The coefficients are kinematic (no `rho`); `steadyState` leaves
+  `eq.transient` empty so the loop is skipped.
 
 ### Under-relaxation
 `relax(α, φ_prev)` performs Patankar-style implicit relaxation by scaling the diagonal and adjusting RHS with the previous state.
@@ -353,14 +371,14 @@ struct TransportEquation
 ## Parallelization (OpenMP)
 
 The solver uses shared-memory OpenMP for hot cell and face loops. There is
-**no domain decomposition** — that is an MPI concept. OpenMP threads share the
+**no domain decomposition**: that is an MPI concept. OpenMP threads share the
 same address space and operate on the full mesh simultaneously.
 
 ### Eigen RowMajor requirement
 
 `Eigen::BiCGSTAB` only parallelizes its sparse matrix-vector product when the
 matrix is stored **row-major**. The column-major default produces single-threaded
-solves even with `-fopenmp` active — silently. `Matrix.h` therefore declares:
+solves even with `-fopenmp` active, silently. `Matrix.h` therefore declares:
 
 ```cpp
 Eigen::SparseMatrix<Scalar, Eigen::RowMajor> matrixA_;
@@ -368,10 +386,10 @@ Eigen::SparseMatrix<Scalar, Eigen::RowMajor> matrixA_;
 
 **Never change this to the Eigen default `ColMajor`.** The same type must be
 propagated through `LinearSolvers.h` (all BiCGSTAB / PCG declarations). The
-`ConjugateGradient` solver additionally requires `Lower|Upper` UpLo — that is
+`ConjugateGradient` solver additionally requires `Lower|Upper` UpLo, which is
 already set in `LinearSolvers.h` and must be preserved.
 
-### Matrix assembly — per-thread buffer pattern
+### Matrix assembly: per-thread buffer pattern
 
 `Matrix::buildMatrix` loops over all faces. Internal faces write to *both* owner
 and neighbor cells, so a naive parallel face loop would race on `tripletList_`
@@ -401,7 +419,7 @@ std::vector<Matrix::Vec> perThreadB_(T, Matrix::Vec::Zero(eIdx(numCells)));
     }
 }
 
-// serial merge — O(numFaces), not on the hot path
+// serial merge, O(numFaces), not on the hot path
 for (auto& v : perThreadTriplets_)
     tripletList_.insert(tripletList_.end(), move_iterator(v.begin()), ...);
 for (const auto& v : perThreadB_) vectorB_ += v;
@@ -413,11 +431,11 @@ The `assembleInternalFace` and `assembleBoundaryFace` helpers receive the
 thread-local `triplets` and `localB` by reference; they never touch any shared
 state.
 
-`Matrix::setValues` is deliberately left serial — it processes a small number
+`Matrix::setValues` is deliberately left serial: it processes a small number
 of constrained cells (typically wall patches) and has irregular neighbor
 accesses that do not amortize thread-launch overhead.
 
-### Face loops that write two cells — scatter vs gather
+### Face loops that write two cells: scatter vs gather
 
 Any face loop that accumulates into `field[ownerIdx]` **and** `field[neighborIdx]`
 is a scatter loop with a write race. There are two safe approaches:
@@ -429,7 +447,7 @@ is a scatter loop with a write race. There are two safe approaches:
    `cell.faceIndices()` + `cell.faceSigns()` to sum face contributions.
 
 `SIMPLE::addTransposeGradientSource` and `RANS::velocityDivergence` use the
-gather approach. Prefer gather for new code — it is race-free, avoids temporary
+gather approach. Prefer gather for new code: it is race-free, avoids temporary
 allocations, and often has better cache behavior.
 
 ### What is and is not parallel
@@ -453,7 +471,7 @@ allocations, and often has better cache behavior.
 Follow this checklist before adding `#pragma omp parallel for`:
 
 1. **Check write destinations.** If a loop writes only to `array[loopIdx]`,
-   it is race-free — add the pragma directly.
+   it is race-free, so add the pragma directly.
 2. **Check reductions.** If the loop accumulates a scalar (residual, norm),
    use `reduction(+:varName)` on the pragma.
 3. **Watch for face loops.** Any loop over faces that writes to owner *and*
@@ -477,9 +495,9 @@ builds.
 
 Entry point: `SIMPLE::solve()` performs the outer iteration until convergence or `maxIterations`:
 1) Store previous-iteration fields (U, face velocities, flow rates), compute gradP.
-2) `solveMomentumEquations()`: computes velocity gradients once into the `gradU_` member, then solves the `Ux_`/`Uy_`/`Uz_` component fields the solver owns directly — each via `solveMomentumEquation()` with `buildMatrix()` + Patankar relaxation.
+2) `solveMomentumEquations()`: computes velocity gradients once into the `gradU_` member, then solves the `Ux_`/`Uy_`/`Uz_` component fields the solver owns directly, each via `solveMomentumEquation()` with `buildMatrix()` + Patankar relaxation.
 3) `updateRhieChowFlowRate()`: compute Rhie-Chow face mass fluxes.
-4) `solvePressureCorrection()`: pre-compute mass imbalance source, reset p' and grad(p') to zero, then build and solve the p' equation using `buildMatrix()` with face-based diffusion (DUf), no convection. `SIMPLE.nNonOrthogonalCorrectors` extra loop passes re-assemble with the explicit non-orthogonal correction from the latest grad(p') and re-solve (simpleFoam's non-orthogonal pressure corrector loop — the first solve always carries a zero correction because p' restarts from zero).
+4) `solvePressureCorrection()`: pre-compute mass imbalance source, reset p' and grad(p') to zero, then build and solve the p' equation using `buildMatrix()` with face-based diffusion (DUf), no convection. `SIMPLE.nNonOrthogonalCorrectors` extra loop passes re-assemble with the explicit non-orthogonal correction from the latest grad(p') and re-solve (simpleFoam's non-orthogonal pressure corrector loop, where the first solve always carries a zero correction because p' restarts from zero).
 5) `correctVelocity()`: update U using `U = U* - D ∇p'`.
 6) `correctFlowRate()`: update face mass fluxes.
 7) `correctPressure()`: apply `p = p + α_p p'` (p' is reset at the next iteration's corrector-loop entry).
@@ -489,20 +507,52 @@ Entry point: `SIMPLE::solve()` performs the outer iteration until convergence or
 Controls:
 - `SIMPLE` is fully initialized by its constructor. Runtime controls (rho, mu,
   initial fields, under-relaxation factors, tolerances, constraints, debug
-  flag) are passed as individual constructor parameters, OpenFOAM-style — no
+  flag) are passed as individual constructor parameters, OpenFOAM-style, with no
   intermediate POD config struct. The two linear solvers (`momentum`,
   `pressure`) are likewise passed as plain `LinearSolver&` parameters.
 - Turbulence is **not owned by `SIMPLE`**. `SolverModules` owns
   `unique_ptr<TurbulenceModel>` as a sibling of the SIMPLE solver and
   constructs it *before* SIMPLE (mirroring `simpleFoam`'s `createFields.H`
   ordering). A non-owning `TurbulenceModel&` is passed as the final constructor
-  argument to `SIMPLE`; it is always valid — a `Laminar` null-object represents
+  argument to `SIMPLE`; it is always valid: a `Laminar` null-object represents
   the laminar path instead of `nullptr`.
 - `CaseConfig::loadConfiguration()` parses non-BC runtime input into
   `CaseConfiguration`. `SolverSetup::configure()` owns selected linear
-  solvers, gradient and convection schemes, and the turbulence model
-  (`kOmegaSST` or `Laminar`) through `SolverModules`, then constructs `SIMPLE`
-  last so it is destroyed first.
+  solvers, gradient and convection schemes, the turbulence model
+  (`kOmegaSST` or `Laminar`), and the time scheme (`TimeScheme::create`)
+  through `SolverModules`, then constructs `SIMPLE` last so it is destroyed
+  first.
+
+### Transient (URANS) solve
+
+`SIMPLE` holds a `const TimeScheme&` plus the time-step controls (`deltaT_`,
+`nOuterCorrectors_`). `isTransient()` simply forwards `TimeScheme::isTransient()`,
+which `CFDApplication::run()` uses to branch between two private paths:
+
+- `runSteady()`: calls `SIMPLE::solve()` once (the loop above), then
+  post-processes and exports once.
+- `runTransient()`: sets up the `.pvd` time series (and the optional forces
+  history CSV), exports the t = 0 state, then for each step
+  `1 … round(totalTime/deltaT)` calls `SIMPLE::solveTimeStep(step, totalSteps, time)`
+  and writes output at the `writingIntervals` cadence (the final step is always
+  written). It finalizes the PVD collection and prints the final-step statistics
+  afterward.
+
+`SIMPLE::solveTimeStep()` per step:
+1. Snapshots `phi^n` (`Ux/Uy/UzOld_`) and the converged `t^n` face flux
+   (`RhieChowFlowRateOld_`, used for the Rhie–Chow ddt consistency term), and
+   calls `turbulence_.beginTimeStep()`.
+2. Runs a **fixed** `nOuterCorrectors_` outer iterations (the same inner sequence
+   as the steady solve), with no per-step convergence check. Per-iteration
+   residual lines are emitted only in debug mode, so a non-debug run prints one
+   summary line per time step.
+3. Rolls the Crank-Nicolson stored old time derivatives forward
+   (`updateOldTimeDerivatives()` for momentum and `turbulence_`).
+
+Each momentum, k, and omega `TransportEquation` carries a `TransientTerm` on the
+transient path; the pressure-correction equation never does. `RANS` mirrors the
+old-time bookkeeping (`kOld`/`ddt0`) so URANS turbulence transport is consistent
+with the momentum time scheme.
 
 
 ## Rhie–Chow face-velocity interpolation
@@ -543,12 +593,12 @@ wall-shear evaluation, and the turbulent-kinetic-energy inlet estimate.
 
 Class `kOmegaSST`:
 - Is fully initialized by its constructor from inlined parameters (laminar
-  viscosity, initial k/omega, under-relaxation factors, debug flag) — no
+  viscosity, initial k/omega, under-relaxation factors, debug flag), with no
   config-struct indirection.
 - Owned by `SolverModules` as a sibling of `SIMPLE`; never owned by `SIMPLE`
   itself. SIMPLE holds a non-owning, non-const `TurbulenceModel&` (a `Laminar`
   null-object replaces the former `nullptr` for laminar runs, so the reference
-  is always valid; the reference — not a pointer — encodes that invariant).
+  is always valid; the reference, not a pointer, encodes that invariant).
 - Inherits common RANS state and owns only SST-specific persistent state such
   as `ω`, its previous-iteration snapshot, SST constants/options, and dynamic
   omega wall-function values.
@@ -621,6 +671,21 @@ Class `kOmegaSST`:
   and lift directions, then computes coefficients with
   `0.5 * rho * |referenceVelocity|^2 * referenceArea`.
 
+### Transient output
+
+The steady path calls `PostProcess::exportResults()` once. The transient path
+(`CFDApplication::runTransient()`) instead drives a ParaView time series:
+- `PostProcess::pvdPathFor(config)` derives `<base>.pvd`; `VTK::writePVDTimeSeriesHeader`
+  / `appendPVDTimeStep` / `closePVDTimeSeries` (in `VTK/PvdTimeSeries`) manage the
+  collection file.
+- `PostProcess::exportTimeStep()` writes one indexed volume file
+  `<base>_NNNNNN.vtu` (6-digit zero-padded step) plus its `_boundary.vtp` sibling,
+  reusing the same `writeFields()` helper as the steady export, and appends both
+  to the PVD as parts 0/1 so ParaView animates them together.
+- When `forces.enabled`, `Forces::writeForceHistoryHeader()` /
+  `appendForceHistory()` write a `<base>_forces.csv` row per step (including
+  t = 0); `Forces::reportForces()` still prints the final-step summary.
+
 
 ## Linear solvers
 
@@ -656,21 +721,21 @@ The codebase uses explicit special-member declarations when ownership or
 borrowing makes compiler-generated operations unsafe. The recurring patterns
 are:
 
-### Pattern 1 — Non-owning reference member (rule of five, all deleted)
+### Pattern 1: Non-owning reference member (rule of five, all deleted)
 
 Classes that hold `const T&` or `T&` members borrow an object they do not own.
 References cannot be rebound, so copy/move operations are meaningless.
 
 ```cpp
-/// Copy constructor and assignment — Not copyable (const T& members)
+/// Copy constructor and assignment - Not copyable (const T& members)
 GradientScheme(const GradientScheme&) = delete;
 GradientScheme& operator=(const GradientScheme&) = delete;
 
-/// Move constructor and assignment — Not movable (const T& members)
+/// Move constructor and assignment - Not movable (const T& members)
 GradientScheme(GradientScheme&&) = delete;
 GradientScheme& operator=(GradientScheme&&) = delete;
 
-/// Destructor (virtual — GradientScheme is a polymorphic base)
+/// Destructor (virtual, GradientScheme is a polymorphic base)
 virtual ~GradientScheme() noexcept = default;
 ```
 
@@ -679,7 +744,7 @@ Used by: `GradientScheme` (abstract base; `LeastSquares` derives from it),
 destructor is `virtual` only for the polymorphic `GradientScheme`; the
 non-polymorphic borrowers keep a non-virtual `= default` destructor.
 
-### Pattern 2 — Runtime-owned polymorphic services
+### Pattern 2: Runtime-owned polymorphic services
 
 Polymorphic runtime services are owned through `std::unique_ptr`.
 `SolverModules` deletes copy and move because `SIMPLE` stores references into
@@ -698,10 +763,10 @@ std::unique_ptr<SIMPLE> solver;  // declared last, destroyed first
 
 Used by: `SolverModules`.
 
-### Pattern 3 — Eigen iterative solver member (rule of five, copy/move deleted)
+### Pattern 3: Eigen iterative solver member (rule of five, copy/move deleted)
 
 Eigen's `BiCGSTAB` and `ConjugateGradient` hold a `generic_matrix_wrapper` that
-stores a `Ref<>` pointing to a dummy member — the default move leaves that `Ref<>`
+stores a `Ref<>` pointing to a dummy member, so the default move leaves that `Ref<>`
 dangling. Solver wrappers are therefore owned through `std::unique_ptr`, with
 copy and move operations deleted.
 
@@ -717,7 +782,7 @@ LinearSolver& operator=(LinearSolver&&) = delete;
 virtual ~LinearSolver() noexcept = default;
 ```
 
-### Pattern 4 — Rule of zero
+### Pattern 4: Rule of zero
 
 Classes with only value or standard-library members (e.g. `std::vector`, `Name`,
 `Scalar`) that are fully copyable and movable by the compiler.
@@ -794,11 +859,11 @@ construction).
    `protected` base constructor; delete copy/move; give it an
    `override` destructor.
 2) Override `[[nodiscard]] Vector cellGradient(Field, const ScalarField&, Index) const override;`.
-   The base's `faceGradient`/`limitGradient`/`fieldGradient` are reused as-is —
-   `fieldGradient` dispatches to your `cellGradient` virtually.
+   The base's `faceGradient`/`limitGradient`/`fieldGradient` are reused as-is,
+   since `fieldGradient` dispatches to your `cellGradient` virtually.
 3) Add the `.cpp` to `CMakeLists.txt`.
 4) Add the case-file name to `GradientScheme::availableSchemes()`
-   (`src/Schemes/GradientSchemes/GradientScheme.cpp`) — the parser validates
+   (`src/Schemes/GradientSchemes/GradientScheme.cpp`): the parser validates
    `numericalSchemes.gradient` against that list, so an unregistered name is
    rejected before the factory runs.
 5) Add a matching `if (schemeName == "...")` branch to
@@ -901,21 +966,21 @@ residuals, iteration banners): route through the `Logger` namespace in
 `src/Primitives/Logger.h`. Do not add raw `std::cout` to the iteration
 loop. Helpers available:
 
-- `Logger::iterationHeader(n)` / `Logger::iterationFooter()` — frame the
+- `Logger::iterationHeader(n)` / `Logger::iterationFooter()`: frame the
   iteration block with `===`/`---` rules.
 - `Logger::residualTableHeader()` / `Logger::residualRow(equation, solver,
-  iters, lsResidual)` — column-aligned residual table. The equation label
+  iters, lsResidual)`: column-aligned residual table. The equation label
   is supplied by the caller (e.g. `SIMPLE` passes `"Ux"`/`"Uy"`/`"Uz"`/
   `"p'"`; `kOmegaSST` passes `"k"`/`"omega"`), using the `SolvePerformance`
   cached by `LinearSolver::solve()`.
-- `Logger::subsection(title)` + `Logger::scalarStat(name, min, max, mean)`
-  — grouped field statistics blocks.
-- `Logger::scaledResidual(name, value)` — one row of the convergence
+- `Logger::subsection(title)` + `Logger::scalarStat(name, min, max, mean)`:
+  grouped field statistics blocks.
+- `Logger::scaledResidual(name, value)`: one row of the convergence
   block.
 
 All helpers are stateless; callers guard each call with their own
 `debug_` flag. `StreamStateGuard` (in `Logger.h`) is the canonical
-pattern when you do need to manipulate `std::cout` flags directly — it
+pattern when you do need to manipulate `std::cout` flags directly: it
 saves and restores `flags()` and `precision()` so changes cannot leak
 into unrelated output.
 
@@ -990,6 +1055,7 @@ mesh { file path; checkQuality bool; }
 physicalProperties { rho scalar; mu scalar; }
 initialConditions { U vector; p scalar; }
 boundaryConditions { U { patch { type value; } } p { ... } }
+time { timeScheme name; timeStep scalar; totalTime scalar; writingIntervals int; nOuterCorrectors int; CrankNicolsonCoeff scalar; }
 numericalSchemes { gradient scheme; convection { default scheme; U scheme; k scheme; omega scheme; } }
 SIMPLE { numIterations int; convergenceTolerance scalar; relaxationFactors { U scalar; p scalar; k scalar; omega scalar; } }
 linearSolvers { U { solver type; preconditioner type; tolerance scalar; maxIter int; } p { ... } }
@@ -1049,7 +1115,10 @@ flowchart TD
   D --> E[MeshCreator::create]
   E --> F[BCLoader]
   F --> G[SolverSetup::configure]
-  G --> H[SIMPLE.solve]
+  G --> G2{isTransient?}
+  G2 -->|no| H[SIMPLE.solve]
+  G2 -->|yes| H2[runTransient: per-step SIMPLE.solveTimeStep]
+  H2 --> H
   H --> I[compute gradP]
   I --> J[solveMomentumEquations]
   J --> K[updateRhieChowFlowRate]
@@ -1058,9 +1127,9 @@ flowchart TD
   M --> N[correctFlowRate]
   N --> O[correctPressure]
   O -.-> T[solveTurbulence]
-  T --> P[checkConvergence]
+  T --> P[steady: checkConvergence / transient: fixed nOuterCorrectors]
   P -->|loop| I
-  P --> Q[PostProcess::reportStatistics/exportResults]
+  P --> Q[PostProcess: reportStatistics + exportResults / exportTimeStep]
   Q --> R{forces enabled?}
-  R -->|yes| S[Forces::reportForces]
+  R -->|yes| S[Forces::reportForces / appendForceHistory]
 ```
