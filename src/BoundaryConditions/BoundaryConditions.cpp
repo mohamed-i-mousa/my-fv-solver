@@ -31,8 +31,8 @@ void BoundaryConditions::addPatch(BoundaryPatch patch)
     {
         FatalError
         (
-            "Cannot add patch after linkFaces() has been called — "
-            "stored face pointers would become invalid."
+            "Cannot add patch after linkFaces() has been called. "
+            "Stored face pointers would become invalid."
         );
     }
     patches_.push_back(std::move(patch));

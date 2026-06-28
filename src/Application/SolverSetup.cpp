@@ -147,8 +147,11 @@ void SolverSetup::configure
 
     makeConvectionSchemes(modules, config.schemes);
 
-    modules.timeScheme =
-        TimeScheme::create(config.time.timeScheme, config.time.ocCoeff);
+    modules.timeScheme = TimeScheme::create
+    (
+        config.time.timeScheme,
+        config.time.CrankNicolsonCoeff
+    );
 
     modules.momentumSolver =
         makeLinearSolver

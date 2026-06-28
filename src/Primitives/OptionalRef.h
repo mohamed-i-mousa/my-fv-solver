@@ -9,7 +9,7 @@
  * @file OptionalRef.h
  * @brief Non-owning optional reference alias
  *
- * @details Defines OptionalRef<T> — a std::optional holding a
+ * @details Defines OptionalRef<T>, a std::optional holding a
  * std::reference_wrapper<const T>. Used to express "may reference an
  * externally-owned T, or nothing" without raw pointers.
  *****************************************************************************/

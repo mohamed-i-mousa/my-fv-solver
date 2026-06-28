@@ -26,7 +26,7 @@
 std::unique_ptr<TimeScheme> TimeScheme::create
 (
     Name schemeName,
-    Scalar offCenteringCoefficient
+    Scalar CrankNicolsonCoeff
 )
 {
     if (schemeName == "steadyState")
@@ -41,7 +41,7 @@ std::unique_ptr<TimeScheme> TimeScheme::create
 
     if (schemeName == "CrankNicolson")
     {
-        return std::make_unique<CrankNicolson>(offCenteringCoefficient);
+        return std::make_unique<CrankNicolson>(CrankNicolsonCoeff);
     }
 
     RuntimeSelection::unknownSelection

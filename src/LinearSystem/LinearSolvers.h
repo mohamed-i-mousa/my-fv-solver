@@ -73,7 +73,7 @@ using EigenPCG =
 
 struct SolvePerformance
 {
-    /// Solver name (view into LinearSolver::name() — program-lifetime storage)
+    /// Solver name (view into LinearSolver::name(), program-lifetime storage)
     NameRef solverName = {};
 
     /// Iterations performed by the solve call
@@ -286,7 +286,7 @@ public:
             Warning
             (
                 Name(name())
-              + ": non-finite solution — rolling back to previous iterate"
+              + ": non-finite solution, rolling back to previous iterate"
             );
             x = xPrev;
         }

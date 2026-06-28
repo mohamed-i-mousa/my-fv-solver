@@ -58,7 +58,7 @@ public:
 
 private:
 
-    /// Steady-state path: solve once, report, export
+    /// Steady-state path
     void runSteady
     (
         SolverModules& modules,
@@ -67,7 +67,7 @@ private:
         const CaseConfiguration& config
     );
 
-    /// Transient path: time-march, writing output at the configured cadence
+    /// Transient path
     void runTransient
     (
         SolverModules& modules,

@@ -11,12 +11,14 @@
  *
  * @details Crank-Nicolson is implemented in the form that keeps
  * the spatial operator fully implicit and carries a per-cell old time
- * derivative (ddt0) between steps. With coefft = 1 + oc (oc in [0, 1]):
+ * derivative (ddt0) between steps. With coefft = 1 + CrankNicolsonCoeff
+ * (CrankNicolsonCoeff in [0, 1]):
  *   diag   += coefft * V/dt
- *   source += coefft * V/dt * phi^n + oc * ddt0
- *   ddt0_new = coefft * V/dt * (phi^{n+1} - phi^n) - oc * ddt0
- * Because the stored ddt0 equals the previous spatial residual, oc = 1 yields
- * true second-order Crank-Nicolson and oc = 0 degenerates to backward Euler.
+ *   source += coefft * V/dt * phi^n + CrankNicolsonCoeff * ddt0
+ *   ddt0_new = coefft * V/dt * (phi^{n+1} - phi^n) - CrankNicolsonCoeff * ddt0
+ * Because the stored ddt0 equals the previous spatial residual,
+ * CrankNicolsonCoeff = 1 yields true second-order Crank-Nicolson and
+ * CrankNicolsonCoeff = 0 degenerates to backward Euler.
  *****************************************************************************/
 
 #pragma once
@@ -34,9 +36,9 @@ public:
 // ************************* Special Member Functions *************************
 
     /// Constructor
-    explicit CrankNicolson(Scalar offCenteringCoefficient) noexcept
+    explicit CrankNicolson(Scalar CrankNicolsonCoeff) noexcept
     :
-        offCenteringCoeff_{offCenteringCoefficient}
+        CrankNicolsonCoeff_{CrankNicolsonCoeff}
     {}
 
 // ****************************** Public Methods ******************************
@@ -54,9 +56,9 @@ public:
         Scalar oldDdt
     ) const noexcept override
     {
-        const Scalar coefft = S(1.0) + offCenteringCoeff_;
+        const Scalar coefft = S(1.0) + CrankNicolsonCoeff_;
         const Scalar rDeltaT = coefft * volume / deltaT;
-        return {rDeltaT, rDeltaT * phiOld + offCenteringCoeff_ * oldDdt};
+        return {rDeltaT, rDeltaT * phiOld + CrankNicolsonCoeff_ * oldDdt};
     }
 
     [[nodiscard]] Scalar updateOldDdt
@@ -68,16 +70,16 @@ public:
         Scalar oldDdt
     ) const noexcept override
     {
-        const Scalar coefft = S(1.0) + offCenteringCoeff_;
+        const Scalar coefft = S(1.0) + CrankNicolsonCoeff_;
         return
             coefft * (volume / deltaT) * (phiNew - phiOld)
-          - offCenteringCoeff_ * oldDdt;
+          - CrankNicolsonCoeff_ * oldDdt;
     }
 
 // ****************************** Private Members *****************************
 
 private:
 
-    /// Off-centering coefficient (0 = backward Euler, 1 = Crank-Nicolson)
-    Scalar offCenteringCoeff_;
+    /// Crank-Nicolson coefficient (0 = backward Euler, 1 = Crank-Nicolson)
+    Scalar CrankNicolsonCoeff_;
 };

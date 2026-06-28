@@ -1009,7 +1009,7 @@ void SIMPLE::solveMomentumComponent
 
     const Count numCells = mesh_.numCells();
 
-    // DU_ is identical for all 3 momentum components — compute only once
+    // DU_ is identical for all 3 momentum components, so compute only once
     if (DUComputed_ == false)
     {
         #pragma omp parallel for schedule(static)

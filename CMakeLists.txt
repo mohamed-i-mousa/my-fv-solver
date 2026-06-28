@@ -108,7 +108,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 # Set output directory for executable
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-# Warning flags — GCC/Clang/AppleClang only
+# Warning flags: GCC/Clang/AppleClang only
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:
         -Wall

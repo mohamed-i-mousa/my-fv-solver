@@ -104,8 +104,8 @@ struct TimeControl
     /// Fixed number of SIMPLE outer correctors per time step
     Count nOuterCorrectors;
 
-    /// Crank-Nicolson off-centering coefficient in [0, 1] (1 = pure CN)
-    Scalar ocCoeff;
+    /// Crank-Nicolson coefficient in [0, 1]
+    Scalar CrankNicolsonCoeff;
 };
 
 // ************************* struct CaseConfiguration *************************
@@ -214,7 +214,7 @@ struct CaseConfiguration
     /// Linear solver settings
     LinearSolverConfig linearSolvers;
 
-    /// Time-marching control
+    /// Transient control
     TimeControl time;
 };
 

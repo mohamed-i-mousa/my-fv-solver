@@ -11,8 +11,8 @@
  *
  * @details A PVD file is a small XML collection that groups per-timestep
  * `.vtu` outputs so ParaView can animate them as a single time series.
- * These helpers create and append to that XML file — no VTK library
- * dependency is involved, since the format is plain text.
+ * These helpers create and append to that XML file, with no VTK library
+ * dependency involved, since the format is plain text.
  *****************************************************************************/
 
 #pragma once

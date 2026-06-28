@@ -62,7 +62,7 @@ public:
     [[nodiscard]] static std::unique_ptr<TimeScheme> create
     (
         Name schemeName,
-        Scalar offCenteringCoefficient = S(1.0)
+        Scalar CrankNicolsonCoeff = S(1.0)
     );
 
     /// Names of every selectable time scheme

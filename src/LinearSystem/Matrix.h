@@ -10,7 +10,7 @@
  * @brief Matrix assembly for finite volume discretization
  *
  * @details This header defines the Matrix class, which handles assembly of
- * sparse linear systems (Ax=b) for any transport equation type — momentum,
+ * sparse linear systems (Ax=b) for any transport equation type: momentum,
  * pressure correction, and turbulence, described by a TransportEquation
  * bundle (see TransportEquation.h).
  *

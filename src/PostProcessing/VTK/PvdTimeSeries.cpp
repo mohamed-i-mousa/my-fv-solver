@@ -61,7 +61,7 @@ void appendPVDTimeStep
     Count part
 )
 {
-    // Append a single DataSet line to the open collection — O(1), no read-back
+    // Append a single DataSet line to the open collection, O(1), no read-back
     std::ofstream pvdFileOutput(pvdFile, std::ios::app);
     if (!pvdFileOutput.is_open())
     {

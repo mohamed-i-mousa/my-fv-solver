@@ -300,7 +300,7 @@ void readTimeControl
     config.time.totalTime = S(0.0);
     config.time.writingIntervals = 1;
     config.time.nOuterCorrectors = 1;
-    config.time.ocCoeff = S(1.0);
+    config.time.CrankNicolsonCoeff = S(1.0);
 
     if (!reader.hasSection("time"))
     {
@@ -329,7 +329,8 @@ void readTimeControl
     config.time.writingIntervals = time.lookup<Count>("writingIntervals");
     config.time.nOuterCorrectors =
         time.lookupOrDefault<Count>("nOuterCorrectors", 50);
-    config.time.ocCoeff = time.lookupOrDefault<Scalar>("ocCoeff", S(1.0));
+    config.time.CrankNicolsonCoeff =
+        time.lookupOrDefault<Scalar>("CrankNicolsonCoeff", S(1.0));
 
     if (config.time.timeStep <= S(0.0))
     {
@@ -347,9 +348,10 @@ void readTimeControl
     {
         FatalError("time.nOuterCorrectors must be a positive integer.");
     }
-    if (config.time.ocCoeff < S(0.0) || config.time.ocCoeff > S(1.0))
+    if (config.time.CrankNicolsonCoeff < S(0.0)
+     || config.time.CrankNicolsonCoeff > S(1.0))
     {
-        FatalError("time.ocCoeff must be in [0, 1].");
+        FatalError("time.CrankNicolsonCoeff must be in [0, 1].");
     }
 }
 

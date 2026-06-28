@@ -10,7 +10,7 @@
  * @brief Runtime selection of turbulence models
  *
  * @details Dispatches every selectable model by name, including the Laminar
- * null-object — the "no turbulence" selection. Laminar needs none of the
+ * null-object, the "no turbulence" selection. Laminar needs none of the
  * turbulence services, so its branch ignores all but the mesh and viscosity.
  *****************************************************************************/
 

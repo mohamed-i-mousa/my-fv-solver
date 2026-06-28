@@ -162,7 +162,7 @@ void CFDApplication::runTransient
         numSteps = 1;
     }
 
-    // Export the initial condition (t = 0) before marching
+    // Export the initial condition (t = 0) before the transient solve
     PostProcess::exportTimeStep
     (
         pvdFile,

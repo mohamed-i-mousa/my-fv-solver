@@ -150,6 +150,6 @@ private:
     /// All boundary patches
     PatchList patches_;
 
-    /// True after linkFaces() — prevents addPatch() after linking
+    /// True after linkFaces() to prevent addPatch() after linking
     bool linked_ = false;
 };
