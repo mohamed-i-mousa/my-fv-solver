@@ -63,6 +63,7 @@ add_executable(${PROJECT_NAME}
     src/Schemes/ConvectionSchemes/UpwindScheme.cpp
     src/Schemes/ConvectionSchemes/CentralDifferenceScheme.cpp
     src/Schemes/ConvectionSchemes/SecondOrderUpwindScheme.cpp
+    src/Schemes/TimeSchemes/TimeScheme.cpp
     src/LinearSystem/Matrix.cpp
     src/LinearSystem/LinearSolvers.cpp
     src/Solver/SIMPLE.cpp
@@ -93,11 +94,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/Schemes/Interpolation/
     src/Schemes/GradientSchemes/
     src/Schemes/ConvectionSchemes/
+    src/Schemes/TimeSchemes/
     src/Models/
     src/Models/Turbulence/
     src/Case/
     src/Application/
     src/PostProcessing/
+    src/PostProcessing/VTK/
     src/Solver/
     src/LinearSystem/
 )

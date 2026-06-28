@@ -20,6 +20,13 @@
 
 #include "StringTypes.h"
 
+// *************************** Forward Declarations ***************************
+
+struct SolverModules;
+struct CaseConfiguration;
+class Mesh;
+class BoundaryConditions;
+
 // *************************** class CFDApplication ***************************
 
 class CFDApplication
@@ -47,9 +54,29 @@ public:
     /// Run the full simulation
     void run();
 
-// ****************************** Private Members *****************************
+// ****************************** Private Methods *****************************
 
 private:
+
+    /// Steady-state path: solve once, report, export
+    void runSteady
+    (
+        SolverModules& modules,
+        const Mesh& mesh,
+        const BoundaryConditions& bcManager,
+        const CaseConfiguration& config
+    );
+
+    /// Transient path: time-march, writing output at the configured cadence
+    void runTransient
+    (
+        SolverModules& modules,
+        const Mesh& mesh,
+        const BoundaryConditions& bcManager,
+        const CaseConfiguration& config
+    );
+
+// ****************************** Private Members *****************************
 
     /// Path to case file
     FilePath caseFile_;

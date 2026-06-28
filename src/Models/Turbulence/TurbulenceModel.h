@@ -35,10 +35,11 @@
 // *************************** Forward Declarations ***************************
 
 class BoundaryConditions;
+class Mesh;
+class TimeScheme;
 class ConvectionSchemes;
 class GradientScheme;
 class LinearSolver;
-class Mesh;
 
 // *************************** class TurbulenceModel **************************
 
@@ -83,11 +84,13 @@ public:
         NameRef modelName,
         const Mesh& mesh,
         const BoundaryConditions& bc,
+        const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         const ConvectionSchemes& kScheme,
         LinearSolver& kSolver,
         const ConvectionSchemes& omegaScheme,
         LinearSolver& omegaSolver,
+        Scalar deltaT,
         Scalar nu,
         Scalar initialK,
         Scalar initialOmega,
@@ -110,6 +113,12 @@ public:
         const FaceFluxField&,
         const TensorField&
     ) = 0;
+
+    /// Old-time fields at the start of a transient time step
+    virtual void beginTimeStep() {}
+
+    /// Roll stored old time derivatives forward at the end of a time step
+    virtual void updateOldTimeDerivatives() {}
 
 // ************************** Shared Accessor Methods *************************
 

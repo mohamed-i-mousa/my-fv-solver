@@ -19,8 +19,9 @@
 // *************************** Forward Declarations ***************************
 
 class BoundaryConditions;
-class ConvectionSchemes;
+class TimeScheme;
 class GradientScheme;
+class ConvectionSchemes;
 class TurbulenceModel;
 class LinearSolver;
 class Mesh;
@@ -44,6 +45,9 @@ struct SolverModules
 
     /// Destructor
     ~SolverModules() noexcept;
+
+    /// Time-derivative scheme
+    std::unique_ptr<TimeScheme> timeScheme;
 
     /// Gradient scheme owned for SIMPLE's borrowed reference
     std::unique_ptr<GradientScheme> gradScheme;

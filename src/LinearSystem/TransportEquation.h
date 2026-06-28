@@ -29,6 +29,10 @@
 #include "ConvectionSchemes.h"
 #include "GradientScheme.h"
 
+// *************************** Forward Declarations ***************************
+
+class TimeScheme;
+
 // *************************** struct ConvectionTerm **************************
 
 struct ConvectionTerm
@@ -39,6 +43,24 @@ struct ConvectionTerm
 
     /// Convection discretization scheme
     const ConvectionSchemes& scheme;
+};
+
+// **************************** struct TransientTerm **************************
+
+struct TransientTerm
+{
+
+    /// Time-derivative discretization scheme
+    const TimeScheme& scheme;
+
+    /// Time step size
+    Scalar deltaT;
+
+    /// Field values at the previous time step (phi^n)
+    const ScalarField& phiOld;
+
+    /// Stored old time derivative for Crank-Nicolson (nullptr if unused)
+    const ScalarField* oldDdt;
 };
 
 // ************************* struct TransportEquation *************************
@@ -54,18 +76,20 @@ struct TransportEquation
     /// Current cell-centered field values (mutable for zero-copy solve)
     ScalarField& phi;
 
+// ******************************** Transient *********************************
+
+    /// Complete transient term d(phi)/dt discretization (nullopt = steady)
+    std::optional<TransientTerm> transient = std::nullopt;
+
 // ******************************** Convection ********************************
 
-// Convection: div(F * phi)
-
-    /// Complete convection term (nullopt = no convection)
+    /// Complete convection term div(F * phi) (nullopt = no convection)
     std::optional<ConvectionTerm> convection = std::nullopt;
 
 // ********************************* Diffusion ********************************
 
-// Diffusion: div(Gamma * grad(phi))
+    /// Pre-interpolated face diffusion coefficient for div(Gamma * grad(phi))
 
-    /// Pre-interpolated face diffusion coefficient
     const FaceFluxField& GammaFace;
 
 // ********************************** Source **********************************

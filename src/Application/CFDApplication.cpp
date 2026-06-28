@@ -16,6 +16,7 @@
 #include "CFDApplication.h"
 
 // Standard library headers
+#include <cmath>
 #include <iostream>
 
 // External library headers
@@ -33,6 +34,7 @@
 #include "PostProcess.h"
 #include "SolverSetup.h"
 #include "SIMPLE.h"
+#include "PvdTimeSeries.h"
 
 // ***************************** Internal Helpers *****************************
 
@@ -85,7 +87,26 @@ void CFDApplication::run()
     SolverSetup::configure(modules, mesh, bcManager, config);
     SolverSetup::logSetup(modules, config);
 
-    // Run the solver (SIMPLE::solve prints its own framed banner)
+    if (!modules.solver->isTransient())
+    {
+        runSteady(modules, mesh, bcManager, config);
+    }
+    else
+    {
+        runTransient(modules, mesh, bcManager, config);
+    }
+}
+
+
+void CFDApplication::runSteady
+(
+    SolverModules& modules,
+    const Mesh& mesh,
+    const BoundaryConditions& bcManager,
+    const CaseConfiguration& config
+)
+{
+    // Run the solver to convergence
     modules.solver->solve();
 
     // Post-process results
@@ -99,6 +120,116 @@ void CFDApplication::run()
     );
 
     // Integrate aerodynamic forces on the configured wall patch
+    if (config.forcesEnabled)
+    {
+        Forces::reportForces
+        (
+            *modules.solver,
+            *modules.turbulenceModel,
+            mesh,
+            bcManager,
+            config
+        );
+    }
+}
+
+
+void CFDApplication::runTransient
+(
+    SolverModules& modules,
+    const Mesh& mesh,
+    const BoundaryConditions& bcManager,
+    const CaseConfiguration& config
+)
+{
+    Logger::sectionHeader("Starting Transient Loop");
+
+    // Set up the PVD time series and the optional force-history CSV
+    const FilePath pvdFile = PostProcess::pvdPathFor(config);
+    VTK::writePVDTimeSeriesHeader(pvdFile);
+
+    if (config.forcesEnabled)
+    {
+        Forces::writeForceHistoryHeader(config);
+    }
+
+    Count numSteps = static_cast<Count>
+    (
+        std::floor(config.time.totalTime / config.time.timeStep + S(0.5))
+    );
+    if (numSteps == 0)
+    {
+        numSteps = 1;
+    }
+
+    // Export the initial condition (t = 0) before marching
+    PostProcess::exportTimeStep
+    (
+        pvdFile,
+        S(0.0),
+        0,
+        mesh,
+        *modules.solver,
+        *modules.turbulenceModel,
+        config
+    );
+
+    if (config.forcesEnabled)
+    {
+        Forces::appendForceHistory
+        (
+            S(0.0),
+            mesh,
+            bcManager,
+            *modules.solver,
+            *modules.turbulenceModel,
+            config
+        );
+    }
+
+    for (Count step = 1; step <= numSteps; ++step)
+    {
+        const Scalar time = S(step) * config.time.timeStep;
+
+        modules.solver->solveTimeStep(step, numSteps, time);
+
+        if (config.forcesEnabled)
+        {
+            Forces::appendForceHistory
+            (
+                time,
+                mesh,
+                bcManager,
+                *modules.solver,
+                *modules.turbulenceModel,
+                config
+            );
+        }
+
+        const bool writeNow =
+            (step % config.time.writingIntervals == 0) || (step == numSteps);
+
+        if (writeNow)
+        {
+            PostProcess::exportTimeStep
+            (
+                pvdFile,
+                time,
+                step,
+                mesh,
+                *modules.solver,
+                *modules.turbulenceModel,
+                config
+            );
+        }
+    }
+
+    // Finalize the PVD collection now that no more timesteps will be appended
+    VTK::closePVDTimeSeries(pvdFile);
+
+    // Final reporting on the last time step's state
+    PostProcess::reportStatistics(*modules.solver);
+
     if (config.forcesEnabled)
     {
         Forces::reportForces

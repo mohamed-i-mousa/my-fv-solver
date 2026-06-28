@@ -85,6 +85,29 @@ struct LinearSolverConfig
     LinearSolverSettings omega;
 };
 
+// **************************** struct TimeControl ***************************
+
+struct TimeControl
+{
+    /// Time scheme name
+    Name timeScheme;
+
+    /// Time step size [s]
+    Scalar timeStep;
+
+    /// Total simulated time [s]
+    Scalar totalTime;
+
+    /// Write output every N time steps
+    Count writingIntervals;
+
+    /// Fixed number of SIMPLE outer correctors per time step
+    Count nOuterCorrectors;
+
+    /// Crank-Nicolson off-centering coefficient in [0, 1] (1 = pure CN)
+    Scalar ocCoeff;
+};
+
 // ************************* struct CaseConfiguration *************************
 
 struct CaseConfiguration
@@ -190,6 +213,9 @@ struct CaseConfiguration
 
     /// Linear solver settings
     LinearSolverConfig linearSolvers;
+
+    /// Time-marching control
+    TimeControl time;
 };
 
 // *************************** namespace CaseConfig ***************************

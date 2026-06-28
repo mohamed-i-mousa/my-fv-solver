@@ -27,6 +27,11 @@
 
 // ********************************** Headers *********************************
 
+// Standard library headers
+#include <optional>
+#include <utility>
+#include <vector>
+
 // Project headers
 #include "Mesh.h"
 #include "Vector.h"
@@ -43,6 +48,7 @@
 // *************************** Forward Declarations ***************************
 
 class TurbulenceModel;
+class TimeScheme;
 
 // ******************************* class SIMPLE *******************************
 
@@ -57,6 +63,7 @@ public:
     (
         const Mesh& mesh,
         const BoundaryConditions& bc,
+        const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         const ConvectionSchemes& momentumConvectionScheme,
         LinearSolver& momentumSolver,
@@ -66,11 +73,13 @@ public:
         Scalar mu,
         const Vector& initialVelocity,
         Scalar initialPressure,
+        Scalar deltaT,
         Scalar alphaU,
         Scalar alphaP,
         Count maxIterations,
         Scalar convergenceTolerance,
         Count nNonOrthogonalCorrectors,
+        Count nOuterCorrectors,
         bool velocityConstraintEnabled,
         bool pressureConstraintEnabled,
         Scalar maxVelocityMagnitude,
@@ -92,8 +101,19 @@ public:
 
 // ******************************* SIMPLE Solve *******************************
 
-    /// Main solve loop for SIMPLE algorithm
+    /// Steady solve: run outer iterations to convergence
     void solve();
+
+    /// Advance one transient time step with a fixed number of outer correctors
+    void solveTimeStep
+    (
+        Count step,
+        Count totalSteps,
+        Scalar time
+    );
+
+    /// Whether the configured time scheme transient
+    [[nodiscard]] bool isTransient() const noexcept;
 
 // ***************************** Accessor Methods *****************************
 
@@ -116,6 +136,9 @@ private:
 
     /// Reference to BCs
     const BoundaryConditions& bcManager_;
+
+    /// Time-derivative discretization scheme
+    const TimeScheme& timeScheme_;
 
     /// Reference to gradient scheme
     const GradientScheme& gradientScheme_;
@@ -142,6 +165,9 @@ private:
 
 // Algorithm parameters
 
+    /// Time step size [s]
+    Scalar deltaT_;
+
     /// Under-relaxation factor for velocity
     Scalar alphaU_;
 
@@ -157,8 +183,14 @@ private:
     /// Non-orthogonal corrector sub-iterations for the p' equation
     Count nNonOrthogonalCorrectors_;
 
+    /// Fixed number of SIMPLE outer correctors per time step
+    Count nOuterCorrectors_;
+
     /// Enable verbose console output
     bool debug_;
+
+    /// Whether the inner loop should print per-iteration residual lines
+    bool reportPerIteration_ = true;
 
 // Solution fields
 
@@ -181,6 +213,16 @@ private:
     ScalarField UyPrev_;
     ScalarField UzPrev_;
 
+    /// Velocity from previous time step (phi^n) for the transient term
+    ScalarField UxOld_;
+    ScalarField UyOld_;
+    ScalarField UzOld_;
+
+    /// Stored old time derivative for Crank-Nicolson (zero unless CN)
+    ScalarField UxDdt0_;
+    ScalarField UyDdt0_;
+    ScalarField UzDdt0_;
+
     /// Face velocity field (current iteration)
     FaceData<Scalar> UxAvgf_;
     FaceData<Scalar> UyAvgf_;
@@ -196,6 +238,9 @@ private:
 
     /// Mass flux from previous iteration
     FaceFluxField RhieChowFlowRatePrev_;
+
+    /// Converged mass flux from previous time step (phi^n)
+    FaceFluxField RhieChowFlowRateOld_;
 
     /// Momentum diagonal coefficients
     ScalarField DU_;
@@ -255,7 +300,62 @@ private:
     Scalar pressureResidual0_ = S(0.0);
     ScalarList turbulenceResidual0_;
 
+    /// Most recent scaled residuals (for the per-time-step summary line)
+    Scalar lastScaledMass_ = S(0.0);
+    Scalar lastScaledVelocity_ = S(0.0);
+    Scalar lastScaledPressure_ = S(0.0);
+    std::vector<std::pair<NameRef, Scalar>> lastScaledTurbulence_;
+
+    /// Outcome of the most recent runOuterIterations call
+    Count lastOuterIterations_ = 0;
+    bool lastConverged_ = false;
+
 // ****************************** Private Methods *****************************
+
+    /// Maximum and mean Courant number over the mesh
+    struct CourantNumber
+    {
+        Scalar max;
+        Scalar mean;
+    };
+
+    /// Run the SIMPLE outer-iteration loop
+    void runOuterIterations
+    (
+        Count maxIters,
+        bool stopOnConvergence
+    );
+
+    /// Roll the Crank-Nicolson stored time derivatives forward one step
+    void updateOldTimeDerivatives();
+
+    /// Build the transient term for one component, or nullopt if steady
+    [[nodiscard]] std::optional<TransientTerm> transientFor
+    (
+        const ScalarField& phiOld,
+        const ScalarField& ddt0
+    ) const;
+
+    /// Compute the maximum and mean cell Courant number
+    [[nodiscard]] CourantNumber computeCourant() const noexcept;
+
+    /// Print the per-time-step Courant and residual summary
+    void reportTimeStep
+    (
+        Count step,
+        Count totalSteps,
+        Scalar time
+    );
+
+    /// Print the one-line scaled-residual summary, selecting the turbulent or
+    /// laminar Logger overload
+    void printResidualSummary
+    (
+        Scalar mass,
+        Scalar velocity,
+        Scalar pressure,
+        const std::vector<std::pair<NameRef, Scalar>>& turbulence
+    ) const;
 
     /// Solve momentum equations for each velocity component
     void solveMomentumEquations();

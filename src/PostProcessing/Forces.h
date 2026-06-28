@@ -19,6 +19,11 @@
 
 #pragma once
 
+// ********************************** Headers *********************************
+
+// Project headers
+#include "Scalar.h"
+
 // *************************** Forward Declarations ***************************
 
 class SIMPLE;
@@ -39,6 +44,20 @@ void reportForces
     const TurbulenceModel& turbulence,
     const Mesh& mesh,
     const BoundaryConditions& bcManager,
+    const CaseConfiguration& config
+);
+
+/// Write the CSV header for the transient force time-history file
+void writeForceHistoryHeader(const CaseConfiguration& config);
+
+/// Append one time step's drag/lift coefficients to the CSV history
+void appendForceHistory
+(
+    Scalar time,
+    const Mesh& mesh,
+    const BoundaryConditions& bcManager,
+    const SIMPLE& solver,
+    const TurbulenceModel& turbulence,
     const CaseConfiguration& config
 );
 

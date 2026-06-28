@@ -24,6 +24,7 @@
 
 // Project headers
 #include "ErrorHandler.h"
+#include "TimeScheme.h"
 
 // ************************* Special Member Functions *************************
 
@@ -111,6 +112,39 @@ void Matrix::buildMatrix(const TransportEquation& equation)
             else
             {
                 assembleInternalFace(face, equation, triplets, localB);
+            }
+        }
+
+        // Transient term: add d(phi)/dt to the diagonal and RHS per cell.
+        if (equation.transient)
+        {
+            const TransientTerm& transient = *equation.transient;
+
+            #pragma omp for schedule(static)
+            for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+            {
+                const Scalar volume = mesh_.cells()[cellIdx].volume();
+                const Scalar oldDdt =
+                    transient.oldDdt != nullptr
+                  ? (*transient.oldDdt)[cellIdx]
+                  : S(0.0);
+
+                const TimeContribution contribution =
+                    transient.scheme.coefficients
+                    (
+                        volume,
+                        transient.deltaT,
+                        transient.phiOld[cellIdx],
+                        oldDdt
+                    );
+
+                triplets.emplace_back
+                (
+                    eIdx(cellIdx),
+                    eIdx(cellIdx),
+                    contribution.diag
+                );
+                localB(eIdx(cellIdx)) += contribution.source;
             }
         }
     }

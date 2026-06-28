@@ -21,6 +21,7 @@
 
 // Standard library headers
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -31,12 +32,14 @@
 #include "Vector.h"
 #include "CellData.h"
 #include "FaceData.h"
+#include "TransportEquation.h"
 #include "TurbulenceModel.h"
 
 // *************************** Forward Declarations ***************************
 
 class Mesh;
 class BoundaryConditions;
+class TimeScheme;
 class GradientScheme;
 class ConvectionSchemes;
 class LinearSolver;
@@ -58,11 +61,13 @@ public:
     (
         const Mesh& mesh,
         const BoundaryConditions& bc,
+        const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         const ConvectionSchemes& kScheme,
         LinearSolver& kSolver,
         const ConvectionSchemes& dissipationScheme,
         LinearSolver& dissipationSolver,
+        Scalar deltaT,
         Scalar nu,
         Scalar alphaK,
         Scalar alphaDissipation,
@@ -91,6 +96,12 @@ public:
         const FaceFluxField& flowRateFace,
         const TensorField& gradU
     ) override = 0;
+
+    /// k and dissipation at the start of a transient time step
+    void beginTimeStep() override;
+
+    /// Roll the Crank-Nicolson stored time derivatives forward one step
+    void updateOldTimeDerivatives() override;
 
 // ************************ Inlet Condition Calculators ***********************
 
@@ -176,6 +187,9 @@ protected:
     /// Reference to BCs
     const BoundaryConditions& bcManager_;
 
+    /// Time-derivative discretization scheme
+    const TimeScheme& timeScheme_;
+
     /// Reference to gradient scheme
     const GradientScheme& gradientScheme_;
 
@@ -199,6 +213,9 @@ protected:
     /// Laminar kinematic viscosity
     Scalar nu_;
 
+    /// Time step size [s] (transient runs)
+    Scalar deltaT_;
+
     /// Under-relaxation factor for k equation
     Scalar alphaK_;
 
@@ -218,6 +235,18 @@ protected:
 
     /// Previous-iteration k snapshot for residual computation
     ScalarField kPrev_;
+
+    /// k from the previous time step (phi^n) for the transient term
+    ScalarField kOld_;
+
+    /// Dissipation from the previous time step (phi^n)
+    ScalarField dissipationOld_;
+
+    /// Stored old time derivative of k for Crank-Nicolson
+    ScalarField kDdt0_;
+
+    /// Stored old time derivative of dissipation for Crank-Nicolson
+    ScalarField dissipationDdt0_;
 
     /// Cell gradient of k
     VectorField gradK_;
@@ -264,6 +293,13 @@ protected:
     Scalar yPlusLam_ = S(11.225);
 
 // ****************************** Shared Methods ******************************
+
+    /// Build the transient term for one field, or nullopt if steady
+    [[nodiscard]] std::optional<TransientTerm> transientFor
+    (
+        const ScalarField& phiOld,
+        const ScalarField& ddt0
+    ) const;
 
     /// Map cell-centered diffusion coefficients to faces for assembly
     void cellToFaceDiffusion

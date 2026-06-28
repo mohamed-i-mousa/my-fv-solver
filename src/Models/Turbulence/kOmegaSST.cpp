@@ -36,11 +36,13 @@ kOmegaSST::kOmegaSST
 (
     const Mesh& mesh,
     const BoundaryConditions& bc,
+    const TimeScheme& timeScheme,
     const GradientScheme& gradientScheme,
     const ConvectionSchemes& kScheme,
     LinearSolver& kSolver,
     const ConvectionSchemes& omegaScheme,
     LinearSolver& omegaSolver,
+    Scalar deltaT,
     Scalar nu,
     Scalar initialK,
     Scalar initialOmega,
@@ -53,11 +55,13 @@ kOmegaSST::kOmegaSST
     {
         mesh,
         bc,
+        timeScheme,
         gradientScheme,
         kScheme,
         kSolver,
         omegaScheme,
         omegaSolver,
+        deltaT,
         nu,
         alphaK,
         alphaOmega,
@@ -629,6 +633,7 @@ void kOmegaSST::solveOmegaEquation
     {
         .field      = Field::omega,
         .phi        = omega_,
+        .transient  = transientFor(dissipationOld_, dissipationDdt0_),
         .convection =
             ConvectionTerm{flowRateFace, dissipationConvectionScheme_},
         .GammaFace  = gammaOmegaFace_,
@@ -759,6 +764,7 @@ void kOmegaSST::solveKEquation
     {
         .field      = Field::k,
         .phi        = k_,
+        .transient  = transientFor(kOld_, kDdt0_),
         .convection = ConvectionTerm{flowRateFace, kConvectionScheme_},
         .GammaFace  = gammaKFace_,
         .source     = kSource,

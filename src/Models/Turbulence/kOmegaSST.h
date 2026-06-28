@@ -57,11 +57,13 @@ public:
     (
         const Mesh& mesh,
         const BoundaryConditions& bc,
+        const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         const ConvectionSchemes& kScheme,
         LinearSolver& kSolver,
         const ConvectionSchemes& omegaScheme,
         LinearSolver& omegaSolver,
+        Scalar deltaT,
         Scalar nu,
         Scalar initialK,
         Scalar initialOmega,

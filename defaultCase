@@ -34,8 +34,8 @@ physicalProperties
 // ============================================================================
 initialConditions
 {
-    U               (0 0 -20.0);     // Initial velocity [m/s]
-    p               0;              // Initial pressure [Pa]
+    U               (0 0 -0.014607);    // Initial velocity [m/s]
+    p               0;                  // Initial pressure [Pa]
 }
 
 // ============================================================================
@@ -48,7 +48,7 @@ boundaryConditions
         inlet
         {
             type        fixedValue;
-            value       (0 0 -20.0);
+            value       (0 0 -0.014607);
         }
 
         outlet
@@ -239,6 +239,21 @@ boundaryConditions
 }
 
 // ============================================================================
+// Time Control
+// ============================================================================
+time
+{
+    // Options: steadyState, implicitEuler, CrankNicolson
+    timeScheme          implicitEuler;
+
+    timeStep            0.1;        // Time step size [s]
+    totalTime           10;         // Total simulated time [s]
+    writingIntervals    1;          // Write output every N steps (>= 1)
+    nOuterCorrectors    20;         // SIMPLE outer correctors per step (>= 1)
+    // ocCoeff          0.5;        // CrankNicolson coeffcient [0,1]
+}
+
+// ============================================================================
 // Numerical Schemes
 // ============================================================================
 numericalSchemes
@@ -317,7 +332,7 @@ linearSolvers
 // ============================================================================
 turbulence
 {
-    model               kOmegaSST;      // Options: Laminar, kOmegaSST
+    model               Laminar;        // Options: Laminar, kOmegaSST
     turbulenceIntensity 0.05;           // Turbulence intensity (5%)
     hydraulicDiameter   0.01;           // Hydraulic diameter [m]
 }

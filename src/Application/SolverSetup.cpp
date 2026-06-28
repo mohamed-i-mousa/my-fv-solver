@@ -20,18 +20,19 @@
 #include <sstream>
 
 // Project headers
-#include "BoundaryConditions.h"
-#include "CaseConfiguration.h"
-#include "ConvectionSchemes.h"
-#include "ErrorHandler.h"
-#include "GradientScheme.h"
-#include "LinearSolvers.h"
-#include "Logger.h"
 #include "Mesh.h"
+#include "BoundaryConditions.h"
+#include "TimeScheme.h"
+#include "GradientScheme.h"
+#include "ConvectionSchemes.h"
+#include "LinearSolvers.h"
 #include "SIMPLE.h"
-#include "StringTypes.h"
 #include "TurbulenceModel.h"
 #include "Laminar.h"
+#include "CaseConfiguration.h"
+#include "ErrorHandler.h"
+#include "Logger.h"
+#include "StringTypes.h"
 
 // ***************************** Internal Helpers *****************************
 
@@ -146,6 +147,9 @@ void SolverSetup::configure
 
     makeConvectionSchemes(modules, config.schemes);
 
+    modules.timeScheme =
+        TimeScheme::create(config.time.timeScheme, config.time.ocCoeff);
+
     modules.momentumSolver =
         makeLinearSolver
         (
@@ -168,6 +172,7 @@ void SolverSetup::configure
                 config.turbulenceModel,
                 mesh,
                 boundaryConditions,
+                *modules.timeScheme,
                 *modules.gradScheme,
                 resolveConvectionScheme
                 (
@@ -181,6 +186,7 @@ void SolverSetup::configure
                     modules.defaultConvectionScheme
                 ),
                 *modules.omegaSolver,
+                config.time.timeStep,
                 config.mu / config.rho,
                 config.initialK,
                 config.initialOmega,
@@ -200,6 +206,7 @@ void SolverSetup::configure
         (
             mesh,
             boundaryConditions,
+            *modules.timeScheme,
             *modules.gradScheme,
             resolveConvectionScheme
             (
@@ -213,11 +220,13 @@ void SolverSetup::configure
             config.mu,
             config.initialVelocity,
             config.initialPressure,
+            config.time.timeStep,
             config.alphaU,
             config.alphaP,
             config.maxIterations,
             config.convergenceTolerance,
             config.nNonOrthogonalCorrectors,
+            config.time.nOuterCorrectors,
             config.velocityConstraintEnabled,
             config.pressureConstraintEnabled,
             config.maxVelocityMagnitude,
@@ -259,8 +268,12 @@ void SolverSetup::logSetup
     }
 
     Logger::subsection("SIMPLE controls");
-    Logger::keyValue("Max iterations", config.maxIterations);
-    Logger::keyValue("Convergence tolerance", config.convergenceTolerance);
+
+    if (!modules.timeScheme->isTransient())
+    {
+        Logger::keyValue("Max iterations", config.maxIterations);
+        Logger::keyValue("Convergence tolerance", config.convergenceTolerance);
+    }
     Logger::keyValue
     (
         "Non-orth correctors",
@@ -272,6 +285,16 @@ void SolverSetup::logSetup
     {
         Logger::keyValue("k relaxation", config.alphaK);
         Logger::keyValue("omega relaxation", config.alphaOmega);
+    }
+
+    if (modules.timeScheme->isTransient())
+    {
+        Logger::subsection("Time integration");
+        Logger::keyValue("Scheme", MessageRef{config.time.timeScheme});
+        Logger::keyValue("Time step", config.time.timeStep, "s");
+        Logger::keyValue("Total time", config.time.totalTime, "s");
+        Logger::keyValue("Write interval", config.time.writingIntervals);
+        Logger::keyValue("Outer correctors", config.time.nOuterCorrectors);
     }
 
     if

@@ -43,29 +43,46 @@ namespace Forces
 namespace
 {
 
-// Derive the forces text-file path from the VTK output filename
-FilePath forcesFilePath(const FilePath& vtkOutputFilename)
+// Drag/lift loads split into pressure and friction contributions
+struct AeroForces
+{
+    Scalar pressureDrag;
+    Scalar frictionDrag;
+    Scalar pressureLift;
+    Scalar frictionLift;
+};
+
+// Derive a forces output-file path from the VTK output filename
+FilePath forcesFilePath
+(
+    const FilePath& vtkOutputFilename,
+    const FilePath& suffix
+)
 {
     FilePath path = vtkOutputFilename;
     const Index dotPos = path.rfind(".vtu");
 
     if (dotPos != FilePath::npos)
     {
-        path.replace(dotPos, 4, "_forces.txt");
+        path.replace(dotPos, 4, suffix);
     }
     else
     {
-        path += "_forces.txt";
+        path += suffix;
     }
 
     return path;
 }
 
-} // namespace
+// Dynamic load 0.5 * rho * Vref^2 * A used to non-dimensionalize forces
+Scalar referenceDynamicLoad(const CaseConfiguration& config)
+{
+    const Scalar referenceVelocity = magnitude(config.referenceVelocity);
+    return S(0.5) * config.rho * referenceVelocity * referenceVelocity
+         * config.referenceArea;
+}
 
-// ***************************** Force Reporting ******************************
-
-void reportForces
+AeroForces computeForces
 (
     const SIMPLE& solver,
     const TurbulenceModel& turbulence,
@@ -85,9 +102,6 @@ void reportForces
 
     const FaceListRef faces = mesh.faces();
 
-    // Integrated dynamic force vectors [N] over the patch
-    // Accumulate the integrated force vectors by component so the patch face
-    // loop folds through scalar OpenMP reductions.
     Scalar pressureForceX = S(0.0);
     Scalar pressureForceY = S(0.0);
     Scalar pressureForceZ = S(0.0);
@@ -142,23 +156,47 @@ void reportForces
     const Vector pressureForce(pressureForceX, pressureForceY, pressureForceZ);
     const Vector frictionForce(frictionForceX, frictionForceY, frictionForceZ);
 
-    // Decompose onto the drag and lift directions
     const Vector& dragDir = config.dragDirection;
     const Vector& liftDir = config.liftDirection;
 
-    const Scalar pressureDrag = dot(pressureForce, dragDir);
-    const Scalar frictionDrag = dot(frictionForce, dragDir);
+    return AeroForces
+    {
+        .pressureDrag = dot(pressureForce, dragDir),
+        .frictionDrag = dot(frictionForce, dragDir),
+        .pressureLift = dot(pressureForce, liftDir),
+        .frictionLift = dot(frictionForce, liftDir)
+    };
+}
+
+} // namespace
+
+// ***************************** Force Reporting ******************************
+
+void reportForces
+(
+    const SIMPLE& solver,
+    const TurbulenceModel& turbulence,
+    const Mesh& mesh,
+    const BoundaryConditions& bcManager,
+    const CaseConfiguration& config
+)
+{
+    const AeroForces forces =
+        computeForces(solver, turbulence, mesh, bcManager, config);
+
+    const Vector& dragDir = config.dragDirection;
+    const Vector& liftDir = config.liftDirection;
+
+    const Scalar pressureDrag = forces.pressureDrag;
+    const Scalar frictionDrag = forces.frictionDrag;
     const Scalar totalDrag = pressureDrag + frictionDrag;
 
-    const Scalar pressureLift = dot(pressureForce, liftDir);
-    const Scalar frictionLift = dot(frictionForce, liftDir);
+    const Scalar pressureLift = forces.pressureLift;
+    const Scalar frictionLift = forces.frictionLift;
     const Scalar totalLift = pressureLift + frictionLift;
 
     // Non-dimensionalise: C = F / (0.5 * rho * Vref^2 * A).
-    const Scalar referenceVelocity = magnitude(config.referenceVelocity);
-    const Scalar dynamicLoad =
-        S(0.5) * config.rho * referenceVelocity * referenceVelocity
-      * config.referenceArea;
+    const Scalar dynamicLoad = referenceDynamicLoad(config);
 
     const Scalar pressureCd = pressureDrag / dynamicLoad;
     const Scalar frictionCd = frictionDrag / dynamicLoad;
@@ -169,7 +207,8 @@ void reportForces
     const Scalar totalCl = totalLift / dynamicLoad;
 
     // Write the breakdown to a text file beside the VTK output
-    const FilePath outputPath = forcesFilePath(config.vtkOutputFilename);
+    const FilePath outputPath =
+        forcesFilePath(config.vtkOutputFilename, "_forces.txt");
 
     std::ofstream file(outputPath);
     if (!file.is_open())
@@ -235,6 +274,63 @@ void reportForces
 
     Logger::subsection("Output file: " + outputPath);
     Logger::iterationFooter();
+}
+
+// ************************* Transient Force History *************************
+
+void writeForceHistoryHeader(const CaseConfiguration& config)
+{
+    const FilePath csvPath =
+        forcesFilePath(config.vtkOutputFilename, "_forces.csv");
+
+    std::ofstream file(csvPath);
+    if (!file.is_open())
+    {
+        FatalError("Failed to open forces history file: " + csvPath);
+    }
+
+    file << "time,pressureDrag,frictionDrag,totalDrag,"
+         << "pressureLift,frictionLift,totalLift,Cd,Cl" << '\n';
+}
+
+
+void appendForceHistory
+(
+    Scalar time,
+    const Mesh& mesh,
+    const BoundaryConditions& bcManager,
+    const SIMPLE& solver,
+    const TurbulenceModel& turbulence,
+    const CaseConfiguration& config
+)
+{
+    const AeroForces forces =
+        computeForces(solver, turbulence, mesh, bcManager, config);
+
+    const Scalar totalDrag = forces.pressureDrag + forces.frictionDrag;
+    const Scalar totalLift = forces.pressureLift + forces.frictionLift;
+
+    const Scalar dynamicLoad = referenceDynamicLoad(config);
+
+    const Scalar totalCd = totalDrag / dynamicLoad;
+    const Scalar totalCl = totalLift / dynamicLoad;
+
+    const FilePath csvPath =
+        forcesFilePath(config.vtkOutputFilename, "_forces.csv");
+
+    std::ofstream file(csvPath, std::ios::app);
+    if (!file.is_open())
+    {
+        FatalError("Failed to open forces history file: " + csvPath);
+    }
+
+    file << std::scientific << std::setprecision(6)
+         << time << ','
+         << forces.pressureDrag << ',' << forces.frictionDrag << ','
+         << totalDrag << ','
+         << forces.pressureLift << ',' << forces.frictionLift << ','
+         << totalLift << ','
+         << totalCd << ',' << totalCl << '\n';
 }
 
 } // namespace Forces

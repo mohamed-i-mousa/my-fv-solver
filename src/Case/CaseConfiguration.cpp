@@ -25,6 +25,7 @@
 #include "GradientScheme.h"
 #include "LinearSolvers.h"
 #include "RuntimeSelection.h"
+#include "TimeScheme.h"
 #include "TurbulenceModel.h"
 #include "kOmegaSST.h"
 
@@ -287,6 +288,71 @@ void readConvectionSchemes
     }
 }
 
+void readTimeControl
+(
+    const CaseReader& reader,
+    CaseConfiguration& config
+)
+{
+    // Default: steady-state
+    config.time.timeScheme = "steadyState";
+    config.time.timeStep = S(0.0);
+    config.time.totalTime = S(0.0);
+    config.time.writingIntervals = 1;
+    config.time.nOuterCorrectors = 1;
+    config.time.ocCoeff = S(1.0);
+
+    if (!reader.hasSection("time"))
+    {
+        return;
+    }
+
+    const auto& time = reader.section("time");
+
+    config.time.timeScheme =
+        time.lookupOrDefault<Name>("timeScheme", "steadyState");
+
+    validateSelection
+    (
+        config.time.timeScheme,
+        TimeScheme::availableSchemes(),
+        "time.timeScheme"
+    );
+
+    if (config.time.timeScheme == "steadyState")
+    {
+        return;
+    }
+
+    config.time.timeStep = time.lookup<Scalar>("timeStep");
+    config.time.totalTime = time.lookup<Scalar>("totalTime");
+    config.time.writingIntervals = time.lookup<Count>("writingIntervals");
+    config.time.nOuterCorrectors =
+        time.lookupOrDefault<Count>("nOuterCorrectors", 50);
+    config.time.ocCoeff = time.lookupOrDefault<Scalar>("ocCoeff", S(1.0));
+
+    if (config.time.timeStep <= S(0.0))
+    {
+        FatalError("time.timeStep must be positive.");
+    }
+    if (config.time.totalTime <= S(0.0))
+    {
+        FatalError("time.totalTime must be positive.");
+    }
+    if (config.time.writingIntervals == 0)
+    {
+        FatalError("time.writingIntervals must be a positive integer.");
+    }
+    if (config.time.nOuterCorrectors == 0)
+    {
+        FatalError("time.nOuterCorrectors must be a positive integer.");
+    }
+    if (config.time.ocCoeff < S(0.0) || config.time.ocCoeff > S(1.0))
+    {
+        FatalError("time.ocCoeff must be in [0, 1].");
+    }
+}
+
 } // namespace
 
 // *************************** namespace CaseConfig ***************************
@@ -453,6 +519,8 @@ CaseConfiguration loadConfiguration(const CaseReader& reader)
     }
 
     readLinearSolvers(reader, config);
+
+    readTimeControl(reader, config);
 
     config.vtkOutputFilename = outputDict.lookup<FilePath>("filename");
     if (config.vtkOutputFilename.empty())

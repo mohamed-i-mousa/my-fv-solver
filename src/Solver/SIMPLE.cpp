@@ -17,6 +17,7 @@
 
 // Standard library headers
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <algorithm>
 
@@ -28,6 +29,7 @@
 #include "Logger.h"
 #include "LinearInterpolation.h"
 #include "Constraint.h"
+#include "TimeScheme.h"
 #include "TurbulenceModel.h"
 
 // ************************* Special Member Functions *************************
@@ -36,6 +38,7 @@ SIMPLE::SIMPLE
 (
     const Mesh& mesh,
     const BoundaryConditions& bc,
+    const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
     const ConvectionSchemes& momentumConvectionScheme,
     LinearSolver& momentumSolver,
@@ -45,11 +48,13 @@ SIMPLE::SIMPLE
     Scalar mu,
     const Vector& initialVelocity,
     Scalar initialPressure,
+    Scalar deltaT,
     Scalar alphaU,
     Scalar alphaP,
     Count maxIterations,
     Scalar convergenceTolerance,
     Count nNonOrthogonalCorrectors,
+    Count nOuterCorrectors,
     bool velocityConstraintEnabled,
     bool pressureConstraintEnabled,
     Scalar maxVelocityMagnitude,
@@ -60,6 +65,7 @@ SIMPLE::SIMPLE
 :
     mesh_{mesh},
     bcManager_{bc},
+    timeScheme_{timeScheme},
     gradientScheme_{gradScheme},
     momentumConvectionScheme_{momentumConvectionScheme},
     momentumSolver_{momentumSolver},
@@ -67,11 +73,13 @@ SIMPLE::SIMPLE
     turbulence_{turbulence},
     matrixConstruct_{mesh_, bcManager_},
     nu_{mu / rho},
+    deltaT_{deltaT},
     alphaU_{alphaU},
     alphaP_{alphaP},
     maxIterations_{maxIterations},
     tolerance_{convergenceTolerance},
     nNonOrthogonalCorrectors_{nNonOrthogonalCorrectors},
+    nOuterCorrectors_{nOuterCorrectors},
     debug_{debug},
     constraintSystem_
     {
@@ -134,6 +142,59 @@ void SIMPLE::solve()
 {
     Logger::sectionHeader("Starting SIMPLE Loop");
 
+    reportPerIteration_ = true;
+    runOuterIterations(maxIterations_, true);
+
+    if (!lastConverged_)
+    {
+        std::cout
+            << "WARNING: SIMPLE algorithm did not converge after "
+            << maxIterations_ << " iterations." << '\n';
+    }
+    else
+    {
+        std::cout
+            << "SIMPLE algorithm converged in " << lastOuterIterations_
+            << " iterations." << '\n';
+    }
+}
+
+
+bool SIMPLE::isTransient() const noexcept
+{
+    return timeScheme_.isTransient();
+}
+
+
+void SIMPLE::solveTimeStep(Count step, Count totalSteps, Scalar time)
+{
+    // Previous-time-step fields phi^n for the transient term
+    UxOld_ = Ux_;
+    UyOld_ = Uy_;
+    UzOld_ = Uz_;
+
+    // Converged t^n face flux for the Rhie-Chow ddt consistency term
+    RhieChowFlowRateOld_ = RhieChowFlowRate_;
+
+    // Turbulence old-time fields
+    turbulence_.beginTimeStep();
+
+    // Run a fixed number of outer correctors. Per-iteration residual lines are
+    // kept only in debug so a non-debug run prints one summary per time step.
+    reportPerIteration_ = debug_;
+    runOuterIterations(nOuterCorrectors_, false);
+
+    // Roll the Crank-Nicolson stored time derivatives forward one step
+    updateOldTimeDerivatives();
+    turbulence_.updateOldTimeDerivatives();
+
+    reportTimeStep(step, totalSteps, time);
+}
+
+// ****************************** Private Methods *****************************
+
+void SIMPLE::runOuterIterations(Count maxIters, bool stopOnConvergence)
+{
     // Reset first-iteration residual references for convergence tracking
     massImbalance0_    = S(0.0);
     velocityResidual0_ = S(0.0);
@@ -145,14 +206,14 @@ void SIMPLE::solve()
     Count iteration = 0;
     bool converged = false;
 
-    while (!converged && iteration < maxIterations_)
+    while (iteration < maxIters && !(stopOnConvergence && converged))
     {
         if (debug_)
         {
             Logger::iterationHeader(iteration + 1);
             Logger::residualTableHeader();
         }
-        else
+        else if (reportPerIteration_)
         {
             std::cout << " Iteration " << iteration + 1 << '\n';
         }
@@ -191,21 +252,121 @@ void SIMPLE::solve()
         iteration++;
     }
 
-    if (!converged)
+    lastOuterIterations_ = iteration;
+    lastConverged_ = converged;
+}
+
+
+void SIMPLE::updateOldTimeDerivatives()
+{
+    if (!timeScheme_.isTransient())
     {
-        std::cout
-            << "WARNING: SIMPLE algorithm did not converge after "
-            << maxIterations_ << " iterations." << '\n';
+        return;
     }
-    else
+
+    const Count numCells = mesh_.numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        std::cout
-            << "SIMPLE algorithm converged in " << iteration
-            << " iterations." << '\n';
+        const Scalar volume = mesh_.cells()[cellIdx].volume();
+
+        UxDdt0_[cellIdx] = timeScheme_.updateOldDdt
+            (volume, deltaT_, Ux_[cellIdx], UxOld_[cellIdx], UxDdt0_[cellIdx]);
+        UyDdt0_[cellIdx] = timeScheme_.updateOldDdt
+            (volume, deltaT_, Uy_[cellIdx], UyOld_[cellIdx], UyDdt0_[cellIdx]);
+        UzDdt0_[cellIdx] = timeScheme_.updateOldDdt
+            (volume, deltaT_, Uz_[cellIdx], UzOld_[cellIdx], UzDdt0_[cellIdx]);
     }
 }
 
-// ****************************** Private Methods *****************************
+
+std::optional<TransientTerm> SIMPLE::transientFor
+(
+    const ScalarField& phiOld,
+    const ScalarField& ddt0
+) const
+{
+    if (!timeScheme_.isTransient())
+    {
+        return std::nullopt;
+    }
+
+    return TransientTerm{timeScheme_, deltaT_, phiOld, &ddt0};
+}
+
+
+SIMPLE::CourantNumber SIMPLE::computeCourant() const noexcept
+{
+    const Count numCells = mesh_.numCells();
+
+    Scalar maxCourant = S(0.0);
+    Scalar sumCourant = S(0.0);
+
+    #pragma omp parallel for schedule(static) \
+        reduction(max:maxCourant) reduction(+:sumCourant)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        const auto& cell = mesh_.cells()[cellIdx];
+        const auto& faceIndices = cell.faceIndices();
+
+        Scalar sumFlux = S(0.0);
+        for (Index j = 0; j < faceIndices.size(); ++j)
+        {
+            sumFlux += std::abs(RhieChowFlowRate_[faceIndices[j]]);
+        }
+
+        const Scalar courant =
+            S(0.5) * sumFlux * deltaT_ / cell.volume();
+        maxCourant = std::max(maxCourant, courant);
+        sumCourant += courant;
+    }
+
+    return {maxCourant, sumCourant / S(std::max<Count>(1, numCells))};
+}
+
+
+void SIMPLE::reportTimeStep(Count step, Count totalSteps, Scalar time)
+{
+    const CourantNumber courant = computeCourant();
+
+    {
+        StreamStateGuard guard(std::cout);
+        std::cout
+            << std::scientific << std::setprecision(3)
+            << " Time = " << time << " s   step " << step << "/" << totalSteps
+            << "   Courant max = " << courant.max
+            << " mean = " << courant.mean << '\n';
+    }
+
+    printResidualSummary
+    (
+        lastScaledMass_,
+        lastScaledVelocity_,
+        lastScaledPressure_,
+        lastScaledTurbulence_
+    );
+}
+
+
+void SIMPLE::printResidualSummary
+(
+    Scalar mass,
+    Scalar velocity,
+    Scalar pressure,
+    const std::vector<std::pair<NameRef, Scalar>>& turbulence
+) const
+{
+    if (turbulence_.isTurbulent())
+    {
+        Logger::residualSummary(mass, velocity, pressure, turbulence);
+    }
+    else
+    {
+        Logger::residualSummary(mass, velocity, pressure);
+    }
+}
+
 
 void SIMPLE::solveMomentumEquations()
 {
@@ -266,6 +427,7 @@ void SIMPLE::solveMomentumEquations()
     {
         .field          = Field::Ux,
         .phi            = Ux_,
+        .transient      = transientFor(UxOld_, UxDdt0_),
         .convection     =
             ConvectionTerm{RhieChowFlowRatePrev_, momentumConvectionScheme_},
         .GammaFace      = nuEffFace_,
@@ -279,6 +441,7 @@ void SIMPLE::solveMomentumEquations()
     {
         .field          = Field::Uy,
         .phi            = Uy_,
+        .transient      = transientFor(UyOld_, UyDdt0_),
         .convection     =
             ConvectionTerm{RhieChowFlowRatePrev_, momentumConvectionScheme_},
         .GammaFace      = nuEffFace_,
@@ -292,6 +455,7 @@ void SIMPLE::solveMomentumEquations()
     {
         .field          = Field::Uz,
         .phi            = Uz_,
+        .transient      = transientFor(UzOld_, UzDdt0_),
         .convection     =
             ConvectionTerm{RhieChowFlowRatePrev_, momentumConvectionScheme_},
         .GammaFace      = nuEffFace_,
@@ -397,6 +561,26 @@ void SIMPLE::updateRhieChowFlowRate()
           - dot((DUf_[faceIdx] * (gradPf - gradPAvgf)), Sf)
           + (S(1.0) - alphaU_)
           * (RhieChowFlowRatePrev_[faceIdx] - dot(UfPrev, Sf));
+
+        if (timeScheme_.isTransient())
+        {
+            const Vector UfOldLinear
+            (
+                interpolateToFace(face, UxOld_),
+                interpolateToFace(face, UyOld_),
+                interpolateToFace(face, UzOld_)
+            );
+            const Scalar phiCorr =
+                RhieChowFlowRateOld_[faceIdx] - dot(UfOldLinear, Sf);
+            const Scalar coeff = S(1.0) - std::min
+            (
+                std::abs(phiCorr)
+              / (std::abs(RhieChowFlowRateOld_[faceIdx]) + vSmallValue),
+                S(1.0)
+            );
+            const Scalar DTf = DUf_[faceIdx] * coeff / deltaT_;
+            RhieChowFlowRate_[faceIdx] += DTf * phiCorr;
+        }
     }
 }
 
@@ -696,6 +880,12 @@ bool SIMPLE::checkConvergence()
         }
     }
 
+    // Remember the latest scaled residuals for the per-time-step summary
+    lastScaledMass_ = scaledMass;
+    lastScaledVelocity_ = scaledVelocity;
+    lastScaledPressure_ = scaledPressure;
+    lastScaledTurbulence_ = scaledTurbulenceResiduals;
+
     if (debug_)
     {
         Logger::subsection("Scaled residuals");
@@ -710,19 +900,15 @@ bool SIMPLE::checkConvergence()
             }
         }
     }
-    else if (turbulence_.isTurbulent())
+    else if (reportPerIteration_)
     {
-        Logger::residualSummary
+        printResidualSummary
         (
             scaledMass,
             scaledVelocity,
             scaledPressure,
             scaledTurbulenceResiduals
         );
-    }
-    else
-    {
-        Logger::residualSummary(scaledMass, scaledVelocity, scaledPressure);
     }
 
     return converged;

@@ -31,6 +31,7 @@
 #include "Field.h"
 #include "Matrix.h"
 #include "LinearInterpolation.h"
+#include "TimeScheme.h"
 
 // ************************* Special Member Functions *************************
 
@@ -38,11 +39,13 @@ RANS::RANS
 (
     const Mesh& mesh,
     const BoundaryConditions& bc,
+    const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
     const ConvectionSchemes& kScheme,
     LinearSolver& kSolver,
     const ConvectionSchemes& dissipationScheme,
     LinearSolver& dissipationSolver,
+    Scalar deltaT,
     Scalar nu,
     Scalar alphaK,
     Scalar alphaDissipation,
@@ -51,6 +54,7 @@ RANS::RANS
 :
     mesh_{mesh},
     bcManager_{bc},
+    timeScheme_{timeScheme},
     gradientScheme_{gradScheme},
     matrixConstruct_{std::make_unique<Matrix>(mesh_, bcManager_)},
     kConvectionScheme_{kScheme},
@@ -58,12 +62,77 @@ RANS::RANS
     dissipationConvectionScheme_{dissipationScheme},
     dissipationSolver_{dissipationSolver},
     nu_{nu},
+    deltaT_{deltaT},
     alphaK_{alphaK},
     alphaDissipation_{alphaDissipation},
     debug_{debug}
 {}
 
 RANS::~RANS() noexcept = default;
+
+// ***************************** Transient Stepping **************************
+
+void RANS::beginTimeStep()
+{
+    if (!timeScheme_.isTransient())
+    {
+        return;
+    }
+
+    // Snapshot the converged previous-step fields as phi^n
+    kOld_ = k_;
+    dissipationOld_ = dissipation();
+}
+
+
+void RANS::updateOldTimeDerivatives()
+{
+    if (!timeScheme_.isTransient())
+    {
+        return;
+    }
+
+    const ScalarField& dissipationNew = dissipation();
+    const Count numCells = mesh_.numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        const Scalar volume = mesh_.cells()[cellIdx].volume();
+
+        kDdt0_[cellIdx] = timeScheme_.updateOldDdt
+        (
+            volume,
+            deltaT_,
+            k_[cellIdx],
+            kOld_[cellIdx],
+            kDdt0_[cellIdx]
+        );
+        dissipationDdt0_[cellIdx] = timeScheme_.updateOldDdt
+        (
+            volume,
+            deltaT_,
+            dissipationNew[cellIdx],
+            dissipationOld_[cellIdx],
+            dissipationDdt0_[cellIdx]
+        );
+    }
+}
+
+
+std::optional<TransientTerm> RANS::transientFor
+(
+    const ScalarField& phiOld,
+    const ScalarField& ddt0
+) const
+{
+    if (!timeScheme_.isTransient())
+    {
+        return std::nullopt;
+    }
+
+    return TransientTerm{timeScheme_, deltaT_, phiOld, &ddt0};
+}
 
 // ************************ Inlet Condition Calculators ***********************
 
