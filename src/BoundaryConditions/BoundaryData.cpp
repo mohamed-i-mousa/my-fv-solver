@@ -86,7 +86,7 @@ Scalar BoundaryData::fixedScalarGradient() const noexcept
 
 // *************************** Non-Member Functions ***************************
 
-NameRef bcTypeToString(BCType bctype) noexcept
+Name bcTypeToString(BCType bctype) noexcept
 {
     using enum BCType;
     switch (bctype)

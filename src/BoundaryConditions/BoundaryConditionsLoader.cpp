@@ -37,10 +37,10 @@ namespace
 
 [[noreturn]] void unknownBCType
 (
-    NameRef bcType,
-    NameRef fieldName,
-    NameRef patchName,
-    MessageRef validList
+    Name bcType,
+    Name fieldName,
+    Name patchName,
+    Message validList
 )
 {
     FatalError

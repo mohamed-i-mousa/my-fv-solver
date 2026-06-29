@@ -21,7 +21,7 @@
 
 std::unique_ptr<LinearSolver> LinearSolver::create
 (
-    NameRef solverName,
+    Name solverName,
     Scalar tolerance,
     Count maxIterations
 )

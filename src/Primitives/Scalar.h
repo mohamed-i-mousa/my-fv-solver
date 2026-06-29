@@ -33,10 +33,10 @@
 /// Floating-point precision type (configured via CMakeLists.txt)
 #ifdef PROJECT_USE_DOUBLE_PRECISION
     using Scalar = double;
-    constexpr MessageRef SCALAR_MODE = "double (FP64)";
+    const Message SCALAR_MODE = "double (FP64)";
 #else
     using Scalar = float;
-    constexpr MessageRef SCALAR_MODE = "float (FP32)";
+    const Message SCALAR_MODE = "float (FP32)";
 #endif
 
 // ***************************** Scalar Conversion ****************************

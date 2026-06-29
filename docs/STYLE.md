@@ -347,8 +347,7 @@ still sees the underlying type, so they are documentation, not type safety):
   quantity), both `std::size_t`; plus `IndexList`/`CountList` and the
   `IndexListRef` (`std::span<const Index>`) view.
 - **`StringTypes.h`**: owned text `Name` / `Token` / `FilePath` / `Message`
-  (all `std::string`) and their borrowed `std::string_view` views with the
-  `*Ref` suffix (`NameRef`, `TokenRef`, `FilePathRef`, `MessageRef`).
+  (all `std::string`).
 - **`MeshContainers.h`**: owning `NodeList`/`FaceList`/`CellList`/`PatchList`
   and the borrowed `*Ref` span views (`FaceListRef`, `MutableFaceListRef`, …).
 

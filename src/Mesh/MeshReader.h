@@ -95,7 +95,7 @@ private:
     /// Mapping entry from Fluent type string to enum
     struct BCMapping
     {
-        TokenRef fluentType;
+        Token fluentType;
         PatchType patchType;
     };
 
@@ -112,15 +112,15 @@ private:
     PatchList boundaryPatches_;
 
     /// Fluent mesh-file section identifier tokens
-    static constexpr TokenRef MSH_COMMENT    = "(0";
-    static constexpr TokenRef MSH_DIMENSION  = "(2";
-    static constexpr TokenRef MSH_NODES      = "(10";
-    static constexpr TokenRef MSH_CELLS      = "(12";
-    static constexpr TokenRef MSH_FACES      = "(13";
-    static constexpr TokenRef MSH_BOUNDARIES = "(45";
+    inline static const Token MSH_COMMENT    = "(0";
+    inline static const Token MSH_DIMENSION  = "(2";
+    inline static const Token MSH_NODES      = "(10";
+    inline static const Token MSH_CELLS      = "(12";
+    inline static const Token MSH_FACES      = "(13";
+    inline static const Token MSH_BOUNDARIES = "(45";
 
     /// Lookup table for Fluent BC type string to enum mapping
-    static constexpr BCMapping bcMappings_[] =
+    inline static const BCMapping bcMappings_[] =
     {
         {"velocity-inlet",   PatchType::velocityInlet},
         {"pressure-inlet",   PatchType::pressureInlet},
@@ -151,16 +151,16 @@ private:
     void parseDimensionSection(std::ifstream& ifs) const;
 
     /// Parse the nodes section
-    void parseNodesSection(std::ifstream& ifs, TokenRef token);
+    void parseNodesSection(std::ifstream& ifs, Token token);
 
     /// Parse the cells section
-    void parseCellsSection(std::ifstream& ifs, TokenRef token);
+    void parseCellsSection(std::ifstream& ifs, Token token);
 
     /// Parse the faces section
-    void parseFacesSection(std::ifstream& ifs, TokenRef token);
+    void parseFacesSection(std::ifstream& ifs, Token token);
 
     /// Parse the boundaries section
-    void parseBoundariesSection(std::ifstream& ifs, TokenRef token);
+    void parseBoundariesSection(std::ifstream& ifs, Token token);
 
     /// Build cell-face connectivity and neighbor relationships
     void buildTopology();
@@ -172,21 +172,21 @@ private:
     void printSummary() const;
 
     /// Convert hexadecimal string to Count
-    [[nodiscard]] static Count hexToDec(TokenRef hexStr);
+    [[nodiscard]] static Count hexToDec(Token hexStr);
 
     /// Convert decimal string to Count
-    [[nodiscard]] static Count strToDec(TokenRef decStr);
+    [[nodiscard]] static Count strToDec(Token decStr);
 
     /// Safely convert 1-based Fluent index to 0-based index
     [[nodiscard]] static Index safeFluentIndexConvert
     (
         Count fluentIdx,
-        MessageRef context
+        Message context
     );
 
     /// Map Fluent boundary type string to enumeration
     [[nodiscard]] static PatchType mapFluentBCToEnum
     (
-        TokenRef fluentType
+        Token fluentType
     );
 };

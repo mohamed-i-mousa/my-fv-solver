@@ -110,7 +110,7 @@ public:
     }
 
     /// Dissipation field name for output labelling
-    [[nodiscard]] NameRef dissipationName() const noexcept override
+    [[nodiscard]] Name dissipationName() const noexcept override
     {
         return "omega";
     }

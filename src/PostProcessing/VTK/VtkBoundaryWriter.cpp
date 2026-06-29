@@ -56,7 +56,7 @@ struct BoundaryFace
 };
 
 
-int checkedInt(Count value, MessageRef label)
+int checkedInt(Count value, Message label)
 {
     if (value > static_cast<Count>(std::numeric_limits<int>::max()))
     {

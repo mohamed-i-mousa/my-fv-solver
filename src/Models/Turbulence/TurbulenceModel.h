@@ -48,11 +48,11 @@ class TurbulenceModel
 public:
 
     using CellDataPair =
-        std::vector<std::pair<NameRef, const ScalarField*>>;
+        std::vector<std::pair<Name, const ScalarField*>>;
     using BoundaryDataPair =
-        std::vector<std::pair<NameRef, const FaceData<Scalar>*>>;
+        std::vector<std::pair<Name, const FaceData<Scalar>*>>;
     using ResidualPair =
-        std::vector<std::pair<NameRef, Scalar>>;
+        std::vector<std::pair<Name, Scalar>>;
 
 // ************************* Special Member Functions *************************
 
@@ -73,7 +73,7 @@ public:
 // **************************** Runtime Selection ****************************
 
     /// Whether modelName selects the Laminar null-object (no turbulence)
-    [[nodiscard]] static bool isLaminar(NameRef modelName) noexcept
+    [[nodiscard]] static bool isLaminar(Name modelName) noexcept
     {
         return modelName == "Laminar";
     }
@@ -81,7 +81,7 @@ public:
     /// Construct the turbulence model selected by name
     [[nodiscard]] static std::unique_ptr<TurbulenceModel> create
     (
-        NameRef modelName,
+        Name modelName,
         const Mesh& mesh,
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,

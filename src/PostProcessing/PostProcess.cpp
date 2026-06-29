@@ -53,7 +53,7 @@ namespace
 FilePath outputBase(const FilePath& filename)
 {
     FilePath base = filename;
-    static constexpr FilePathRef extension = ".vtu";
+    static const FilePath extension = ".vtu";
     if (base.ends_with(extension))
     {
         base.resize(base.size() - extension.size());

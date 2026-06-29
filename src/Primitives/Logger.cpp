@@ -22,7 +22,7 @@
 
 // ***************************** namespace Logger *****************************
 
-void Logger::sectionHeader(MessageRef title)
+void Logger::sectionHeader(Message title)
 {
     StreamStateGuard guard(std::cout);
     std::cout
@@ -72,8 +72,8 @@ void Logger::residualTableHeader()
 
 void Logger::residualRow
 (
-    NameRef equation,
-    NameRef solver,
+    Name equation,
+    Name solver,
     int iterations,
     Scalar linearSolverResidual
 )
@@ -91,14 +91,14 @@ void Logger::residualRow
 }
 
 
-void Logger::subsection(MessageRef title)
+void Logger::subsection(Message title)
 {
     StreamStateGuard guard(std::cout);
     std::cout << '\n' << "  " << title << '\n';
 }
 
 
-void Logger::breakdownHeader(MessageRef cornerLabel)
+void Logger::breakdownHeader(Message cornerLabel)
 {
     StreamStateGuard guard(std::cout);
 
@@ -122,7 +122,7 @@ void Logger::breakdownHeader(MessageRef cornerLabel)
 
 void Logger::breakdownRow
 (
-    MessageRef label,
+    Message label,
     Scalar pressure,
     Scalar friction,
     Scalar total
@@ -143,7 +143,7 @@ void Logger::breakdownRow
 
 void Logger::scalarStat
 (
-    NameRef name,
+    Name name,
     Scalar minVal,
     Scalar maxVal,
     Scalar meanVal
@@ -161,7 +161,7 @@ void Logger::scalarStat
 }
 
 
-void Logger::scaledResidual(NameRef name, Scalar value)
+void Logger::scaledResidual(Name name, Scalar value)
 {
     StreamStateGuard guard(std::cout);
 
@@ -238,8 +238,8 @@ void Logger::linearSolverConfigHeader()
 
 void Logger::linearSolverConfigRow
 (
-    NameRef equation,
-    NameRef solver,
+    Name equation,
+    Name solver,
     Scalar tolerance,
     Count maxIters
 )
@@ -254,7 +254,7 @@ void Logger::linearSolverConfigRow
 }
 
 
-void Logger::keyValue(MessageRef label, Scalar value)
+void Logger::keyValue(Message label, Scalar value)
 {
     StreamStateGuard guard(std::cout);
 
@@ -264,7 +264,7 @@ void Logger::keyValue(MessageRef label, Scalar value)
 }
 
 
-void Logger::keyValue(MessageRef label, Scalar value, MessageRef unit)
+void Logger::keyValue(Message label, Scalar value, Message unit)
 {
     StreamStateGuard guard(std::cout);
 
@@ -275,7 +275,7 @@ void Logger::keyValue(MessageRef label, Scalar value, MessageRef unit)
 }
 
 
-void Logger::keyValue(MessageRef label, int value)
+void Logger::keyValue(Message label, int value)
 {
     StreamStateGuard guard(std::cout);
 
@@ -285,7 +285,7 @@ void Logger::keyValue(MessageRef label, int value)
 }
 
 
-void Logger::keyValue(MessageRef label, Count value)
+void Logger::keyValue(Message label, Count value)
 {
     StreamStateGuard guard(std::cout);
 
@@ -295,7 +295,7 @@ void Logger::keyValue(MessageRef label, Count value)
 }
 
 
-void Logger::keyValue(MessageRef label, MessageRef value)
+void Logger::keyValue(Message label, Message value)
 {
     StreamStateGuard guard(std::cout);
 

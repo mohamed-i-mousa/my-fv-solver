@@ -106,14 +106,14 @@ std::unique_ptr<LinearSolver> makeLinearSolver
 
 void logLinearSolver
 (
-    NameRef fieldName,
+    Name fieldName,
     const LinearSolverSettings& config
 )
 {
     Logger::linearSolverConfigRow
     (
         fieldName,
-        NameRef{config.solver},
+        Name{config.solver},
         config.tolerance,
         config.maxIter
     );
@@ -293,7 +293,7 @@ void SolverSetup::logSetup
     if (modules.timeScheme->isTransient())
     {
         Logger::subsection("Time integration");
-        Logger::keyValue("Scheme", MessageRef{config.time.timeScheme});
+        Logger::keyValue("Scheme", Name{config.time.timeScheme});
         Logger::keyValue("Time step", config.time.timeStep, "s");
         Logger::keyValue("Total time", config.time.totalTime, "s");
         Logger::keyValue("Write interval", config.time.writingIntervals);
@@ -327,7 +327,7 @@ void SolverSetup::logSetup
     if (!TurbulenceModel::isLaminar(config.turbulenceModel))
     {
         Logger::subsection("Turbulence initialization");
-        Logger::keyValue("Model", NameRef{config.turbulenceModel});
+        Logger::keyValue("Model", Name{config.turbulenceModel});
         Logger::keyValue
         (
             "Wall distance",

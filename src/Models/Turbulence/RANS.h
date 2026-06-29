@@ -146,7 +146,7 @@ public:
     [[nodiscard]] virtual const ScalarField& dissipation() const noexcept = 0;
 
     /// Name of the dissipation field for output labelling ("omega"/"epsilon")
-    [[nodiscard]] virtual NameRef dissipationName() const noexcept = 0;
+    [[nodiscard]] virtual Name dissipationName() const noexcept = 0;
 
     /// Get normalised k change from the most recent solve
     [[nodiscard]] Scalar lastKResidual() const noexcept

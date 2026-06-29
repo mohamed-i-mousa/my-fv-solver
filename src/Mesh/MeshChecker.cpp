@@ -51,7 +51,7 @@ namespace
 void printIndicesList
 (
     IndexListRef indices,
-    MessageRef entityName
+    Name entityName
 )
 {
     constexpr Count maxDisplay = 10;

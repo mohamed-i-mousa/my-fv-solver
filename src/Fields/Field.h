@@ -38,4 +38,4 @@ enum class Field
 // *************************** Non-Member Functions ***************************
 
 /// Human-readable name of a field, for diagnostics and logging
-[[nodiscard]] NameRef fieldToString(Field field) noexcept;
+[[nodiscard]] Name fieldToString(Field field) noexcept;

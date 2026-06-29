@@ -134,7 +134,7 @@ void MeshReader::parseDimensionSection(std::ifstream& ifs) const
 void MeshReader::parseNodesSection
 (
     std::ifstream& ifs,
-    TokenRef token
+    Token token
 )
 {
     // Header with "(0"
@@ -263,7 +263,7 @@ void MeshReader::parseNodesSection
 void MeshReader::parseCellsSection
 (
     std::ifstream& ifs,
-    TokenRef token
+    Token token
 )
 {
     // Only header with "(0" is expected for cells section, no data block
@@ -286,7 +286,7 @@ void MeshReader::parseCellsSection
 void MeshReader::parseFacesSection
 (
     std::ifstream& ifs,
-    TokenRef token
+    Token token
 )
 {
     // The faces section header
@@ -444,8 +444,8 @@ void MeshReader::parseFacesSection
             }
 
             const Index nodeEnd = hexItems.size() - 2;
-            const TokenRef ownerHex = hexItems[hexItems.size() - 2];
-            const TokenRef neighborHex = hexItems[hexItems.size() - 1];
+            const Token ownerHex = hexItems[hexItems.size() - 2];
+            const Token neighborHex = hexItems[hexItems.size() - 1];
 
             for (Index j = nodeStart; j < nodeEnd; ++j)
             {
@@ -491,7 +491,7 @@ void MeshReader::parseFacesSection
 void MeshReader::parseBoundariesSection
 (
     std::ifstream& ifs,
-    TokenRef token
+    Token token
 )
 {
     Token zoneToken = Token{token};
@@ -676,7 +676,7 @@ void MeshReader::printSummary() const
         << boundaryPatches_.size() << '\n';
 }
 
-PatchType MeshReader::mapFluentBCToEnum(TokenRef fluentType)
+PatchType MeshReader::mapFluentBCToEnum(Token fluentType)
 {
     for (const auto& [name, type] : bcMappings_)
     {
@@ -693,7 +693,7 @@ PatchType MeshReader::mapFluentBCToEnum(TokenRef fluentType)
 }
 
 
-Count MeshReader::hexToDec(TokenRef hexStr)
+Count MeshReader::hexToDec(Token hexStr)
 {
     Count decVal = 0;
 
@@ -723,7 +723,7 @@ Count MeshReader::hexToDec(TokenRef hexStr)
 }
 
 
-Count MeshReader::strToDec(TokenRef decStr)
+Count MeshReader::strToDec(Token decStr)
 {
     Count decVal = 0;
     
@@ -757,7 +757,7 @@ Count MeshReader::strToDec(TokenRef decStr)
 Index MeshReader::safeFluentIndexConvert
 (
     Count fluentIdx,
-    MessageRef context
+    Message context
 )
 {
     if (fluentIdx == 0)

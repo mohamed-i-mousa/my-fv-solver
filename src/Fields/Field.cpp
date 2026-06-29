@@ -20,7 +20,7 @@
 
 // *************************** Non-Member Functions ***************************
 
-NameRef fieldToString(Field field) noexcept
+Name fieldToString(Field field) noexcept
 {
     using enum Field;
     switch (field)

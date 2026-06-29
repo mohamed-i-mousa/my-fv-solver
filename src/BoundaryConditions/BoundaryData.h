@@ -92,4 +92,4 @@ private:
 // *************************** Non-Member Functions ***************************
 
 /// Convert BCType to human-readable string
-[[nodiscard]] NameRef bcTypeToString(BCType bctype) noexcept;
+[[nodiscard]] Name bcTypeToString(BCType bctype) noexcept;

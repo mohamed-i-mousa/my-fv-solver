@@ -73,8 +73,8 @@ using EigenPCG =
 
 struct SolvePerformance
 {
-    /// Solver name (view into LinearSolver::name(), program-lifetime storage)
-    NameRef solverName = {};
+    /// Solver name
+    Name solverName = {};
 
     /// Iterations performed by the solve call
     int iterations = 0;
@@ -97,7 +97,7 @@ public:
     /// Constructor
     LinearSolver
     (
-        NameRef name,
+        Name name,
         Scalar tolerance = S(1e-6),
         Count maxIterations = 1000
     )
@@ -124,7 +124,7 @@ public:
     /// Construct the linear solver selected by name
     [[nodiscard]] static std::unique_ptr<LinearSolver> create
     (
-        NameRef name,
+        Name name,
         Scalar tolerance,
         Count maxIterations
     );
@@ -189,7 +189,7 @@ public:
     ) = 0;
 
     /// Solver name, used in diagnostic output
-    [[nodiscard]] NameRef name() const noexcept
+    [[nodiscard]] Name name() const noexcept
     {
         return name_;
     }
