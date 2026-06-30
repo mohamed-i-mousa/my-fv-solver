@@ -22,6 +22,15 @@
 // Project headers
 #include "ErrorHandler.h"
 
+// ***************************** Internal Helpers *****************************
+
+namespace
+{
+    const Message pvdClosingBlock =
+        "  </Collection>\n"
+        "</VTKFile>\n";
+}
+
 // ******************************* namespace VTK ******************************
 
 namespace VTK
@@ -43,7 +52,8 @@ void writePVDTimeSeriesHeader
         << "<?xml version=\"1.0\"?>" << '\n'
         << "<VTKFile type=\"Collection\" version=\"0.1\" "
         << "byte_order=\"LittleEndian\">" << '\n'
-        << "  <Collection>" << '\n';
+        << "  <Collection>" << '\n'
+        << pvdClosingBlock;
 
     pvdFileOutput.close();
 
@@ -61,8 +71,8 @@ void appendPVDTimeStep
     Count part
 )
 {
-    // Append a single DataSet line to the open collection, O(1), no read-back
-    std::ofstream pvdFileOutput(pvdFile, std::ios::app);
+    // Open for in-place update so the closing tags can be overwritten
+    std::fstream pvdFileOutput(pvdFile, std::ios::in | std::ios::out);
     if (!pvdFileOutput.is_open())
     {
         FatalError
@@ -72,41 +82,25 @@ void appendPVDTimeStep
         );
     }
 
+    // Rewind over the closing block, insert the DataSet, re-emit the close
+    pvdFileOutput.seekp(0, std::ios::end);
+    const std::streamoff fileEnd = pvdFileOutput.tellp();
+    pvdFileOutput.seekp
+    (
+        fileEnd - static_cast<std::streamoff>(pvdClosingBlock.size())
+    );
+
     pvdFileOutput
         << "    <DataSet timestep=\"" << timeValue
         << "\" part=\"" << part
-        << "\" file=\"" << dataFile << "\"/>" << '\n';
+        << "\" file=\"" << dataFile << "\"/>" << '\n'
+        << pvdClosingBlock;
 
     pvdFileOutput.close();
 
     if (pvdFileOutput.fail())
     {
         FatalError("Failed to write PVD file: " + pvdFile);
-    }
-}
-
-
-void closePVDTimeSeries(const FilePath& pvdFile)
-{
-    std::ofstream pvdFileOutput(pvdFile, std::ios::app);
-    if (!pvdFileOutput.is_open())
-    {
-        FatalError
-        (
-            "Failed to open PVD file for finalizing: "
-          + pvdFile
-        );
-    }
-
-    pvdFileOutput
-        << "  </Collection>" << '\n'
-        << "</VTKFile>" << '\n';
-
-    pvdFileOutput.close();
-
-    if (pvdFileOutput.fail())
-    {
-        FatalError("Failed to finalize PVD file: " + pvdFile);
     }
 }
 

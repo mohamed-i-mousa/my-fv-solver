@@ -224,9 +224,6 @@ void CFDApplication::runTransient
         }
     }
 
-    // Finalize the PVD collection now that no more timesteps will be appended
-    VTK::closePVDTimeSeries(pvdFile);
-
     // Final reporting on the last time step's state
     PostProcess::reportStatistics(*modules.solver);
 

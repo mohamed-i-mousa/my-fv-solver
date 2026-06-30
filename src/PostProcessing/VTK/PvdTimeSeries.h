@@ -32,7 +32,7 @@ namespace VTK
 /// Create PVD time series file header for transient runs
 void writePVDTimeSeriesHeader(const FilePath& pvdFile);
 
-/// Append one dataset to the (open) PVD time series file
+/// Append one dataset to the PVD time series file, keeping it valid
 void appendPVDTimeStep
 (
     const FilePath& pvdFile,
@@ -40,8 +40,5 @@ void appendPVDTimeStep
     Scalar timeValue,
     Count part
 );
-
-/// Finalize the PVD time series file by closing the open collection
-void closePVDTimeSeries(const FilePath& pvdFile);
 
 } // namespace VTK
