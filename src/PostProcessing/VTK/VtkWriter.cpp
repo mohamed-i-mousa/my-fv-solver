@@ -19,7 +19,7 @@
 #include <vtkCellData.h>
 #include <vtkCellType.h>
 #include <vtkCellValidator.h>
-#include <vtkDoubleArray.h>
+#include <vtkFloatArray.h>
 #include <vtkGenericCell.h>
 #include <vtkPoints.h>
 #include <vtkSmartPointer.h>
@@ -416,8 +416,8 @@ void writeVtkUnstructuredGrid
             );
         }
 
-        vtkSmartPointer<vtkDoubleArray>
-        dataArray = vtkSmartPointer<vtkDoubleArray>::New();
+        vtkSmartPointer<vtkFloatArray>
+        dataArray = vtkSmartPointer<vtkFloatArray>::New();
 
         dataArray->SetName(fieldName.c_str());
         dataArray->SetNumberOfComponents(1);
@@ -425,8 +425,8 @@ void writeVtkUnstructuredGrid
 
         for (Index cellIdx = 0; cellIdx < allCells.size(); ++cellIdx)
         {
-            const double value =
-                static_cast<double>((*scalarField)[cellIdx]);
+            const float value =
+                static_cast<float>((*scalarField)[cellIdx]);
             dataArray->SetValue(static_cast<vtkIdType>(cellIdx), value);
         }
 
@@ -457,8 +457,8 @@ void writeVtkUnstructuredGrid
             );
         }
 
-        vtkSmartPointer<vtkDoubleArray> dataArray =
-            vtkSmartPointer<vtkDoubleArray>::New();
+        vtkSmartPointer<vtkFloatArray> dataArray =
+            vtkSmartPointer<vtkFloatArray>::New();
 
         dataArray->SetName(fieldName.c_str());
         dataArray->SetNumberOfComponents(3);
@@ -466,11 +466,11 @@ void writeVtkUnstructuredGrid
 
         for (Index cellIdx = 0; cellIdx < allCells.size(); ++cellIdx)
         {
-            const double vecData[3] =
+            const float vecData[3] =
             {
-                static_cast<double>(cx[cellIdx]),
-                static_cast<double>(cy[cellIdx]),
-                static_cast<double>(cz[cellIdx])
+                static_cast<float>(cx[cellIdx]),
+                static_cast<float>(cy[cellIdx]),
+                static_cast<float>(cz[cellIdx])
             };
             dataArray->SetTuple(static_cast<vtkIdType>(cellIdx), vecData);
         }
