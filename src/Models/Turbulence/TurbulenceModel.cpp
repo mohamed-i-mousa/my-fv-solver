@@ -33,7 +33,7 @@
 
 std::unique_ptr<TurbulenceModel> TurbulenceModel::create
 (
-    Name modelName,
+    const Name& modelName,
     const Mesh& mesh,
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,

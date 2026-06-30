@@ -30,7 +30,7 @@ namespace RuntimeSelection
 /// Whether selection matches one of the available names
 [[nodiscard]] bool isKnown
 (
-    Name selection,
+    const Name& selection,
     const NameList& available
 ) noexcept;
 
@@ -40,8 +40,8 @@ namespace RuntimeSelection
 /// Abort with a "unknown <category> '<selection>'" message & listing available
 [[noreturn]] void unknownSelection
 (
-    Name category,
-    Name selection,
+    const Name& category,
+    const Name& selection,
     const NameList& available
 );
 

@@ -106,7 +106,7 @@ std::unique_ptr<LinearSolver> makeLinearSolver
 
 void logLinearSolver
 (
-    Name fieldName,
+    const Name& fieldName,
     const LinearSolverSettings& config
 )
 {

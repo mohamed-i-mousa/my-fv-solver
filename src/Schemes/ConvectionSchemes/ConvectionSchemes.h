@@ -54,7 +54,7 @@ public:
     /// Construct the convection scheme selected by name
     [[nodiscard]] static std::unique_ptr<ConvectionSchemes> create
     (
-        Name schemeName
+        const Name& schemeName
     );
 
     /// Names of every selectable convection scheme

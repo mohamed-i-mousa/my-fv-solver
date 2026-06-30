@@ -61,7 +61,7 @@ public:
     /// Construct the time scheme selected by name
     [[nodiscard]] static std::unique_ptr<TimeScheme> create
     (
-        Name schemeName,
+        const Name& schemeName,
         Scalar CrankNicolsonCoeff = S(1.0)
     );
 

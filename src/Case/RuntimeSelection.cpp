@@ -25,7 +25,7 @@ namespace RuntimeSelection
 
 bool isKnown
 (
-    Name selection,
+    const Name& selection,
     const NameList& available
 ) noexcept
 {
@@ -59,8 +59,8 @@ Name joinNames(const NameList& available)
 
 void unknownSelection
 (
-    Name category,
-    Name selection,
+    const Name& category,
+    const Name& selection,
     const NameList& available
 )
 {

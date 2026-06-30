@@ -151,16 +151,16 @@ private:
     void parseDimensionSection(std::ifstream& ifs) const;
 
     /// Parse the nodes section
-    void parseNodesSection(std::ifstream& ifs, Token token);
+    void parseNodesSection(std::ifstream& ifs, const Token& token);
 
     /// Parse the cells section
-    void parseCellsSection(std::ifstream& ifs, Token token);
+    void parseCellsSection(std::ifstream& ifs, const Token& token);
 
     /// Parse the faces section
-    void parseFacesSection(std::ifstream& ifs, Token token);
+    void parseFacesSection(std::ifstream& ifs, const Token& token);
 
     /// Parse the boundaries section
-    void parseBoundariesSection(std::ifstream& ifs, Token token);
+    void parseBoundariesSection(std::ifstream& ifs, const Token& token);
 
     /// Build cell-face connectivity and neighbor relationships
     void buildTopology();
@@ -172,10 +172,10 @@ private:
     void printSummary() const;
 
     /// Convert hexadecimal string to Count
-    [[nodiscard]] static Count hexToDec(Token hexStr);
+    [[nodiscard]] static Count hexToDec(const Token& hexStr);
 
     /// Convert decimal string to Count
-    [[nodiscard]] static Count strToDec(Token decStr);
+    [[nodiscard]] static Count strToDec(const Token& decStr);
 
     /// Safely convert 1-based Fluent index to 0-based index
     [[nodiscard]] static Index safeFluentIndexConvert
@@ -187,6 +187,6 @@ private:
     /// Map Fluent boundary type string to enumeration
     [[nodiscard]] static PatchType mapFluentBCToEnum
     (
-        Token fluentType
+        const Token& fluentType
     );
 };

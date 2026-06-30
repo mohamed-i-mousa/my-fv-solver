@@ -25,7 +25,7 @@
 
 std::unique_ptr<TimeScheme> TimeScheme::create
 (
-    Name schemeName,
+    const Name& schemeName,
     Scalar CrankNicolsonCoeff
 )
 {

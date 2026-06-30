@@ -124,7 +124,7 @@ public:
     /// Construct the linear solver selected by name
     [[nodiscard]] static std::unique_ptr<LinearSolver> create
     (
-        Name name,
+        const Name& name,
         Scalar tolerance,
         Count maxIterations
     );
@@ -189,7 +189,7 @@ public:
     ) = 0;
 
     /// Solver name, used in diagnostic output
-    [[nodiscard]] Name name() const noexcept
+    [[nodiscard]] const Name& name() const noexcept
     {
         return name_;
     }
@@ -263,7 +263,7 @@ public:
 
         if (solver_.info() != Eigen::Success)
         {
-            Warning(Name(name()) + ": factorization failed");
+            Warning(name() + ": factorization failed");
 
             const SolvePerformance performance
             {
@@ -285,7 +285,7 @@ public:
         {
             Warning
             (
-                Name(name())
+                name()
               + ": non-finite solution, rolling back to previous iterate"
             );
             x = xPrev;

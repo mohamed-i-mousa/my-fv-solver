@@ -56,11 +56,11 @@ struct BoundaryFace
 };
 
 
-int checkedInt(Count value, Message label)
+int checkedInt(Count value, const Message& label)
 {
     if (value > static_cast<Count>(std::numeric_limits<int>::max()))
     {
-        FatalError(Message(label) + " exceeds the range of vtkIntArray.");
+        FatalError(label + " exceeds the range of vtkIntArray.");
     }
 
     return static_cast<int>(value);

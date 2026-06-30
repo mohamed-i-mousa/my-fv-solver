@@ -22,7 +22,10 @@
 
 // **************************** Runtime Selection ****************************
 
-std::unique_ptr<ConvectionSchemes> ConvectionSchemes::create(Name schemeName)
+std::unique_ptr<ConvectionSchemes> ConvectionSchemes::create
+(
+    const Name& schemeName
+)
 {
     if (schemeName == "Upwind")
     {

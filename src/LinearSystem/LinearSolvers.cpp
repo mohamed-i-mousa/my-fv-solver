@@ -21,7 +21,7 @@
 
 std::unique_ptr<LinearSolver> LinearSolver::create
 (
-    Name solverName,
+    const Name& solverName,
     Scalar tolerance,
     Count maxIterations
 )
@@ -39,7 +39,7 @@ std::unique_ptr<LinearSolver> LinearSolver::create
     RuntimeSelection::unknownSelection
     (
         "linear solver",
-        Name(solverName),
+        solverName,
         availableSolvers()
     );
 }

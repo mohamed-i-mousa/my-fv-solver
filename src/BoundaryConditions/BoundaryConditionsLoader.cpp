@@ -37,18 +37,18 @@ namespace
 
 [[noreturn]] void unknownBCType
 (
-    Name bcType,
-    Name fieldName,
-    Name patchName,
-    Message validList
+    const Name& bcType,
+    const Name& fieldName,
+    const Name& patchName,
+    const Message& validList
 )
 {
     FatalError
     (
-        "Unknown boundary condition type '" + Name(bcType)
-      + "' for field '" + Name(fieldName)
-      + "' on patch '" + Name(patchName)
-      + "'. Valid types: " + Message(validList)
+        "Unknown boundary condition type '" + bcType
+      + "' for field '" + fieldName
+      + "' on patch '" + patchName
+      + "'. Valid types: " + validList
     );
 }
 

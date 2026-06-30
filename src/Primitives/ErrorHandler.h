@@ -34,7 +34,7 @@ using Location = std::source_location;
 /// Print a fatal error message and abort the program
 [[noreturn]] inline void FatalError
 (
-    Message errorMessage,
+    const Message& errorMessage,
     const Location errorLocation = Location::current()
 ) noexcept
 {
@@ -51,7 +51,7 @@ using Location = std::source_location;
 /// Print a warning message and continue execution
 inline void Warning
 (
-    Message warningMessage,
+    const Message& warningMessage,
     const Location warningLocation = Location::current()
 ) noexcept
 {

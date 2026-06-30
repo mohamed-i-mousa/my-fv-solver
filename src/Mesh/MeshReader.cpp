@@ -134,7 +134,7 @@ void MeshReader::parseDimensionSection(std::ifstream& ifs) const
 void MeshReader::parseNodesSection
 (
     std::ifstream& ifs,
-    Token token
+    const Token& token
 )
 {
     // Header with "(0"
@@ -263,7 +263,7 @@ void MeshReader::parseNodesSection
 void MeshReader::parseCellsSection
 (
     std::ifstream& ifs,
-    Token token
+    const Token& token
 )
 {
     // Only header with "(0" is expected for cells section, no data block
@@ -286,7 +286,7 @@ void MeshReader::parseCellsSection
 void MeshReader::parseFacesSection
 (
     std::ifstream& ifs,
-    Token token
+    const Token& token
 )
 {
     // The faces section header
@@ -444,8 +444,8 @@ void MeshReader::parseFacesSection
             }
 
             const Index nodeEnd = hexItems.size() - 2;
-            const Token ownerHex = hexItems[hexItems.size() - 2];
-            const Token neighborHex = hexItems[hexItems.size() - 1];
+            const Token& ownerHex = hexItems[hexItems.size() - 2];
+            const Token& neighborHex = hexItems[hexItems.size() - 1];
 
             for (Index j = nodeStart; j < nodeEnd; ++j)
             {
@@ -491,7 +491,7 @@ void MeshReader::parseFacesSection
 void MeshReader::parseBoundariesSection
 (
     std::ifstream& ifs,
-    Token token
+    const Token& token
 )
 {
     Token zoneToken = Token{token};
@@ -676,7 +676,7 @@ void MeshReader::printSummary() const
         << boundaryPatches_.size() << '\n';
 }
 
-PatchType MeshReader::mapFluentBCToEnum(Token fluentType)
+PatchType MeshReader::mapFluentBCToEnum(const Token& fluentType)
 {
     for (const auto& [name, type] : bcMappings_)
     {
@@ -693,7 +693,7 @@ PatchType MeshReader::mapFluentBCToEnum(Token fluentType)
 }
 
 
-Count MeshReader::hexToDec(Token hexStr)
+Count MeshReader::hexToDec(const Token& hexStr)
 {
     Count decVal = 0;
 
@@ -723,7 +723,7 @@ Count MeshReader::hexToDec(Token hexStr)
 }
 
 
-Count MeshReader::strToDec(Token decStr)
+Count MeshReader::strToDec(const Token& decStr)
 {
     Count decVal = 0;
     

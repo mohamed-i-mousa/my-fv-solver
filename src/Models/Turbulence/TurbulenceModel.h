@@ -73,7 +73,7 @@ public:
 // **************************** Runtime Selection ****************************
 
     /// Whether modelName selects the Laminar null-object (no turbulence)
-    [[nodiscard]] static bool isLaminar(Name modelName) noexcept
+    [[nodiscard]] static bool isLaminar(const Name& modelName) noexcept
     {
         return modelName == "Laminar";
     }
@@ -81,7 +81,7 @@ public:
     /// Construct the turbulence model selected by name
     [[nodiscard]] static std::unique_ptr<TurbulenceModel> create
     (
-        Name modelName,
+        const Name& modelName,
         const Mesh& mesh,
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,

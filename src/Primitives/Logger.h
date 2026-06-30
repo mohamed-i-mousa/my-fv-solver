@@ -83,7 +83,7 @@ namespace Logger
     using Residuals = std::pair<Name, Scalar>;
 
     /// Print a generic 80-char framed banner with the given title
-    void sectionHeader(Message title);
+    void sectionHeader(const Message& title);
 
     /// Print the per-iteration banner
     void iterationHeader(Count n);
@@ -97,26 +97,26 @@ namespace Logger
     /// Print one row of the linear solver configuration table
     void linearSolverConfigRow
     (
-        Name equation,
-        Name solver,
+        const Name& equation,
+        const Name& solver,
         Scalar tolerance,
         Count maxIters
     );
 
     /// Print one indented label-value row with a Scalar value
-    void keyValue(Message label, Scalar value);
+    void keyValue(const Message& label, Scalar value);
 
     /// Print one indented label-value row with a fixed-point value and unit
-    void keyValue(Message label, Scalar value, Message unit);
+    void keyValue(const Message& label, Scalar value, const Message& unit);
 
     /// Print one indented label-value row with an int value
-    void keyValue(Message label, int value);
+    void keyValue(const Message& label, int value);
 
     /// Print one indented label-value row with a Count value
-    void keyValue(Message label, Count value);
+    void keyValue(const Message& label, Count value);
 
     /// Print one indented label-value row with a string value
-    void keyValue(Message label, Message value);
+    void keyValue(const Message& label, const Message& value);
 
     /// Print the column header row for the table
     void residualTableHeader();
@@ -124,22 +124,22 @@ namespace Logger
     /// Print one row of the per-iteration residual table
     void residualRow
     (
-        Name equation,
-        Name solver,
+        const Name& equation,
+        const Name& solver,
         int iterations,
         Scalar linearSolverResidual
     );
 
     /// Print a sub-section title line with two-space indentation
-    void subsection(Message title);
+    void subsection(const Message& title);
 
     /// Print the header for a pressure/friction/total breakdown table
-    void breakdownHeader(Message cornerLabel);
+    void breakdownHeader(const Message& cornerLabel);
 
     /// Print one labelled pressure/friction/total breakdown row
     void breakdownRow
     (
-        Message label,
+        const Message& label,
         Scalar pressure,
         Scalar friction,
         Scalar total
@@ -148,14 +148,14 @@ namespace Logger
     /// Print one min/max/mean statistics line for a scalar field
     void scalarStat
     (
-        Name name,
+        const Name& name,
         Scalar minVal,
         Scalar maxVal,
         Scalar meanVal
     );
 
     /// Print one labelled scaled-residual line
-    void scaledResidual(Name name, Scalar value);
+    void scaledResidual(const Name& name, Scalar value);
 
     /// Print the non-debug one-line per-iteration residual summary
     void residualSummary(Scalar mass, Scalar velocity, Scalar pressure);

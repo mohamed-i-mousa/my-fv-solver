@@ -42,7 +42,7 @@ GradientScheme::GradientScheme
 
 std::unique_ptr<GradientScheme> GradientScheme::create
 (
-    Name schemeName,
+    const Name& schemeName,
     const Mesh& mesh,
     const BoundaryConditions& bc
 )

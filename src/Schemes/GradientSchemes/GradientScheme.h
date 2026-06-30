@@ -62,7 +62,7 @@ public:
     /// Construct the gradient scheme selected by name
     [[nodiscard]] static std::unique_ptr<GradientScheme> create
     (
-        Name schemeName,
+        const Name& schemeName,
         const Mesh& mesh,
         const BoundaryConditions& bc
     );
