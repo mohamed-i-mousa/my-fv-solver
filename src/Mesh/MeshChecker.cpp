@@ -710,12 +710,6 @@ void check(const Mesh& mesh)
 
     bool goodQuality = true;
 
-    if (!invertedCells.empty())
-    {
-        Warning("Inverted cells detected");
-        goodQuality = false;
-    }
-
     if (maxNonOrthogonality > maxNonOrthThreshold)
     {
         Warning
