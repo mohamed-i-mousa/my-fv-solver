@@ -241,7 +241,7 @@ void writeBoundaryData
         for (vtkIdType j = 0; j < npts; ++j)
         {
             const Index nodeIdx = nodeIndices[static_cast<Index>(j)];
-            pts[static_cast<Index>(j)] = nodeMap[nodeIdx];
+            pts[static_cast<Index>(j)] = nodeMap.at(nodeIdx);
         }
 
         cells->InsertNextCell(npts, pts.data());
