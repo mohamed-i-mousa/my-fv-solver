@@ -298,23 +298,6 @@ private:
     /// Owning boundary patch (nullopt for internal or unlinked faces)
     OptionalRef<BoundaryPatch> patch_;
 
-// ****************************** Private Methods *****************************
-
-private:
-
-    /// Symmetric second-moment polynomial for triangle integration
-    /// Evaluates a² + b² + c² + ab + ac + bc
-    /// ∫∫_triangle x² dA = (area / 6) × secondMoment(x₁, x₂, x₃)
-    [[nodiscard]] static Scalar secondMoment
-    (
-        Scalar a,
-        Scalar b,
-        Scalar c
-    ) noexcept
-    {
-        return a*a + b*b + c*c + a*b + a*c + b*c;
-    }
-
 };
 
 // *************************** Non-Member Functions ***************************

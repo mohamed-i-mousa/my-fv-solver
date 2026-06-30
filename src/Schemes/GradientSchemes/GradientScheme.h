@@ -32,6 +32,8 @@
 
 // Project headers
 #include "Scalar.h"
+#include "Vector.h"
+#include "Integer.h"
 #include "StringTypes.h"
 #include "Mesh.h"
 #include "BoundaryConditions.h"
@@ -106,7 +108,7 @@ public:
         VectorField& gradPhi
     ) const;
 
-// ***************************** Protected Members ****************************
+// ***************************** Protected Methods ****************************
 
 protected:
 
@@ -117,11 +119,17 @@ protected:
         const BoundaryConditions& bc
     );
 
-    /// Mesh view (nodes, faces, cells)
-    const Mesh& mesh_;
+    /// Read-only access to the mesh view (nodes, faces, cells)
+    [[nodiscard]] const Mesh& mesh() const noexcept
+    {
+        return mesh_;
+    }
 
-    /// Reference to boundary conditions manager
-    const BoundaryConditions& bcManager_;
+    /// Read-only access to the boundary conditions manager
+    [[nodiscard]] const BoundaryConditions& bcManager() const noexcept
+    {
+        return bcManager_;
+    }
 
 // ****************************** Private Methods *****************************
 
@@ -147,6 +155,12 @@ private:
 // ****************************** Private Members *****************************
 
 private:
+
+    /// Mesh view (nodes, faces, cells)
+    const Mesh& mesh_;
+
+    /// Reference to boundary conditions manager
+    const BoundaryConditions& bcManager_;
 
     /// Minimum fraction of ||dPf|| used as normal distance to a boundary face
     /// Prevents gradient amplification beyond ~87 degrees of non-orthogonality

@@ -175,9 +175,239 @@ public:
     /// Residuals contributed by RANS models to convergence checks (name, value)
     [[nodiscard]] ResidualPair residualOutputs() const override;
 
-// ****************************** Shared Members ******************************
 
 protected:
+
+// **************************** Protected Accessors ***************************
+
+// Dependencies and services
+
+    /// Mesh view (nodes, faces, cells)
+    [[nodiscard]] const Mesh& mesh() const noexcept { return mesh_; }
+
+    /// Boundary conditions view
+    [[nodiscard]] const BoundaryConditions& bcManager() const noexcept
+    {
+        return bcManager_;
+    }
+
+    /// Gradient scheme
+    [[nodiscard]] const GradientScheme& gradientScheme() const noexcept
+    {
+        return gradientScheme_;
+    }
+
+    /// Matrix constructor (mutable Matrix through a const unique_ptr)
+    [[nodiscard]] const std::unique_ptr<Matrix>&
+    matrixConstruct() const noexcept
+    {
+        return matrixConstruct_;
+    }
+
+    /// k convection scheme
+    [[nodiscard]] const ConvectionSchemes& kConvectionScheme() const noexcept
+    {
+        return kConvectionScheme_;
+    }
+
+    /// Linear solver for the k equation
+    [[nodiscard]] const LinearSolver& kSolver() const noexcept
+    {
+        return kSolver_;
+    }
+    [[nodiscard]] LinearSolver& kSolver() noexcept { return kSolver_; }
+
+    /// Dissipation convection scheme
+    [[nodiscard]] const ConvectionSchemes&
+    dissipationConvectionScheme() const noexcept
+    {
+        return dissipationConvectionScheme_;
+    }
+
+    /// Linear solver for the dissipation equation
+    [[nodiscard]] const LinearSolver& dissipationSolver() const noexcept
+    {
+        return dissipationSolver_;
+    }
+    [[nodiscard]] LinearSolver& dissipationSolver() noexcept
+    {
+        return dissipationSolver_;
+    }
+
+// Physical and algorithm parameters
+
+    /// Laminar kinematic viscosity
+    [[nodiscard]] Scalar nu() const noexcept { return nu_; }
+
+    /// Under-relaxation factor for the k equation
+    [[nodiscard]] Scalar alphaK() const noexcept { return alphaK_; }
+
+    /// Under-relaxation factor for the dissipation equation
+    [[nodiscard]] Scalar alphaDissipation() const noexcept
+    {
+        return alphaDissipation_;
+    }
+
+    /// Whether verbose console output is enabled
+    [[nodiscard]] bool debug() const noexcept { return debug_; }
+
+// Common transport state
+
+    /// Turbulent kinematic viscosity (native short-name accessor)
+    [[nodiscard]] const ScalarField& nut() const noexcept { return nut_; }
+    [[nodiscard]] ScalarField& nut() noexcept { return nut_; }
+
+    /// Mutable turbulent kinetic energy (the const overload is public)
+    [[nodiscard]] ScalarField& k() noexcept { return k_; }
+
+    /// Previous-iteration k snapshot
+    [[nodiscard]] const ScalarField& kPrev() const noexcept { return kPrev_; }
+    [[nodiscard]] ScalarField& kPrev() noexcept { return kPrev_; }
+
+    /// k from the previous time step (phi^n)
+    [[nodiscard]] const ScalarField& kPrevStep() const noexcept
+    {
+        return kPrevStep_;
+    }
+
+    /// Dissipation from the previous time step (phi^n)
+    [[nodiscard]] const ScalarField& dissipationPrevStep() const noexcept
+    {
+        return dissipationPrevStep_;
+    }
+
+    /// Stored old time derivative of k for Crank-Nicolson
+    [[nodiscard]] const ScalarField& kDdtPrevStep() const noexcept
+    {
+        return kDdtPrevStep_;
+    }
+
+    /// Stored old time derivative of dissipation for Crank-Nicolson
+    [[nodiscard]] const ScalarField& dissipationDdtPrevStep() const noexcept
+    {
+        return dissipationDdtPrevStep_;
+    }
+
+    /// Cell gradient of k
+    [[nodiscard]] const VectorField& gradK() const noexcept { return gradK_; }
+    [[nodiscard]] VectorField& gradK() noexcept { return gradK_; }
+
+// Wall distance and wall-function state
+
+    /// Distance to nearest wall
+    [[nodiscard]] const ScalarField& wallDistance() const noexcept
+    {
+        return wallDistance_;
+    }
+
+    /// Owner-cell to wall-face perpendicular distance
+    [[nodiscard]] const FaceData<Scalar>& y() const noexcept { return y_; }
+
+    /// y+ on wall-function faces
+    [[nodiscard]] const FaceData<Scalar>& yPlus() const noexcept
+    {
+        return yPlus_;
+    }
+
+    /// Wall-function nut values on wall faces
+    [[nodiscard]] const FaceData<Scalar>& nutWall() const noexcept
+    {
+        return nutWall_;
+    }
+    [[nodiscard]] FaceData<Scalar>& nutWall() noexcept { return nutWall_; }
+
+    /// Area-based weight per wall face
+    [[nodiscard]] const FaceData<Scalar>& wallFaceWeight() const noexcept
+    {
+        return wallFaceWeight_;
+    }
+
+    /// Indices of faces with model wall-function BCs
+    [[nodiscard]] const IndexList& wallFunctionFaceIndices() const noexcept
+    {
+        return wallFunctionFaceIndices_;
+    }
+
+    /// Unique cell indices adjacent to wall-function faces
+    [[nodiscard]] const IndexList& wallCellIndices() const noexcept
+    {
+        return wallCellIndices_;
+    }
+
+    /// Wall-to-total boundary area fraction per wall cell
+    [[nodiscard]] const ScalarList& wallCellFraction() const noexcept
+    {
+        return wallCellFraction_;
+    }
+
+    /// y+ crossover between viscous sublayer and log region
+    [[nodiscard]] Scalar yPlusLam() const noexcept { return yPlusLam_; }
+
+// ****************************** Shared Methods ******************************
+
+    /// Build the transient term for one field, or nullopt if steady
+    [[nodiscard]] std::optional<TransientTerm> transientFor
+    (
+        const ScalarField& phiPrevStep,
+        const ScalarField& ddtPrevStep
+    ) const;
+
+    /// Map cell-centered diffusion coefficients to faces for assembly
+    void cellToFaceDiffusion
+    (
+        const ScalarField& cellGamma,
+        FaceFluxField& faceGamma
+    ) const;
+
+    /// Update wall distance field using mesh-wave coordinate propagation
+    void updateWallDistance();
+
+    /// Compute y+ crossover via fixed-point iteration
+    void updateYPlusLam(Scalar kappa, Scalar E);
+
+    /// Build wall-function face lists and area weights
+    void initializeWallFunctionGeometry
+    (
+        const BoundaryConditions& bcManager,
+        Field wallFunctionField,
+        BCType wallFunctionType
+    );
+
+    /// Model-specific Cμ^0.25 used by the wall functions
+    [[nodiscard]] virtual Scalar cmu25() const noexcept = 0;
+
+    /// Update y+ field on wall-function faces
+    void updateYPlus();
+
+    /// Compute strain-rate magnitude: ||S|| = sqrt(2 S_ij S_ij)
+    [[nodiscard]] ScalarField computeStrainRateMagnitude
+    (
+        const TensorField& gradU
+    ) const;
+
+    /// Compute cell velocity divergence, allocated on demand
+    [[nodiscard]] ScalarField velocityDivergence
+    (
+        const FaceFluxField& flowRateFace
+    ) const;
+
+    /// Update both residuals against the pre-solve snapshots
+    void updateResiduals
+    (
+        const ScalarField& dissipation,
+        const ScalarField& dissipationPrev
+    );
+
+    /// Compute normalised field change against a previous snapshot
+    [[nodiscard]] Scalar normalisedFieldResidual
+    (
+        const ScalarField& field,
+        const ScalarField& previousField
+    ) const;
+
+// ****************************** Private Members *****************************
+
+private:
 
 // Dependencies and services
 
@@ -291,66 +521,4 @@ protected:
 
     /// y+ crossover between viscous sublayer and log region
     Scalar yPlusLam_ = S(11.225);
-
-// ****************************** Shared Methods ******************************
-
-    /// Build the transient term for one field, or nullopt if steady
-    [[nodiscard]] std::optional<TransientTerm> transientFor
-    (
-        const ScalarField& phiPrevStep,
-        const ScalarField& ddtPrevStep
-    ) const;
-
-    /// Map cell-centered diffusion coefficients to faces for assembly
-    void cellToFaceDiffusion
-    (
-        const ScalarField& cellGamma,
-        FaceFluxField& faceGamma
-    ) const;
-
-    /// Update wall distance field using mesh-wave coordinate propagation
-    void updateWallDistance();
-
-    /// Compute y+ crossover via fixed-point iteration
-    void updateYPlusLam(Scalar kappa, Scalar E);
-
-    /// Build wall-function face lists and area weights
-    void initializeWallFunctionGeometry
-    (
-        const BoundaryConditions& bcManager,
-        Field wallFunctionField,
-        BCType wallFunctionType
-    );
-
-    /// Model-specific Cμ^0.25 used by the wall functions
-    [[nodiscard]] virtual Scalar cmu25() const noexcept = 0;
-
-    /// Update y+ field on wall-function faces
-    void updateYPlus();
-
-    /// Compute strain-rate magnitude: ||S|| = sqrt(2 S_ij S_ij)
-    [[nodiscard]] ScalarField computeStrainRateMagnitude
-    (
-        const TensorField& gradU
-    ) const;
-
-    /// Compute cell velocity divergence, allocated on demand
-    [[nodiscard]] ScalarField velocityDivergence
-    (
-        const FaceFluxField& flowRateFace
-    ) const;
-
-    /// Update both residuals against the pre-solve snapshots
-    void updateResiduals
-    (
-        const ScalarField& dissipation,
-        const ScalarField& dissipationPrev
-    );
-
-    /// Compute normalised field change against a previous snapshot
-    [[nodiscard]] Scalar normalisedFieldResidual
-    (
-        const ScalarField& field,
-        const ScalarField& previousField
-    ) const;
 };

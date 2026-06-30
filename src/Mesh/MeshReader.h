@@ -172,19 +172,6 @@ private:
     /// Print mesh loading summary to stdout
     void printSummary() const;
 
-    /// Convert hexadecimal string to Count
-    [[nodiscard]] static Count hexToDec(const Token& hexStr);
-
-    /// Convert decimal string to Count
-    [[nodiscard]] static Count strToDec(const Token& decStr);
-
-    /// Safely convert 1-based Fluent index to 0-based index
-    [[nodiscard]] static Index safeFluentIndexConvert
-    (
-        Count fluentIdx,
-        Message context
-    );
-
     /// Map Fluent boundary type string to enumeration
     [[nodiscard]] static PatchType mapFluentBCToEnum
     (

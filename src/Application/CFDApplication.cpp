@@ -33,7 +33,7 @@
 #include "MeshCreator.h"
 #include "PostProcess.h"
 #include "SolverSetup.h"
-#include "SIMPLE.h"
+#include "MomentumTransport.h"
 #include "PvdTimeSeries.h"
 
 // ***************************** Internal Helpers *****************************
@@ -50,55 +50,9 @@ void initParallelism(int numThreads)
         << "OpenMP threads: " << numThreads << '\n';
 }
 
-} // namespace
 
-// ************************* Special Member Functions *************************
-
-CFDApplication::CFDApplication(const FilePath& caseFile)
-:
-    caseFile_{caseFile}
-{}
-
-CFDApplication::~CFDApplication() noexcept = default;
-
-// ******************************** Solver Run ********************************
-
-void CFDApplication::run()
-{
-    std::cout << '\n';
-    Logger::sectionHeader("Loading Case");
-
-    // Read the case file and load configuration
-    CaseReader caseReader(caseFile_);
-    const CaseConfiguration config = CaseConfig::loadConfiguration(caseReader);
-
-    // Initialize parallelism
-    initParallelism(static_cast<int>(config.numThreads));
-
-    // Create mesh
-    Mesh mesh = MeshCreator::create(config);
-
-    // Load boundary conditions
-    BoundaryConditions bcManager;
-    BCLoader::load(caseReader, config, mesh, bcManager);
-
-    // Configure solver
-    SolverModules modules;
-    SolverSetup::configure(modules, mesh, bcManager, config);
-    SolverSetup::logSetup(modules, config);
-
-    if (!modules.solver->isTransient())
-    {
-        runSteady(modules, mesh, bcManager, config);
-    }
-    else
-    {
-        runTransient(modules, mesh, bcManager, config);
-    }
-}
-
-
-void CFDApplication::runSteady
+// Steady-state path
+void runSteady
 (
     SolverModules& modules,
     const Mesh& mesh,
@@ -134,7 +88,8 @@ void CFDApplication::runSteady
 }
 
 
-void CFDApplication::runTransient
+// Transient path
+void runTransient
 (
     SolverModules& modules,
     const Mesh& mesh,
@@ -239,5 +194,52 @@ void CFDApplication::runTransient
             bcManager,
             config
         );
+    }
+}
+
+} // namespace
+
+// ************************* Special Member Functions *************************
+
+CFDApplication::CFDApplication(const FilePath& caseFile)
+:
+    caseFile_{caseFile}
+{}
+
+CFDApplication::~CFDApplication() noexcept = default;
+
+// ******************************** Solver Run ********************************
+
+void CFDApplication::run()
+{
+    std::cout << '\n';
+    Logger::sectionHeader("Loading Case");
+
+    // Read the case file and load configuration
+    CaseReader caseReader(caseFile_);
+    const CaseConfiguration config = CaseConfig::loadConfiguration(caseReader);
+
+    // Initialize parallelism
+    initParallelism(static_cast<int>(config.numThreads));
+
+    // Create mesh
+    Mesh mesh = MeshCreator::create(config);
+
+    // Load boundary conditions
+    BoundaryConditions bcManager;
+    BCLoader::load(caseReader, config, mesh, bcManager);
+
+    // Configure solver
+    SolverModules modules;
+    SolverSetup::configure(modules, mesh, bcManager, config);
+    SolverSetup::logSetup(modules, config);
+
+    if (!modules.solver->isTransient())
+    {
+        runSteady(modules, mesh, bcManager, config);
+    }
+    else
+    {
+        runTransient(modules, mesh, bcManager, config);
     }
 }

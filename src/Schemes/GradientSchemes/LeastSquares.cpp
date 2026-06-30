@@ -46,7 +46,7 @@ Vector LeastSquares::cellGradient
     Index cellIndex
 ) const
 {
-    const Cell& cell = mesh_.cells()[cellIndex];
+    const Cell& cell = mesh().cells()[cellIndex];
 
     Scalar b0 = S(0.0);
     Scalar b1 = S(0.0);
@@ -55,12 +55,12 @@ Vector LeastSquares::cellGradient
     // Part 1: Internal neighbor cells contribution to ATb
     for (Index neighborIdx : cell.neighborCellIndices())
     {
-        if (neighborIdx >= mesh_.numCells())
+        if (neighborIdx >= mesh().numCells())
         {
             FatalError("Invalid neighbor ID - mesh topology corrupted");
         }
 
-        const Cell& neighbor = mesh_.cells()[neighborIdx];
+        const Cell& neighbor = mesh().cells()[neighborIdx];
         const Vector r = neighbor.centroid() - cell.centroid();
 
         const Scalar rMagSqr = magnitudeSquared(r);
@@ -77,7 +77,7 @@ Vector LeastSquares::cellGradient
     // Part 2: Boundary faces contribution to ATb
     for (Index faceIdx : cell.faceIndices())
     {
-        const Face& face = mesh_.faces()[faceIdx];
+        const Face& face = mesh().faces()[faceIdx];
 
         if (!face.isBoundary()) continue;
 
@@ -86,7 +86,7 @@ Vector LeastSquares::cellGradient
         const Scalar w = S(1.0) / (rMagSqr + smallValue);
 
         const Scalar phiBoundary =
-            bcManager_.boundaryFaceValue
+            bcManager().boundaryFaceValue
             (
                 field,
                 phi,
@@ -122,7 +122,7 @@ void LeastSquares::precomputeInverseATA()
     using CholeskySolver = Eigen::LLT<Matrix3>;
     using LUSolver = Eigen::FullPivLU<Matrix3>;
 
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh().numCells();
     invATA_.resize(numCells);
 
     Count degenerateCells = 0;
@@ -132,7 +132,7 @@ void LeastSquares::precomputeInverseATA()
     {
         Matrix3 ATA;
         Vector3 rVector;
-        const Cell& cell = mesh_.cells()[cellIdx];
+        const Cell& cell = mesh().cells()[cellIdx];
 
         ATA.setZero();
 
@@ -140,7 +140,7 @@ void LeastSquares::precomputeInverseATA()
         for (Index neighborIdx : cell.neighborCellIndices())
         {
             const Vector r =
-                mesh_.cells()[neighborIdx].centroid()
+                mesh().cells()[neighborIdx].centroid()
               - cell.centroid();
 
             const Scalar rMagSqr = magnitudeSquared(r);
@@ -153,7 +153,7 @@ void LeastSquares::precomputeInverseATA()
         // Boundary faces contribution (purely geometric)
         for (Index faceIdx : cell.faceIndices())
         {
-            const Face& face = mesh_.faces()[faceIdx];
+            const Face& face = mesh().faces()[faceIdx];
 
             if (!face.isBoundary()) continue;
 

@@ -26,6 +26,95 @@
 // Project headers
 #include "ErrorHandler.h"
 
+// ***************************** Internal Helpers *****************************
+
+namespace
+{
+
+// Convert hexadecimal string to Count
+[[nodiscard]] Count hexToDec(const Token& hexStr)
+{
+    Count decVal = 0;
+
+    const auto result =
+        std::from_chars
+        (
+            hexStr.data(),
+            hexStr.data() + hexStr.size(),
+            decVal,
+            16
+        );
+
+    if
+    (
+        result.ec != std::errc()
+     || result.ptr != hexStr.data() + hexStr.size()
+    )
+    {
+        FatalError
+        (
+            "Failed to convert hex string '"
+          + Token(hexStr) + "' to decimal."
+        );
+    }
+
+    return decVal;
+}
+
+
+// Convert decimal string to Count
+[[nodiscard]] Count strToDec(const Token& decStr)
+{
+    Count decVal = 0;
+
+    const auto result =
+        std::from_chars
+        (
+            decStr.data(),
+            decStr.data() + decStr.size(),
+            decVal
+        );
+
+    if
+    (
+        result.ec != std::errc()
+     || result.ptr != decStr.data() + decStr.size()
+    )
+    {
+        FatalError
+        (
+            "Failed to convert decimal string '"
+          + Token(decStr)
+          + "' to Count. Invalid format or "
+            "contains non-numeric characters."
+        );
+    }
+
+    return decVal;
+}
+
+
+// Safely convert 1-based Fluent index to 0-based index
+[[nodiscard]] Index safeFluentIndexConvert
+(
+    Count fluentIdx,
+    Message context
+)
+{
+    if (fluentIdx == 0)
+    {
+        FatalError
+        (
+            "Invalid Fluent index 0 in "
+          + Message(context)
+          + ". Fluent uses 1-based indexing."
+        );
+    }
+    return fluentIdx - 1;
+}
+
+} // namespace
+
 // ************************* Special Member Functions *************************
 
 MeshReader::MeshReader(const FilePath& filePath)
@@ -690,84 +779,4 @@ PatchType MeshReader::mapFluentBCToEnum(const Token& fluentType)
     );
 
     return PatchType::undefined;
-}
-
-
-Count MeshReader::hexToDec(const Token& hexStr)
-{
-    Count decVal = 0;
-
-    const auto result =
-        std::from_chars
-        (
-            hexStr.data(),
-            hexStr.data() + hexStr.size(),
-            decVal,
-            16
-        );
-
-    if
-    (
-        result.ec != std::errc()
-     || result.ptr != hexStr.data() + hexStr.size()
-    )
-    {
-        FatalError
-        (
-            "Failed to convert hex string '"
-          + Token(hexStr) + "' to decimal."
-        );
-    }
-
-    return decVal;
-}
-
-
-Count MeshReader::strToDec(const Token& decStr)
-{
-    Count decVal = 0;
-    
-    const auto result =
-        std::from_chars
-        (
-            decStr.data(),
-            decStr.data() + decStr.size(),
-            decVal
-        );
-
-    if
-    (
-        result.ec != std::errc()
-     || result.ptr != decStr.data() + decStr.size()
-    )
-    {
-        FatalError
-        (
-            "Failed to convert decimal string '"
-          + Token(decStr)
-          + "' to Count. Invalid format or "
-            "contains non-numeric characters."
-        );
-    }
-
-    return decVal;
-}
-
-
-Index MeshReader::safeFluentIndexConvert
-(
-    Count fluentIdx,
-    Message context
-)
-{
-    if (fluentIdx == 0)
-    {
-        FatalError
-        (
-            "Invalid Fluent index 0 in "
-          + Message(context)
-          + ". Fluent uses 1-based indexing."
-        );
-    }
-    return fluentIdx - 1;
 }

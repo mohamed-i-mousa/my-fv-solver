@@ -24,6 +24,26 @@
 #include "Cell.h"
 #include "ErrorHandler.h"
 
+// ***************************** Internal Helpers *****************************
+
+namespace
+{
+
+// Symmetric second-moment polynomial for triangle integration
+// Evaluates a² + b² + c² + ab + ac + bc
+// ∫∫_triangle x² dA = (area / 6) × secondMoment(x₁, x₂, x₃)
+[[nodiscard]] Scalar secondMoment
+(
+    Scalar a,
+    Scalar b,
+    Scalar c
+) noexcept
+{
+    return a*a + b*b + c*c + a*b + a*c + b*c;
+}
+
+} // namespace
+
 // ************************ Geometric Property Methods ************************
 
 FaceIntegrals Face::geometricProperties
