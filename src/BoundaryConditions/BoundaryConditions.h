@@ -23,7 +23,6 @@
 
 // Standard library headers
 #include <map>
-#include <optional>
 
 // Project headers
 #include "Scalar.h"

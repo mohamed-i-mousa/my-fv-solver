@@ -16,6 +16,7 @@
 #include "Constraint.h"
 
 // Standard library headers
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 

@@ -23,7 +23,6 @@
 
 // Standard library headers
 #include <algorithm>
-#include <span>
 #include <vector>
 #include <concepts>
 #include <iostream>
