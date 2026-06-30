@@ -37,6 +37,7 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
+#include <array>
 #include <iosfwd>
 #include <utility>
 
@@ -120,8 +121,8 @@ private:
     inline static const Token MSH_BOUNDARIES = "(45";
 
     /// Lookup table for Fluent BC type string to enum mapping
-    inline static const BCMapping bcMappings_[] =
-    {
+    inline static const std::array<BCMapping, 13> bcMappings_ =
+    {{
         {"velocity-inlet",   PatchType::velocityInlet},
         {"pressure-inlet",   PatchType::pressureInlet},
         {"pressure-outlet",  PatchType::pressureOutlet},
@@ -135,7 +136,7 @@ private:
         {"interior",         PatchType::interior},
         {"solid",            PatchType::solid},
         {"fluid",            PatchType::fluid}
-    };
+    }};
 
 // ****************************** Private Methods *****************************
 
