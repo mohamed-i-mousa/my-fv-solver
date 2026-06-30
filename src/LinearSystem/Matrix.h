@@ -110,7 +110,7 @@ public:
     }
 
     /// Apply Patankar implicit under-relaxation
-    void relax(Scalar alpha, const ScalarField& phiPrev);
+    void relax(Scalar alpha, const ScalarField& phiPrevIter);
 
     /// Fix matrix rows to impose known cell values
     /// Replaces each constrained cell's equation with

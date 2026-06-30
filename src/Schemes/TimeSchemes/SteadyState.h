@@ -37,20 +37,20 @@ public:
     (
         Scalar /*volume*/,
         Scalar /*deltaT*/,
-        Scalar /*phiOld*/,
-        Scalar /*oldDdt*/
+        Scalar /*phiPrevStep*/,
+        Scalar /*ddtPrevStep*/
     ) const noexcept override
     {
         return {S(0.0), S(0.0)};
     }
 
-    [[nodiscard]] Scalar updateOldDdt
+    [[nodiscard]] Scalar updateDdtPrevStep
     (
         Scalar /*volume*/,
         Scalar /*deltaT*/,
         Scalar /*phiNew*/,
-        Scalar /*phiOld*/,
-        Scalar /*oldDdt*/
+        Scalar /*phiPrevStep*/,
+        Scalar /*ddtPrevStep*/
     ) const noexcept override
     {
         return S(0.0);

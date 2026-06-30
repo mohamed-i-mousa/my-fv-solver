@@ -78,18 +78,18 @@ public:
     (
         Scalar volume,
         Scalar deltaT,
-        Scalar phiOld,
-        Scalar oldDdt
+        Scalar phiPrevStep,
+        Scalar ddtPrevStep
     ) const noexcept = 0;
 
     /// New stored old time-derivative for the next step
-    [[nodiscard]] virtual Scalar updateOldDdt
+    [[nodiscard]] virtual Scalar updateDdtPrevStep
     (
         Scalar volume,
         Scalar deltaT,
         Scalar phiNew,
-        Scalar phiOld,
-        Scalar oldDdt
+        Scalar phiPrevStep,
+        Scalar ddtPrevStep
     ) const noexcept = 0;
 
 // ***************************** Protected Methods ****************************

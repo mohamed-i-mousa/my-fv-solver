@@ -118,7 +118,7 @@ public:
     virtual void beginTimeStep() {}
 
     /// Roll stored old time derivatives forward at the end of a time step
-    virtual void updateOldTimeDerivatives() {}
+    virtual void updatePrevStepDerivatives() {}
 
 // ************************** Shared Accessor Methods *************************
 

@@ -80,12 +80,12 @@ void RANS::beginTimeStep()
     }
 
     // Snapshot the converged previous-step fields as phi^n
-    kOld_ = k_;
-    dissipationOld_ = dissipation();
+    kPrevStep_ = k_;
+    dissipationPrevStep_ = dissipation();
 }
 
 
-void RANS::updateOldTimeDerivatives()
+void RANS::updatePrevStepDerivatives()
 {
     if (!timeScheme_.isTransient())
     {
@@ -100,21 +100,21 @@ void RANS::updateOldTimeDerivatives()
     {
         const Scalar volume = mesh_.cells()[cellIdx].volume();
 
-        kDdt0_[cellIdx] = timeScheme_.updateOldDdt
+        kDdtPrevStep_[cellIdx] = timeScheme_.updateDdtPrevStep
         (
             volume,
             deltaT_,
             k_[cellIdx],
-            kOld_[cellIdx],
-            kDdt0_[cellIdx]
+            kPrevStep_[cellIdx],
+            kDdtPrevStep_[cellIdx]
         );
-        dissipationDdt0_[cellIdx] = timeScheme_.updateOldDdt
+        dissipationDdtPrevStep_[cellIdx] = timeScheme_.updateDdtPrevStep
         (
             volume,
             deltaT_,
             dissipationNew[cellIdx],
-            dissipationOld_[cellIdx],
-            dissipationDdt0_[cellIdx]
+            dissipationPrevStep_[cellIdx],
+            dissipationDdtPrevStep_[cellIdx]
         );
     }
 }
@@ -122,8 +122,8 @@ void RANS::updateOldTimeDerivatives()
 
 std::optional<TransientTerm> RANS::transientFor
 (
-    const ScalarField& phiOld,
-    const ScalarField& ddt0
+    const ScalarField& phiPrevStep,
+    const ScalarField& ddtPrevStep
 ) const
 {
     if (!timeScheme_.isTransient())
@@ -131,7 +131,7 @@ std::optional<TransientTerm> RANS::transientFor
         return std::nullopt;
     }
 
-    return TransientTerm{timeScheme_, deltaT_, phiOld, &ddt0};
+    return TransientTerm{timeScheme_, deltaT_, phiPrevStep, &ddtPrevStep};
 }
 
 // ************************ Inlet Condition Calculators ***********************

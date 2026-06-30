@@ -10,13 +10,14 @@
  * @brief Second-order Crank-Nicolson time scheme
  *
  * @details Crank-Nicolson is implemented in the form that keeps
- * the spatial operator fully implicit and carries a per-cell old time
- * derivative (ddt0) between steps. With coefft = 1 + CrankNicolsonCoeff
- * (CrankNicolsonCoeff in [0, 1]):
+ * the spatial operator fully implicit and carries a per-cell
+ * previous-time-step derivative (ddtPrevStep) between steps. With
+ * coefft = 1 + CrankNicolsonCoeff (CrankNicolsonCoeff in [0, 1]):
  *   diag   += coefft * V/dt
- *   source += coefft * V/dt * phi^n + CrankNicolsonCoeff * ddt0
- *   ddt0_new = coefft * V/dt * (phi^{n+1} - phi^n) - CrankNicolsonCoeff * ddt0
- * Because the stored ddt0 equals the previous spatial residual,
+ *   source += coefft * V/dt * phi^n + CrankNicolsonCoeff * ddtPrevStep
+ *   ddtPrevStep_new =
+ *      coefft * V/dt * (phi^{n+1} - phi^n) - CrankNicolsonCoeff * ddtPrevStep
+ * Because the stored ddtPrevStep equals the previous spatial residual,
  * CrankNicolsonCoeff = 1 yields true second-order Crank-Nicolson and
  * CrankNicolsonCoeff = 0 degenerates to backward Euler.
  *****************************************************************************/
@@ -52,28 +53,33 @@ public:
     (
         Scalar volume,
         Scalar deltaT,
-        Scalar phiOld,
-        Scalar oldDdt
+        Scalar phiPrevStep,
+        Scalar ddtPrevStep
     ) const noexcept override
     {
         const Scalar coefft = S(1.0) + CrankNicolsonCoeff_;
         const Scalar rDeltaT = coefft * volume / deltaT;
-        return {rDeltaT, rDeltaT * phiOld + CrankNicolsonCoeff_ * oldDdt};
+        
+        return
+            {
+                rDeltaT,
+                rDeltaT * phiPrevStep + CrankNicolsonCoeff_ * ddtPrevStep
+            };
     }
-
-    [[nodiscard]] Scalar updateOldDdt
+    
+    [[nodiscard]] Scalar updateDdtPrevStep
     (
         Scalar volume,
         Scalar deltaT,
         Scalar phiNew,
-        Scalar phiOld,
-        Scalar oldDdt
+        Scalar phiPrevStep,
+        Scalar ddtPrevStep
     ) const noexcept override
     {
         const Scalar coefft = S(1.0) + CrankNicolsonCoeff_;
         return
-            coefft * (volume / deltaT) * (phiNew - phiOld)
-          - CrankNicolsonCoeff_ * oldDdt;
+            coefft * (volume / deltaT) * (phiNew - phiPrevStep)
+          - CrankNicolsonCoeff_ * ddtPrevStep;
     }
 
 // ****************************** Private Members *****************************

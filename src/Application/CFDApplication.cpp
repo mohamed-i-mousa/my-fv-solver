@@ -187,11 +187,13 @@ void CFDApplication::runTransient
         );
     }
 
+    TransientFields prevStep;
+
     for (Count step = 1; step <= numSteps; ++step)
     {
         const Scalar time = S(step) * config.time.timeStep;
 
-        modules.solver->solveTimeStep(step, numSteps, time);
+        modules.solver->solveTimeStep(step, numSteps, time, prevStep);
 
         if (config.forcesEnabled)
         {

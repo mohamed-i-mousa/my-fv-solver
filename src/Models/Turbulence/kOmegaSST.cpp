@@ -633,7 +633,7 @@ void kOmegaSST::solveOmegaEquation
     {
         .field      = Field::omega,
         .phi        = omega_,
-        .transient  = transientFor(dissipationOld_, dissipationDdt0_),
+        .transient  = transientFor(dissipationPrevStep_, dissipationDdtPrevStep_),
         .convection =
             ConvectionTerm{flowRateFace, dissipationConvectionScheme_},
         .GammaFace  = gammaOmegaFace_,
@@ -764,7 +764,7 @@ void kOmegaSST::solveKEquation
     {
         .field      = Field::k,
         .phi        = k_,
-        .transient  = transientFor(kOld_, kDdt0_),
+        .transient  = transientFor(kPrevStep_, kDdtPrevStep_),
         .convection = ConvectionTerm{flowRateFace, kConvectionScheme_},
         .GammaFace  = gammaKFace_,
         .source     = kSource,

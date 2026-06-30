@@ -57,10 +57,10 @@ struct TransientTerm
     Scalar deltaT;
 
     /// Field values at the previous time step (phi^n)
-    const ScalarField& phiOld;
+    const ScalarField& phiPrevStep;
 
     /// Stored old time derivative for Crank-Nicolson (nullptr if unused)
-    const ScalarField* oldDdt;
+    const ScalarField* ddtPrevStep;
 };
 
 // ************************* struct TransportEquation *************************

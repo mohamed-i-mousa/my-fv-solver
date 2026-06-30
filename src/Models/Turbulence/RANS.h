@@ -101,7 +101,7 @@ public:
     void beginTimeStep() override;
 
     /// Roll the Crank-Nicolson stored time derivatives forward one step
-    void updateOldTimeDerivatives() override;
+    void updatePrevStepDerivatives() override;
 
 // ************************ Inlet Condition Calculators ***********************
 
@@ -237,16 +237,16 @@ protected:
     ScalarField kPrev_;
 
     /// k from the previous time step (phi^n) for the transient term
-    ScalarField kOld_;
+    ScalarField kPrevStep_;
 
     /// Dissipation from the previous time step (phi^n)
-    ScalarField dissipationOld_;
+    ScalarField dissipationPrevStep_;
 
     /// Stored old time derivative of k for Crank-Nicolson
-    ScalarField kDdt0_;
+    ScalarField kDdtPrevStep_;
 
     /// Stored old time derivative of dissipation for Crank-Nicolson
-    ScalarField dissipationDdt0_;
+    ScalarField dissipationDdtPrevStep_;
 
     /// Cell gradient of k
     VectorField gradK_;
@@ -297,8 +297,8 @@ protected:
     /// Build the transient term for one field, or nullopt if steady
     [[nodiscard]] std::optional<TransientTerm> transientFor
     (
-        const ScalarField& phiOld,
-        const ScalarField& ddt0
+        const ScalarField& phiPrevStep,
+        const ScalarField& ddtPrevStep
     ) const;
 
     /// Map cell-centered diffusion coefficients to faces for assembly

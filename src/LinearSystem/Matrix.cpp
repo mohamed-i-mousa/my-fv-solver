@@ -124,9 +124,9 @@ void Matrix::buildMatrix(const TransportEquation& equation)
             for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
             {
                 const Scalar volume = mesh_.cells()[cellIdx].volume();
-                const Scalar oldDdt =
-                    transient.oldDdt != nullptr
-                  ? (*transient.oldDdt)[cellIdx]
+                const Scalar ddtPrevStep =
+                    transient.ddtPrevStep != nullptr
+                  ? (*transient.ddtPrevStep)[cellIdx]
                   : S(0.0);
 
                 const TimeContribution contribution =
@@ -134,8 +134,8 @@ void Matrix::buildMatrix(const TransportEquation& equation)
                     (
                         volume,
                         transient.deltaT,
-                        transient.phiOld[cellIdx],
-                        oldDdt
+                        transient.phiPrevStep[cellIdx],
+                        ddtPrevStep
                     );
 
                 triplets.emplace_back
@@ -177,7 +177,7 @@ void Matrix::buildMatrix(const TransportEquation& equation)
 }
 
 
-void Matrix::relax(Scalar alpha, const ScalarField& phiPrev)
+void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
 {
     if (alpha <= S(0.0))
     {
@@ -186,11 +186,11 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrev)
 
     const Eigen::Index numCells = matrixA_.rows();
 
-    if (eIdx(phiPrev.size()) != numCells)
+    if (eIdx(phiPrevIter.size()) != numCells)
     {
         FatalError
         (
-            "Matrix::relax: phiPrev size mismatch "
+            "Matrix::relax: phiPrevIter size mismatch "
             "with matrix size"
         );
     }
@@ -209,9 +209,10 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrev)
         // Scale diagonal: a_P <- a_P / alpha
         matrixA_.coeffRef(cellIdx, cellIdx) = origDiag / alpha;
 
-        // Update RHS: b <- b + ((1-alpha)/alpha) * a_P * phiPrev
+        // Update RHS: b <- b + ((1-alpha)/alpha) * a_P * phiPrevIter
         vectorB_(cellIdx) +=
             factor * origDiag
+          * phiPrevIter[static_cast<Index>(cellIdx)];
           * phiPrev[static_cast<Index>(cellIdx)];
     }
 }
