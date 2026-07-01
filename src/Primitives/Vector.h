@@ -18,7 +18,7 @@
  * - Components access and manipulation (x, y, z coordinates)
  * - Arithmetic operations (addition, subtraction, scalar multiplication)
  * - Vector operations (dot product, cross product, normalization)
- * - Comparison operators for sorting and equality testing
+ * - Equality comparison operator
  * - Stream I/O operators for debugging
  *****************************************************************************/
 

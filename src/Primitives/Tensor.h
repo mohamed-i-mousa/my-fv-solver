@@ -18,7 +18,7 @@
  * - Arithmetic operations (addition, subtraction, scalar multiplication)
  * - Tensor operations (transpose, symmetric/antisymmetric part, trace)
  * - Double-dot product and Frobenius magnitude
- * - Comparison operators and stream I/O for debugging
+ * - Stream I/O for debugging
  *****************************************************************************/
 
 #pragma once
