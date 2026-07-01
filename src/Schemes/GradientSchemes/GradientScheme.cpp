@@ -203,15 +203,6 @@ Vector GradientScheme::averageFaceGradient
     const Vector& gradPhiN
 ) const
 {
-    if (internalFace.isBoundary())
-    {
-        FatalError
-        (
-            "GradientScheme::averageFaceGradient: "
-            "Cannot average gradient on boundary face"
-        );
-    }
-
     const Scalar dPf = internalFace.dPfMag();
     const Scalar dNf = internalFace.dNfMag().value();
     const Scalar totalDist = dPf + dNf;
