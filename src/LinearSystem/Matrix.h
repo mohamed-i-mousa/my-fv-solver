@@ -161,9 +161,6 @@ private:
 
 private:
 
-    /// Clear matrix and vector for new assembly
-    void clear();
-
     /// Assemble internal face contributions
     void assembleInternalFace
     (

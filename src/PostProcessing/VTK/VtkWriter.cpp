@@ -69,29 +69,6 @@ Vector newellNormal
 }
 
 
-void appendUniqueNodeId
-(
-    std::vector<vtkIdType>& uniquePointIds,
-    Index nodeIdx
-)
-{
-    const vtkIdType vtkNodeIdx = static_cast<vtkIdType>(nodeIdx);
-
-    if
-    (
-        std::find
-        (
-            uniquePointIds.begin(),
-            uniquePointIds.end(),
-            vtkNodeIdx
-        ) == uniquePointIds.end()
-    )
-    {
-        uniquePointIds.push_back(vtkNodeIdx);
-    }
-}
-
-
 void appendValidationStateName
 (
     Message& result,
@@ -345,7 +322,21 @@ void writeVtkUnstructuredGrid
 
             for (Index nodeIdx : nodeIndices)
             {
-                appendUniqueNodeId(uniquePointIds, nodeIdx);
+                const vtkIdType vtkNodeIdx =
+                    static_cast<vtkIdType>(nodeIdx);
+
+                if
+                (
+                    std::find
+                    (
+                        uniquePointIds.begin(),
+                        uniquePointIds.end(),
+                        vtkNodeIdx
+                    ) == uniquePointIds.end()
+                )
+                {
+                    uniquePointIds.push_back(vtkNodeIdx);
+                }
             }
 
             std::vector<vtkIdType> orientedFaceNodes;

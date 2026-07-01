@@ -173,7 +173,22 @@ void MeshReader::parseFile(const FilePath& filePath)
 
     buildTopology();
     validateMesh();
-    printSummary();
+
+    std::cout
+        << "Mesh loaded successfully:" << '\n';
+
+    std::cout
+        << "  - Nodes: " << nodes_.size() << '\n';
+
+    std::cout
+        << "  - Faces: " << faces_.size() << '\n';
+
+    std::cout
+        << "  - Cells: " << cells_.size() << '\n';
+
+    std::cout
+        << "  - Boundary patches: "
+        << boundaryPatches_.size() << '\n';
 }
 
 
@@ -745,25 +760,6 @@ void MeshReader::validateMesh() const
     }
 }
 
-
-void MeshReader::printSummary() const
-{
-    std::cout
-        << "Mesh loaded successfully:" << '\n';
-
-    std::cout
-        << "  - Nodes: " << nodes_.size() << '\n';
-
-    std::cout
-        << "  - Faces: " << faces_.size() << '\n';
-
-    std::cout
-        << "  - Cells: " << cells_.size() << '\n';
-
-    std::cout
-        << "  - Boundary patches: "
-        << boundaryPatches_.size() << '\n';
-}
 
 PatchType MeshReader::mapFluentBCToEnum(const Token& fluentType)
 {

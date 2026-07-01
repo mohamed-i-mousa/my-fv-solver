@@ -169,9 +169,6 @@ private:
     /// Validate mesh integrity
     void validateMesh() const;
 
-    /// Print mesh loading summary to stdout
-    void printSummary() const;
-
     /// Map Fluent boundary type string to enumeration
     [[nodiscard]] static PatchType mapFluentBCToEnum
     (

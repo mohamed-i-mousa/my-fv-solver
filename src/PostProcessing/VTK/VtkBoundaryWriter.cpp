@@ -66,28 +66,6 @@ int checkedInt(Count value, const Message& label)
     return static_cast<int>(value);
 }
 
-
-vtkIdType localPointIdx
-(
-    std::unordered_map<Index, vtkIdType>& nodeMap,
-    IndexList& localToGlobalNodes,
-    Index globalNodeIdx
-)
-{
-    const auto it = nodeMap.find(globalNodeIdx);
-    if (it != nodeMap.end())
-    {
-        return it->second;
-    }
-
-    const vtkIdType localIdx =
-        static_cast<vtkIdType>(localToGlobalNodes.size());
-
-    nodeMap.emplace(globalNodeIdx, localIdx);
-    localToGlobalNodes.push_back(globalNodeIdx);
-    return localIdx;
-}
-
 } // namespace
 
 // **************************** Write Boundary Data ***************************
@@ -152,7 +130,15 @@ void writeBoundaryData
 
             for (Index nodeIdx : face.nodeIndices())
             {
-                localPointIdx(nodeMap, localToGlobalNodes, nodeIdx);
+                if (nodeMap.find(nodeIdx) == nodeMap.end())
+                {
+                    nodeMap.emplace
+                    (
+                        nodeIdx,
+                        static_cast<vtkIdType>(localToGlobalNodes.size())
+                    );
+                    localToGlobalNodes.push_back(nodeIdx);
+                }
             }
 
             boundaryFaces.push_back

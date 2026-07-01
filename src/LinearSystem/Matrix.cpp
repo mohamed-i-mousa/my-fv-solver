@@ -72,7 +72,10 @@ Matrix::Matrix
 
 void Matrix::buildMatrix(const TransportEquation& equation)
 {
-    clear();
+    tripletList_.clear();
+    matrixA_.setZero();
+    vectorB_.setZero();
+    lastRelaxationFactor_ = S(0.0);
 
     const Count numCells = mesh_.numCells();
     const Count numFaces = mesh_.numFaces();
@@ -218,15 +221,6 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
 }
 
 // ****************************** Private Methods *****************************
-
-void Matrix::clear()
-{
-    tripletList_.clear();
-    matrixA_.setZero();
-    vectorB_.setZero();
-    lastRelaxationFactor_ = S(0.0);
-}
-
 
 void Matrix::assembleInternalFace
 (

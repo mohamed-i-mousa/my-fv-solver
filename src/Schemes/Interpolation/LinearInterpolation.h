@@ -24,14 +24,6 @@
 
 // ************************** Interpolation Functions *************************
 
-/// Distance weight for the neighbour cell: wN = dP / (dP + dN).
-[[nodiscard]] inline Scalar faceWeight(const Face& face)
-{
-    const Scalar dP = face.dPfMag();
-    const Scalar dN = face.dNfMag().value();
-    return dP / (dP + dN);
-}
-
 /// Linear interpolation of a cell-centered field to an internal face
 template<CellFieldType T>
 [[nodiscard]] T interpolateToFace
@@ -51,7 +43,11 @@ template<CellFieldType T>
 
     const Index P = targetFace.ownerCell();
     const Index N = targetFace.neighborCell().value();
-    const Scalar wN = faceWeight(targetFace);
+
+    // Distance weight for the neighbour cell: wN = dP / (dP + dN)
+    const Scalar dP = targetFace.dPfMag();
+    const Scalar dN = targetFace.dNfMag().value();
+    const Scalar wN = dP / (dP + dN);
 
     return (S(1.0) - wN) * field[P] + wN * field[N];
 }

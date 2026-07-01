@@ -132,20 +132,6 @@ public:
     /// Names of every selectable linear solver
     [[nodiscard]] static NameList availableSolvers();
 
-// ****************************** Setter Methods ******************************
-
-    /// Set relative residual tolerance
-    void setTolerance(Scalar tol) noexcept
-    {
-        tolerance_ = tol;
-    }
-
-    /// Set maximum solver iterations
-    void setMaxIterations(Count maxIter) noexcept
-    {
-        maxIterations_ = maxIter;
-    }
-
 // ***************************** Accessor Methods *****************************
 
     /// Get relative tolerance
@@ -158,18 +144,6 @@ public:
     [[nodiscard]] Count maxIterations() const noexcept
     {
         return maxIterations_;
-    }
-
-    /// Iterations performed by the last solve call (-1 = no solve yet)
-    [[nodiscard]] int lastIterations() const noexcept
-    {
-        return lastPerformance_.iterations;
-    }
-
-    /// Final relative residual reported by the last solve call
-    [[nodiscard]] Scalar lastResidual() const noexcept
-    {
-        return lastPerformance_.finalResidual;
     }
 
     /// Full diagnostics from the last solve call

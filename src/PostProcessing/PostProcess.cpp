@@ -68,14 +68,6 @@ FilePath fileName(const FilePath& path)
     return slash == FilePath::npos ? path : path.substr(slash + 1);
 }
 
-// Zero-padded step suffix, e.g. step 42 -> "000042"
-Name stepSuffix(Count step)
-{
-    std::ostringstream suffix;
-    suffix << std::setw(6) << std::setfill('0') << step;
-    return suffix.str();
-}
-
 // Collect the volume and boundary fields and write the .vtu and .vtp files
 void writeFields
 (
@@ -262,7 +254,13 @@ void exportTimeStep
 )
 {
     const FilePath base = outputBase(config.vtkOutputFilename);
-    const FilePath vtuFilename = base + "_" + stepSuffix(step) + ".vtu";
+
+    // Zero-padded step suffix, e.g. step 42 -> "000042"
+    std::ostringstream stepSuffix;
+    stepSuffix << std::setw(6) << std::setfill('0') << step;
+
+    const FilePath vtuFilename =
+        base + "_" + stepSuffix.str() + ".vtu";
     const FilePath vtpFilename = boundaryPath(vtuFilename);
 
     writeFields

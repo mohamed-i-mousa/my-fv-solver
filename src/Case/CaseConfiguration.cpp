@@ -55,30 +55,6 @@ void validateSelection
 }
 
 
-LinearSolverSettings momentumSolverDefaults()
-{
-    return LinearSolverSettings
-    {
-        .solver = "BiCGSTAB",
-        .preconditioner = "Jacobi",
-        .tolerance = S(1e-8),
-        .maxIter = 1000
-    };
-}
-
-
-LinearSolverSettings pressureSolverDefaults()
-{
-    return LinearSolverSettings
-    {
-        .solver = "PCG",
-        .preconditioner = "Jacobi",
-        .tolerance = S(1e-6),
-        .maxIter = 1000
-    };
-}
-
-
 LinearSolverSettings turbulenceSolverDefaults()
 {
     return LinearSolverSettings
@@ -145,8 +121,20 @@ void readLinearSolvers
     CaseConfiguration& config
 )
 {
-    config.linearSolvers.momentum = momentumSolverDefaults();
-    config.linearSolvers.pressure = pressureSolverDefaults();
+    config.linearSolvers.momentum = LinearSolverSettings
+    {
+        .solver = "BiCGSTAB",
+        .preconditioner = "Jacobi",
+        .tolerance = S(1e-8),
+        .maxIter = 1000
+    };
+    config.linearSolvers.pressure = LinearSolverSettings
+    {
+        .solver = "PCG",
+        .preconditioner = "Jacobi",
+        .tolerance = S(1e-6),
+        .maxIter = 1000
+    };
     config.linearSolvers.k = turbulenceSolverDefaults();
     config.linearSolvers.omega = turbulenceSolverDefaults();
 

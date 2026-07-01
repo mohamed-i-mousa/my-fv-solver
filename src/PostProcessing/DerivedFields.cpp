@@ -26,25 +26,6 @@
 namespace VTK
 {
 
-// ***************************** Internal Helpers *****************************
-
-namespace
-{
-
-ScalarField computeMagnitude(const VectorField& field)
-{
-    ScalarField result;
-    #pragma omp parallel for schedule(static)
-    for (Index cellIdx = 0; cellIdx < field.size(); ++cellIdx)
-    {
-        result[cellIdx] = magnitude(field[cellIdx]);
-    }
-    return result;
-}
-
-} // namespace
-
-
 ScalarField velocityMagnitude
 (
     const ScalarField& Ux,
@@ -68,7 +49,13 @@ ScalarField velocityMagnitude
 
 ScalarField vorticityMagnitude(const VectorField& vorticity)
 {
-    return computeMagnitude(vorticity);
+    ScalarField result;
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < vorticity.size(); ++cellIdx)
+    {
+        result[cellIdx] = magnitude(vorticity[cellIdx]);
+    }
+    return result;
 }
 
 ScalarField QCriterion

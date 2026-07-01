@@ -92,21 +92,6 @@ void printIndicesList
 }
 
 
-Scalar faceOrthogonality
-(
-    const Vector& ownerCellCentroid,
-    const Vector& neighborCellCentroid,
-    const Vector& faceNormal
-) noexcept
-{
-    const Vector dPN = neighborCellCentroid - ownerCellCentroid;
-    const Scalar dPNMag = magnitude(dPN);
-    const Scalar cosAngle = dot(dPN, faceNormal) / (dPNMag + vSmallValue);
-
-    return std::clamp(cosAngle, S(-1.0), S(1.0));
-}
-
-
 Scalar faceSkewness
 (
     const Mesh& mesh,
@@ -435,13 +420,14 @@ void check(const Mesh& mesh)
                 mesh.cells()[face.neighborCell().value()];
 
             // Non-orthogonality (angle in degrees)
-            const Scalar ortho =
-                faceOrthogonality
-                (
-                    ownerCell.centroid(),
-                    neighborCell.centroid(),
-                    face.normal()
-                );
+            const Vector dPN =
+                neighborCell.centroid() - ownerCell.centroid();
+            const Scalar ortho = std::clamp
+            (
+                dot(dPN, face.normal()) / (magnitude(dPN) + vSmallValue),
+                S(-1.0),
+                S(1.0)
+            );
 
             const Scalar angleRad = std::acos(ortho);
             const Scalar angleDeg = angleRad * radToDeg;
