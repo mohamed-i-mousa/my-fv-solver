@@ -23,6 +23,7 @@
 // Project headers
 #include "Cell.h"
 #include "ErrorHandler.h"
+#include "Logger.h"
 
 // ***************************** Internal Helpers *****************************
 
@@ -222,9 +223,8 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
 
     if (f.geometricPropertiesCalculated())
     {
-        // save the current format
-        const auto flags = os.flags();
-        const auto prec = os.precision();
+        // Restore os format flags/precision on scope exit
+        const StreamStateGuard guard(os);
 
         // change format for geometric properties
         os  << std::fixed << std::setprecision(6);
@@ -233,10 +233,6 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
         os  << ", Centroid: " << f.centroid()
             << ", Area: "   << f.projectedArea()
             << ", Normal: " << f.normal();
-
-        // restore original format
-        os.flags(flags);
-        os.precision(prec);
     }
     else
     {
@@ -245,9 +241,8 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
 
     if (f.distancesCalculated())
     {
-        // save the current format
-        const auto flags = os.flags();
-        const auto prec = os.precision();
+        // Restore os format flags/precision on scope exit
+        const StreamStateGuard guard(os);
 
         // change format for distance properties
         os  << std::fixed << std::setprecision(6);
@@ -259,10 +254,6 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
         {
             os  << ", dNfMag: " << f.dNfMag().value();
         }
-
-        // restore original format
-        os.flags(flags);
-        os.precision(prec);
     }
 
     os  << ')';

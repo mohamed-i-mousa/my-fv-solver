@@ -22,6 +22,7 @@
 
 // Project headers
 #include "ErrorHandler.h"
+#include "Logger.h"
 
 // ************************ Geometric Property Methods ************************
 
@@ -105,9 +106,8 @@ std::ostream& operator<<(std::ostream& os, const Cell& c)
 
     if (c.geometricPropertiesCalculated())
     {
-        // save current formatting
-        const auto flags = os.flags();
-        const auto prec = os.precision();
+        // Restore os format flags/precision on scope exit
+        const StreamStateGuard guard(os);
 
         // change formatting for geometric properties
         os  << std::fixed
@@ -116,10 +116,6 @@ std::ostream& operator<<(std::ostream& os, const Cell& c)
         // output volume and centroid
         os  << ", Volume: " << c.volume()
             << ", Centroid: " << c.centroid();
-
-        // restore original formatting
-        os.flags(flags);
-        os.precision(prec);
     }
     else
     {
