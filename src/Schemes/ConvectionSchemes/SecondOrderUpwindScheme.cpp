@@ -26,10 +26,10 @@ Scalar SecondOrderUpwindScheme::correction
 ) const
 {
     // Deferred correction: flowRate * grad(phi)_upwind dot d_upwind_to_face
-    const Scalar correction =
+    const Scalar gradientProjection =
         (flowRate >= S(0.0))
       ? dot(gradPhiP, face.dPf())
       : dot(gradPhiN, face.dNf().value());
 
-    return flowRate * correction;
+    return flowRate * gradientProjection;
 }

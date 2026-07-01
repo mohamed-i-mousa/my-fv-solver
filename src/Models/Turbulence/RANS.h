@@ -394,8 +394,8 @@ protected:
     /// Update both residuals against the pre-solve snapshots
     void updateResiduals
     (
-        const ScalarField& dissipation,
-        const ScalarField& dissipationPrev
+        const ScalarField& dissipationField,
+        const ScalarField& dissipationPrevField
     );
 
     /// Compute normalised field change against a previous snapshot

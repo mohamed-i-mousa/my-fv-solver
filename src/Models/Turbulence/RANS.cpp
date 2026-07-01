@@ -543,13 +543,13 @@ ScalarField RANS::velocityDivergence
 
 void RANS::updateResiduals
 (
-    const ScalarField& dissipation,
-    const ScalarField& dissipationPrev
+    const ScalarField& dissipationField,
+    const ScalarField& dissipationPrevField
 )
 {
     lastKResidual_ = normalisedFieldResidual(k_, kPrev_);
     lastDissipationResidual_ =
-        normalisedFieldResidual(dissipation, dissipationPrev);
+        normalisedFieldResidual(dissipationField, dissipationPrevField);
 }
 
 
