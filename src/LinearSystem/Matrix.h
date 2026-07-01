@@ -184,7 +184,13 @@ private:
 // *************************** Non-Member Functions ***************************
 
 /// Convert an unsigned storage index to Eigen's signed index type
-[[nodiscard]] inline Eigen::Index eIdx(Index value) noexcept
+[[nodiscard]] inline Eigen::Index EigenIdx(Index value) noexcept
 {
     return static_cast<Eigen::Index>(value);
+}
+
+/// Convert an unsigned storage index to int
+[[nodiscard]] inline int IntIdx(Index value) noexcept
+{
+    return static_cast<int>(value);
 }

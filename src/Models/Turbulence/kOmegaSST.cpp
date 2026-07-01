@@ -655,14 +655,14 @@ void kOmegaSST::solveOmegaEquation
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
 
         // Production term: add the limited omega production POmega to RHS
-        vectorB(eIdx(cellIdx)) += POmega[cellIdx] * cellVolume;
+        vectorB(EigenIdx(cellIdx)) += POmega[cellIdx] * cellVolume;
 
         // Destruction term: -β·ω² (implicit: β·ω on diagonal)
         const Scalar beta = blend(f1[cellIdx], coeffs_.beta1, coeffs_.beta2);
         matrixA.coeffRef
         (
-            eIdx(cellIdx),
-            eIdx(cellIdx)
+            EigenIdx(cellIdx),
+            EigenIdx(cellIdx)
         ) += beta * omega_[cellIdx] * cellVolume;
 
         // Cross-diffusion: linearization of (1-F1)*CDkOmega
@@ -674,13 +674,13 @@ void kOmegaSST::solveOmegaEquation
         {
             matrixA.coeffRef
             (
-                eIdx(cellIdx),
-                eIdx(cellIdx)
+                EigenIdx(cellIdx),
+                EigenIdx(cellIdx)
             ) += -CDkOmegaLineared * cellVolume;
         }
         else
         {
-            vectorB(eIdx(cellIdx)) +=
+            vectorB(EigenIdx(cellIdx)) +=
                 CDkOmegaLineared * omega_[cellIdx] * cellVolume;
         }
 
@@ -692,11 +692,11 @@ void kOmegaSST::solveOmegaEquation
 
         matrixA.coeffRef
         (
-            eIdx(cellIdx),
-            eIdx(cellIdx)
+            EigenIdx(cellIdx),
+            EigenIdx(cellIdx)
         ) += std::max(suspOmega, S(0.0)) * cellVolume;
 
-        vectorB(eIdx(cellIdx)) +=
+        vectorB(EigenIdx(cellIdx)) +=
             std::max(-suspOmega, S(0.0)) * omega_[cellIdx] * cellVolume;
     }
 
@@ -711,7 +711,7 @@ void kOmegaSST::solveOmegaEquation
         wallCellFraction()
     );
 
-    EigenVectorMap omegaSolution(omega_.data(), eIdx(numCells));
+    EigenVectorMap omegaSolution(omega_.data(), EigenIdx(numCells));
 
     dissipationSolver().solve(omegaSolution, matrixA, vectorB);
 
@@ -784,27 +784,27 @@ void kOmegaSST::solveKEquation
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
 
-        vectorB(eIdx(cellIdx)) += Pk[cellIdx] * cellVolume;
+        vectorB(EigenIdx(cellIdx)) += Pk[cellIdx] * cellVolume;
 
         // Destruction term: -β*·kω
         const Scalar destruction = coeffs_.betaStar * omega_[cellIdx];
-        matrixA.coeffRef(eIdx(cellIdx),eIdx(cellIdx)) +=
+        matrixA.coeffRef(EigenIdx(cellIdx),EigenIdx(cellIdx)) +=
             destruction * cellVolume;
 
         // -(2/3)*divU SuSp term (continuity correction)
         const Scalar suspK = (S(2.0) / S(3.0)) * divU[cellIdx];
 
-        matrixA.coeffRef(eIdx(cellIdx),eIdx(cellIdx)) +=
+        matrixA.coeffRef(EigenIdx(cellIdx),EigenIdx(cellIdx)) +=
             std::max(suspK, S(0.0)) * cellVolume;
 
-        vectorB(eIdx(cellIdx)) +=
+        vectorB(EigenIdx(cellIdx)) +=
             std::max(-suspK, S(0.0)) * k()[cellIdx] * cellVolume;
     }
 
     // Apply implicit under-relaxation (Patankar's method)
     matrixConstruct()->relax(alphaK(), k());
 
-    EigenVectorMap kSolution(k().data(), eIdx(numCells));
+    EigenVectorMap kSolution(k().data(), EigenIdx(numCells));
 
     kSolver().solve(kSolution, matrixA, vectorB);
 

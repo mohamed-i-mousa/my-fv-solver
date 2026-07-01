@@ -47,10 +47,10 @@ Matrix::Matrix
 
     matrixA_.resize
     (
-        eIdx(numCells),
-        eIdx(numCells)
+        EigenIdx(numCells),
+        EigenIdx(numCells)
     );
-    vectorB_.resize(eIdx(numCells));
+    vectorB_.resize(EigenIdx(numCells));
 
     // Reserve reusable per-thread assembly buffers.
     const Count T = static_cast<Count>(omp_get_max_threads());
@@ -65,7 +65,7 @@ Matrix::Matrix
         triplets.reserve(reservePerThread);
     }
 
-    perThreadB_.assign(T, Vec::Zero(eIdx(numCells)));
+    perThreadB_.assign(T, Vec::Zero(EigenIdx(numCells)));
 }
 
 // ****************************** Public Methods ******************************
@@ -84,7 +84,7 @@ void Matrix::buildMatrix(const TransportEquation& equation)
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        vectorB_(eIdx(cellIdx)) += equation.source[cellIdx];
+        vectorB_(EigenIdx(cellIdx)) += equation.source[cellIdx];
     }
 
     // Reset per-thread scratch (capacity retained from constructor)
@@ -143,11 +143,11 @@ void Matrix::buildMatrix(const TransportEquation& equation)
 
                 triplets.emplace_back
                 (
-                    eIdx(cellIdx),
-                    eIdx(cellIdx),
+                    IntIdx(cellIdx),
+                    IntIdx(cellIdx),
                     contribution.diag
                 );
-                localB(eIdx(cellIdx)) += contribution.source;
+                localB(EigenIdx(cellIdx)) += contribution.source;
             }
         }
     }
@@ -189,7 +189,7 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
 
     const Eigen::Index numCells = matrixA_.rows();
 
-    if (eIdx(phiPrevIter.size()) != numCells)
+    if (EigenIdx(phiPrevIter.size()) != numCells)
     {
         FatalError
         (
@@ -262,10 +262,12 @@ void Matrix::assembleInternalFace
     }
 
     // Matrix coefficients for owner and neighbor cells
-    triplets.emplace_back(ownerIdx, ownerIdx, aDiff + aPConv);
-    triplets.emplace_back(ownerIdx, neighborIdx, -aDiff + aNConv);
-    triplets.emplace_back(neighborIdx, neighborIdx, aDiff - aNConv);
-    triplets.emplace_back(neighborIdx, ownerIdx, -aDiff - aPConv);
+    const int ownerRow = IntIdx(ownerIdx);
+    const int neighborRow = IntIdx(neighborIdx);
+    triplets.emplace_back(ownerRow, ownerRow, aDiff + aPConv);
+    triplets.emplace_back(ownerRow, neighborRow, -aDiff + aNConv);
+    triplets.emplace_back(neighborRow, neighborRow, aDiff - aNConv);
+    triplets.emplace_back(neighborRow, ownerRow, -aDiff - aPConv);
 
     // Non-orthogonal correction (explicit)
     const Vector Tf = Sf - Ef;
@@ -282,8 +284,8 @@ void Matrix::assembleInternalFace
         );
     const Scalar nonOrthogonalFlux = Gammaf * dot(gradPhif, Tf);
 
-    localB(eIdx(ownerIdx)) += nonOrthogonalFlux;
-    localB(eIdx(neighborIdx)) -= nonOrthogonalFlux;
+    localB(EigenIdx(ownerIdx)) += nonOrthogonalFlux;
+    localB(EigenIdx(neighborIdx)) -= nonOrthogonalFlux;
 
     // Deferred correction (explicit, convection only)
     if (equation.convection)
@@ -300,8 +302,8 @@ void Matrix::assembleInternalFace
                 flowRate
             );
 
-        localB(eIdx(ownerIdx)) -= deferredCorrection;
-        localB(eIdx(neighborIdx)) += deferredCorrection;
+        localB(EigenIdx(ownerIdx)) -= deferredCorrection;
+        localB(EigenIdx(neighborIdx)) += deferredCorrection;
     }
 }
 
@@ -315,6 +317,7 @@ void Matrix::assembleBoundaryFace
 ) const
 {
     const Index ownerIdx = face.ownerCell();
+    const int ownerRow = IntIdx(ownerIdx);
     const BoundaryData& bc =
         bcManager_.fieldBC(face.patch()->get().patchName(), equation.field);
     const Vector Sf = face.normal() * face.projectedArea();
@@ -327,83 +330,87 @@ void Matrix::assembleBoundaryFace
         equation.convection ? &*equation.convection : nullptr;
 
     using enum BCType;
-    if
-    (
-        bc.type() == fixedValue
-     || bc.type() == noSlip
-    )
+    const BCType type = bc.type();
+
+    switch (type)
     {
-        // Dirichlet BC: phiB is prescribed
-        Scalar phiB = S(0.0);
-
-        if (bc.type() != noSlip)
+        case fixedValue:
+        case noSlip:
         {
-            phiB = bc.fixedScalarValue();
+            // Dirichlet BC: phiB is prescribed
+            Scalar phiB = S(0.0);
+
+            if (type != noSlip)
+            {
+                phiB = bc.fixedScalarValue();
+            }
+
+            // Diffusion contribution
+            triplets.emplace_back(ownerRow, ownerRow, aDiff);
+            localB(EigenIdx(ownerIdx)) += aDiff * phiB;
+
+            // Convection contribution
+            if (convection != nullptr)
+            {
+                const Scalar aConv = convection->flowRate[face.idx()];
+
+                localB(EigenIdx(ownerIdx)) -= aConv * phiB;
+            }
+
+            break;
         }
-
-        // Diffusion contribution
-        triplets.emplace_back(ownerIdx, ownerIdx, aDiff);
-        localB(eIdx(ownerIdx)) += aDiff * phiB;
-
-        // Convection contribution
-        if (convection != nullptr)
+        case fixedGradient:
         {
-            const Scalar aConv = convection->flowRate[face.idx()];
+            const Scalar gradient = bc.fixedScalarGradient();
+            const Scalar dn = dot(face.dPf(), face.normal());
 
-            localB(eIdx(ownerIdx)) -= aConv * phiB;
+            localB(EigenIdx(ownerIdx)) +=
+                Gammaf * gradient * face.projectedArea();
+
+            // Boundary value for convection: phi_b = phi_P + grad * dn
+            if (convection != nullptr)
+            {
+                const Scalar aConv = convection->flowRate[face.idx()];
+
+                triplets.emplace_back(ownerRow, ownerRow, aConv);
+                localB(EigenIdx(ownerIdx)) -= aConv * gradient * dn;
+            }
+
+            break;
         }
-
-    }
-    else if (bc.type() == fixedGradient)
-    {
-        const Scalar gradient = bc.fixedScalarGradient();
-        const Scalar dn = dot(face.dPf(), face.normal());
-
-        localB(eIdx(ownerIdx)) +=
-            Gammaf * gradient * face.projectedArea();
-
-        // Boundary value for convection: phi_b = phi_P + grad * dn
-        if (convection != nullptr)
+        case zeroGradient:
+        case kWallFunction:
+        case nutWallFunction:
+        case omegaWallFunction:
         {
-            const Scalar aConv = convection->flowRate[face.idx()];
+            // Zero normal gradient: only convection
+            if (convection != nullptr)
+            {
+                const Scalar aConv = convection->flowRate[face.idx()];
 
-            triplets.emplace_back(ownerIdx, ownerIdx, aConv);
-            localB(eIdx(ownerIdx)) -= aConv * gradient * dn;
+                triplets.emplace_back(ownerRow, ownerRow, aConv);
+            }
+            // No convection + zero gradient = no contribution
+            break;
         }
-    }
-    else if
-    (
-        bc.type() == zeroGradient
-     || bc.type() == kWallFunction
-     || bc.type() == nutWallFunction
-     || bc.type() == omegaWallFunction
-    )
-    {
-        // Zero normal gradient: only convection
-        if (convection != nullptr)
+        default:
         {
-            const Scalar aConv = convection->flowRate[face.idx()];
+            // Unhandled BC type: default to zero gradient
+            Warning
+            (
+                "Undefined boundary condition type for field "
+              + Name(fieldToString(equation.field)) + " on patch "
+              + face.patch()->get().patchName()
+              + ". Applying zero gradient."
+            );
 
-            triplets.emplace_back(ownerIdx, ownerIdx, aConv);
-        }
-        // No convection + zero gradient = no contribution
-    }
-    else
-    {
-        // Unhandled BC type: default to zero gradient
-        Warning
-        (
-            "Undefined boundary condition type for field "
-          + Name(fieldToString(equation.field)) + " on patch "
-          + face.patch()->get().patchName()
-          + ". Applying zero gradient."
-        );
+            if (convection != nullptr)
+            {
+                const Scalar aConv = convection->flowRate[face.idx()];
 
-        if (convection != nullptr)
-        {
-            const Scalar aConv = convection->flowRate[face.idx()];
-
-            triplets.emplace_back(ownerIdx, ownerIdx, aConv);
+                triplets.emplace_back(ownerRow, ownerRow, aConv);
+            }
+            break;
         }
     }
 }
@@ -431,13 +438,13 @@ void Matrix::setValues
         const Scalar diag =
             matrixA_.coeff
             (
-                eIdx(cellIdx),
-                eIdx(cellIdx)
+                EigenIdx(cellIdx),
+                EigenIdx(cellIdx)
             );
 
         if (f > S(1.0) - rootSmallValue_)
         {
-            const Eigen::Index c = eIdx(cellIdx);
+            const Eigen::Index c = EigenIdx(cellIdx);
 
             for
             (
@@ -445,7 +452,7 @@ void Matrix::setValues
               :  mesh_.cells()[cellIdx].neighborCellIndices()
             )
             {
-                const Eigen::Index r = eIdx(neighborIdx);
+                const Eigen::Index r = EigenIdx(neighborIdx);
 
                 const Scalar coupling = matrixA_.coeff(r, c);
                 if (coupling != S(0.0))
@@ -470,11 +477,11 @@ void Matrix::setValues
 
             matrixA_.coeffRef
             (
-                eIdx(cellIdx),
-                eIdx(cellIdx)
+                EigenIdx(cellIdx),
+                EigenIdx(cellIdx)
             ) += coeff;
 
-            vectorB_(eIdx(cellIdx)) += coeff * values[i];
+            vectorB_(EigenIdx(cellIdx)) += coeff * values[i];
         }
     }
 }
