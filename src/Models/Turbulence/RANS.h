@@ -346,7 +346,7 @@ protected:
 // ****************************** Shared Methods ******************************
 
     /// Build the transient term for one field, or nullopt if steady
-    [[nodiscard]] std::optional<TransientTerm> transientFor
+    [[nodiscard]] std::optional<TransientTerm> ddtTerm
     (
         const ScalarField& phiPrevStep,
         const ScalarField& ddtPrevStep

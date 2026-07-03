@@ -26,7 +26,7 @@
 
 // *************************** Forward Declarations ***************************
 
-class SIMPLE;
+class MomentumTransport;
 class TurbulenceModel;
 class Mesh;
 class BoundaryConditions;
@@ -40,7 +40,7 @@ namespace Forces
 /// Integrate, decompose, report, and write aerodynamic forces on a wall patch
 void reportForces
 (
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const Mesh& mesh,
     const BoundaryConditions& bcManager,
@@ -56,7 +56,7 @@ void appendForceHistory
     Scalar time,
     const Mesh& mesh,
     const BoundaryConditions& bcManager,
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const CaseConfiguration& config
 );

@@ -34,7 +34,7 @@ physicalProperties
 // ============================================================================
 initialConditions
 {
-    U               (0 0 -0.014607);    // Initial velocity [m/s]
+    U               (0 0 -0.043821);    // Initial velocity [m/s]
     p               0;                  // Initial pressure [Pa]
 }
 
@@ -48,7 +48,7 @@ boundaryConditions
         inlet
         {
             type        fixedValue;
-            value       (0 0 -0.014607);
+            value       (0 0 -0.043821);
         }
 
         outlet
@@ -239,6 +239,15 @@ boundaryConditions
 }
 
 // ============================================================================
+// Velocity Coupling
+// ============================================================================
+velocityCoupling
+{
+    // Options: SIMPLE, PISO
+    algorithm           PISO;
+}
+
+// ============================================================================
 // Time Control
 // ============================================================================
 time
@@ -247,10 +256,10 @@ time
     timeScheme          implicitEuler;
 
     timeStep            0.1;        // Time step size [s]
-    totalTime           10;         // Total simulated time [s]
+    totalTime           200;        // Total simulated time [s]
     writingIntervals    1;          // Write output every N steps (>= 1)
-    nOuterCorrectors    20;         // SIMPLE outer correctors per step (>= 1)
-    // ocCoeff          0.5;        // CrankNicolson coeffcient [0,1]
+    nOuterCorrectors    1;          // Outer correctors per step (PISO, >= 1)
+    // CrankNicolsonCoeff   0.5;    // Crank-Nicolson coefficient [0, 1]
 }
 
 // ============================================================================
@@ -282,10 +291,28 @@ SIMPLE
 
     relaxationFactors
     {
-        U                   0.7;        // Velocity under-relaxation
-        p                   0.3;        // Pressure under-relaxation
+        U                   1.0;        // Velocity under-relaxation
+        p                   1.0;        // Pressure under-relaxation
         k                   0.5;        // TKE under-relaxation
         omega               0.5;        // Omega under-relaxation
+    }
+}
+
+// ============================================================================
+// PISO Algorithm Settings
+// ============================================================================
+PISO
+{
+    convergenceTolerance        1e-3;       // Convergence criterion
+    nNonOrthogonalCorrectors    0;          // p' corrector re-solves
+    nPrimeCorrectors    2;                  // Explicit PRIME correctors
+
+    relaxationFactors
+    {
+        U                   1.0;        // Velocity under-relaxation
+        p                   1.0;        // Pressure under-relaxation
+        k                   1.0;        // TKE under-relaxation
+        omega               1.0;        // Omega under-relaxation
     }
 }
 
@@ -338,30 +365,11 @@ turbulence
 }
 
 // ============================================================================
-// Solution Constraints (Optional)
-// ============================================================================
-constraints
-{
-    velocity
-    {
-        enabled         false;      // Enable velocity limiting
-        maxVelocity     50;         // Maximum velocity magnitude [m/s]
-    }
-
-    pressure
-    {
-        enabled         false;      // Enable pressure limiting
-        minPressure     -0.05;      // Minimum pressure [Pa]
-        maxPressure     0.05;       // Maximum pressure [Pa]
-    }
-}
-
-// ============================================================================
 // Aerodynamic Forces
 // ============================================================================
 forces
 {
-    enabled             true;          // Enable aerodynamic force calculation
+    enabled             false;         // Enable aerodynamic force calculation
     patch               sphere;        // Wall patch to integrate loads over
     dragDirection       (0 0 -1);      // Drag direction (freestream)
     liftDirection       (0 1 0);       // Lift direction

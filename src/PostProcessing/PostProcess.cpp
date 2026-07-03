@@ -29,7 +29,7 @@
 #include "ErrorHandler.h"
 #include "Logger.h"
 #include "Mesh.h"
-#include "SIMPLE.h"
+#include "MomentumTransport.h"
 #include "VTK/PvdTimeSeries.h"
 #include "VTK/VtkBoundaryWriter.h"
 #include "VTK/VtkWriter.h"
@@ -74,7 +74,7 @@ void writeFields
     const FilePath& vtuFilename,
     const FilePath& vtpFilename,
     const Mesh& mesh,
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     bool debug
 )
@@ -153,7 +153,7 @@ FilePath boundaryPath(const FilePath& vtuFilename)
 
 } // namespace
 
-void reportStatistics(const SIMPLE& solver)
+void reportStatistics(const MomentumTransport& solver)
 {
     std::cout << '\n';
     Logger::sectionHeader("Post-Processing Results");
@@ -202,7 +202,7 @@ void reportStatistics(const SIMPLE& solver)
 
 void exportResults
 (
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const Mesh& mesh,
     const CaseConfiguration& config
@@ -211,7 +211,7 @@ void exportResults
     std::cout << '\n';
     Logger::sectionHeader("Exporting Results");
 
-    FilePath vtuFilename = outputBase(config.vtkOutputFilename) + ".vtu";
+    const FilePath vtuFilename = outputBase(config.vtkOutputFilename) + ".vtu";
     const FilePath vtpFilename = boundaryPath(vtuFilename);
 
     if (config.debug)
@@ -248,7 +248,7 @@ void exportTimeStep
     Scalar time,
     Count step,
     const Mesh& mesh,
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const CaseConfiguration& config
 )

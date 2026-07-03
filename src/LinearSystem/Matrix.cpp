@@ -16,6 +16,7 @@
 #include "Matrix.h"
 
 // Standard library headers
+#include <algorithm>
 #include <iostream>
 #include <iterator>
 
@@ -37,10 +38,14 @@ Matrix::Matrix
     mesh_{mesh},
     bcManager_{boundaryConds}
 {
+    // Face counts for the triplet-list reservation estimate
+    Count numInternalFaces = 0;
+    Count numBoundaryFaces = 0;
+
     for (const auto& face : mesh_.faces())
     {
-        if (face.isBoundary()) ++numBoundaryFaces_;
-        else ++numInternalFaces_;
+        if (face.isBoundary()) ++numBoundaryFaces;
+        else ++numInternalFaces;
     }
 
     const Count numCells = mesh_.numCells();
@@ -54,7 +59,7 @@ Matrix::Matrix
 
     // Reserve reusable per-thread assembly buffers.
     const Count T = static_cast<Count>(omp_get_max_threads());
-    const Count estimatedTriplets = 4 * numInternalFaces_ + numBoundaryFaces_;
+    const Count estimatedTriplets = 4 * numInternalFaces + numBoundaryFaces;
     const Count reservePerThread = (estimatedTriplets / T) + 1;
 
     tripletList_.reserve(estimatedTriplets);
@@ -216,7 +221,41 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
         vectorB_(cellIdx) +=
             factor * origDiag
           * phiPrevIter[static_cast<Index>(cellIdx)];
-          * phiPrev[static_cast<Index>(cellIdx)];
+    }
+}
+
+
+void Matrix::explicitJacobiUpdate
+(
+    const ScalarField& phiOld,
+    ScalarField& phiNew
+) const
+{
+    const Eigen::Index numCells = matrixA_.rows();
+
+    // Single Jacobi sweep:
+    //     phiNew_P = (b_P - sum_{N != P} A_PN phiOld_N) / A_PP.
+    #pragma omp parallel for schedule(static)
+    for (Eigen::Index row = 0; row < numCells; ++row)
+    {
+        Scalar diagonal = S(0.0);
+        Scalar offDiagonalSum = S(0.0);
+
+        for (SparseMatrix::InnerIterator it(matrixA_, row); it; ++it)
+        {
+            if (it.col() == row)
+            {
+                diagonal = it.value();
+            }
+            else
+            {
+                offDiagonalSum +=
+                    it.value() * phiOld[static_cast<Index>(it.col())];
+            }
+        }
+
+        phiNew[static_cast<Index>(row)] =
+            (vectorB_(row) - offDiagonalSum) / (diagonal + vSmallValue);
     }
 }
 
@@ -226,7 +265,7 @@ void Matrix::assembleInternalFace
 (
     const Face& face,
     const TransportEquation& equation,
-    std::vector<Eigen::Triplet<Scalar>>& triplets,
+    TripletList& triplets,
     Vec& localB
 ) const
 {
@@ -255,10 +294,9 @@ void Matrix::assembleInternalFace
 
         flowRate = convection.flowRate[face.idx()];
 
-        const auto [aP, aN] = ConvectionSchemes::getFluxCoefficients(flowRate);
-
-        aPConv = aP;
-        aNConv = aN;
+        // Implicit upwind split: a_P = max(F, 0), a_N = min(F, 0)
+        aPConv = std::max(flowRate, S(0.0));
+        aNConv = std::min(flowRate, S(0.0));
     }
 
     // Matrix coefficients for owner and neighbor cells
@@ -312,7 +350,7 @@ void Matrix::assembleBoundaryFace
 (
     const Face& face,
     const TransportEquation& equation,
-    std::vector<Eigen::Triplet<Scalar>>& triplets,
+    TripletList& triplets,
     Vec& localB
 ) const
 {

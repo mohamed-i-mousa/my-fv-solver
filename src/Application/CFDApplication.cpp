@@ -51,7 +51,6 @@ void initParallelism(int numThreads)
 }
 
 
-// Steady-state path
 void runSteady
 (
     SolverModules& modules,
@@ -88,7 +87,6 @@ void runSteady
 }
 
 
-// Transient path
 void runTransient
 (
     SolverModules& modules,
@@ -148,7 +146,7 @@ void runTransient
     {
         const Scalar time = S(step) * config.time.timeStep;
 
-        modules.solver->solveTimeStep(step, numSteps, time, prevStep);
+        modules.solver->solve(step, numSteps, time, &prevStep);
 
         if (config.forcesEnabled)
         {

@@ -121,6 +121,9 @@ struct CaseConfiguration
     /// OpenMP/Eigen thread count
     Count numThreads;
 
+    /// Velocity-coupling algorithm
+    Name algorithm;
+
     /// Fluid density
     Scalar rho;
 
@@ -148,6 +151,9 @@ struct CaseConfiguration
     /// Non-orthogonal corrector sub-iterations for the p' equation
     Count nNonOrthogonalCorrectors;
 
+    /// Number of explicit PRIME correctors per outer iteration
+    Count nPrimeCorrectors;
+
     /// Velocity relaxation factor
     Scalar alphaU;
 
@@ -168,21 +174,6 @@ struct CaseConfiguration
 
     /// Hydraulic diameter for calculated inlet/default values
     Scalar hydraulicDiameter;
-
-    /// Enable velocity field constraints
-    bool velocityConstraintEnabled;
-
-    /// Enable pressure field constraints
-    bool pressureConstraintEnabled;
-
-    /// Maximum allowed velocity magnitude
-    Scalar maxVelocityMagnitude;
-
-    /// Minimum allowed pressure
-    Scalar minPressure;
-
-    /// Maximum allowed pressure
-    Scalar maxPressure;
 
     /// Enable aerodynamic force calculation on a wall patch
     bool forcesEnabled;

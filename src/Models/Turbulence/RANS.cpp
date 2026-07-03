@@ -120,7 +120,7 @@ void RANS::updatePrevStepDerivatives()
 }
 
 
-std::optional<TransientTerm> RANS::transientFor
+std::optional<TransientTerm> RANS::ddtTerm
 (
     const ScalarField& phiPrevStep,
     const ScalarField& ddtPrevStep

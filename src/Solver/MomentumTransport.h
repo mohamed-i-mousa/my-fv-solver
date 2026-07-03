@@ -1,0 +1,395 @@
+/******************************************************************************
+
+                                     Turblyze
+                           3D incompressible CFD solver
+                       Copyright (C) 2025-2026 Mohamed Mousa
+                        SPDX-License-Identifier: Apache-2.0
+
+ ------------------------------------------------------------------------------
+ * @file MomentumTransport.h
+ * @brief Abstract base class for pressure-velocity coupling algorithms
+ *
+ * @details MomentumTransport owns the common to every momentum transport
+ * algorithm. This includes, the time control, the turbulence solve,
+ * the convergence / Courant / residual evaluation, the velocity-gradient
+ * reconstruction, and the solution fields. The parts that differ between
+ * algorithms are reached through a virtual method.
+ *
+ * @class MomentumTransport
+ * - Universal time control shared by steady and transient runs
+ * - Runtime-selection factory (create / availableAlgorithms)
+ * - Convergence and Courant-number reporting
+ *****************************************************************************/
+
+#pragma once
+
+// ********************************** Headers *********************************
+
+// Standard library headers
+#include <memory>
+
+// Project headers
+#include "Scalar.h"
+#include "StringTypes.h"
+#include "Vector.h"
+#include "Mesh.h"
+#include "BoundaryConditions.h"
+#include "CellData.h"
+#include "FaceData.h"
+#include "GradientScheme.h"
+#include "TurbulenceModel.h"
+
+// *************************** Forward Declarations ***************************
+
+class TimeScheme;
+class ConvectionSchemes;
+class LinearSolver;
+
+// *************************** struct TransientFields *************************
+
+/// Previous time step quantities for the transient runs
+struct TransientFields
+{
+    ScalarField UxPrevStep;
+    ScalarField UyPrevStep;
+    ScalarField UzPrevStep;
+    ScalarField UxDdtPrevStep;
+    ScalarField UyDdtPrevStep;
+    ScalarField UzDdtPrevStep;
+    FaceFluxField fluxPrevStep;
+};
+
+// ************************* class MomentumTransport **************************
+
+class MomentumTransport
+{
+public:
+
+// ************************* Special Member Functions *************************
+
+    /// Constructor
+    MomentumTransport
+    (
+        const Mesh& mesh,
+        const BoundaryConditions& bc,
+        const TimeScheme& timeScheme,
+        const GradientScheme& gradScheme,
+        TurbulenceModel& turbulence,
+        const Vector& initialVelocity,
+        Scalar initialPressure,
+        Scalar deltaT,
+        Scalar rho,
+        Scalar mu,
+        Count maxIterations,
+        Scalar convergenceTolerance,
+        Count nOuterCorrectors,
+        bool debug
+    );
+
+    /// Copy constructor and assignment - Not copyable (const T& members)
+    MomentumTransport(const MomentumTransport&) = delete;
+    MomentumTransport& operator=(const MomentumTransport&) = delete;
+
+    /// Move constructor and assignment - Not movable (const T& members)
+    MomentumTransport(MomentumTransport&&) = delete;
+    MomentumTransport& operator=(MomentumTransport&&) = delete;
+
+    /// Destructor
+    virtual ~MomentumTransport() noexcept = default;
+
+// **************************** Runtime Selection *****************************
+
+    /// Construct the momentum transport algorithm selected by name
+    [[nodiscard]] static std::unique_ptr<MomentumTransport> create
+    (
+        const Name& algorithm,
+        const Mesh& mesh,
+        const BoundaryConditions& bc,
+        const TimeScheme& timeScheme,
+        const GradientScheme& gradScheme,
+        const ConvectionSchemes& momentumConvectionScheme,
+        LinearSolver& momentumSolver,
+        LinearSolver& pressureSolver,
+        TurbulenceModel& turbulence,
+        const Vector& initialVelocity,
+        Scalar initialPressure,
+        Scalar deltaT,
+        Scalar rho,
+        Scalar mu,
+        Scalar alphaU,
+        Scalar alphaP,
+        Count maxIterations,
+        Scalar convergenceTolerance,
+        Count nNonOrthogonalCorrectors,
+        Count nOuterCorrectors,
+        Count nPrimeCorrectors,
+        bool debug
+    );
+
+    /// Names of every selectable momentum transport algorithm
+    [[nodiscard]] static NameList availableAlgorithms();
+
+// ****************************** Solver Driver *******************************
+
+    /// Steady: run outer iterations to convergence
+    /// Transient: advance one time step
+    void solve
+    (
+        Count step = 0,
+        Count totalSteps = 0,
+        Scalar time = S(0.0),
+        TransientFields* prevStep = nullptr
+    );
+
+    /// Whether the time scheme is transient
+    [[nodiscard]] bool isTransient() const noexcept;
+
+// ***************************** Accessor Methods *****************************
+
+    /// Get velocity field components
+    [[nodiscard]] const ScalarField& Ux() const noexcept { return Ux_; }
+    [[nodiscard]] const ScalarField& Uy() const noexcept { return Uy_; }
+    [[nodiscard]] const ScalarField& Uz() const noexcept { return Uz_; }
+
+    /// Get pressure field
+    [[nodiscard]] const ScalarField& pressure() const noexcept { return p_; }
+
+// ***************************** Protected Methods ****************************
+
+protected:
+
+    /// Run one outer-iteration
+    [[nodiscard]] virtual bool outerIteration
+    (
+        const TransientFields* prevStep
+    ) = 0;
+
+    /// Algorithm label for banners and convergence messages
+    [[nodiscard]] virtual Name algorithmName() const noexcept = 0;
+
+    /// The convective face mass flux used by the shared driver
+    [[nodiscard]] virtual const FaceFluxField&
+    faceMassFlux() const noexcept = 0;
+
+    /// Family pressure residual for the convergence check
+    [[nodiscard]] virtual Scalar pressureResidual() const noexcept = 0;
+
+// Shared driver helpers
+
+    /// Roll the Crank-Nicolson stored velocity time derivatives forward
+    void updatePrevStepDerivatives(TransientFields& prevStep);
+
+    /// Compute limited velocity gradients into gradU_ / gradU{x,y,z}_
+    void updateVelocityGradients();
+
+    /// Solve the turbulence transport equations
+    void solveTurbulence();
+
+    /// Check convergence against the scaled-residual tolerance
+    [[nodiscard]] bool checkConvergence();
+
+    /// Compute the normalized mass-imbalance residual
+    [[nodiscard]] Scalar massImbalance() const noexcept;
+
+    /// Compute the normalized velocity residual
+    [[nodiscard]] Scalar velocityResidual() const noexcept;
+
+    /// Maximum and mean Courant number over the mesh
+    struct CourantNumber
+    {
+        Scalar max;
+        Scalar mean;
+    };
+
+    /// Compute the maximum and mean cell Courant number
+    [[nodiscard]] CourantNumber computeCourant() const noexcept;
+
+// **************************** Protected Accessors ***************************
+
+    /// Mesh view (nodes, faces, cells)
+    [[nodiscard]] const Mesh& mesh() const noexcept
+    {
+        return mesh_;
+    }
+
+    /// Boundary-condition manager
+    [[nodiscard]] const BoundaryConditions& bcManager() const noexcept
+    {
+        return bcManager_;
+    }
+
+    /// Time-derivative discretization scheme
+    [[nodiscard]] const TimeScheme& timeScheme() const noexcept
+    {
+        return timeScheme_;
+    }
+
+    /// Gradient reconstruction scheme
+    [[nodiscard]] const GradientScheme& gradientScheme() const noexcept
+    {
+        return gradientScheme_;
+    }
+
+    /// Turbulence model
+    [[nodiscard]] const TurbulenceModel& turbulence() const noexcept
+    {
+        return turbulence_;
+    }
+
+    /// Kinematic viscosity
+    [[nodiscard]] Scalar nu() const noexcept
+    {
+        return nu_;
+    }
+
+    /// Time step size [s]
+    [[nodiscard]] Scalar deltaT() const noexcept
+    {
+        return deltaT_;
+    }
+
+    /// Whether verbose console output is enabled
+    [[nodiscard]] bool debug() const noexcept
+    {
+        return debug_;
+    }
+
+    /// Mutable velocity field components (derived correctors write in place)
+    [[nodiscard]] ScalarField& Ux() noexcept
+    {
+        return Ux_;
+    }
+    [[nodiscard]] ScalarField& Uy() noexcept
+    {
+        return Uy_;
+    }
+    [[nodiscard]] ScalarField& Uz() noexcept
+    {
+        return Uz_;
+    }
+
+    /// Mutable pressure field
+    [[nodiscard]] ScalarField& pressure() noexcept
+    {
+        return p_;
+    }
+
+    /// Velocity from the previous iteration (for the velocity residual)
+    [[nodiscard]] const ScalarField& UxPrevIter() const noexcept
+    {
+        return UxPrevIter_;
+    }
+    [[nodiscard]] const ScalarField& UyPrevIter() const noexcept
+    {
+        return UyPrevIter_;
+    }
+    [[nodiscard]] const ScalarField& UzPrevIter() const noexcept
+    {
+        return UzPrevIter_;
+    }
+
+    /// Per-component velocity gradients
+    [[nodiscard]] const VectorField& gradUx() const noexcept
+    {
+        return gradUx_;
+    }
+    [[nodiscard]] const VectorField& gradUy() const noexcept
+    {
+        return gradUy_;
+    }
+    [[nodiscard]] const VectorField& gradUz() const noexcept
+    {
+        return gradUz_;
+    }
+
+    /// Velocity gradient tensor field
+    [[nodiscard]] const TensorField& gradU() const noexcept
+    {
+        return gradU_;
+    }
+
+// ****************************** Private Members *****************************
+
+private:
+
+// Dependencies
+
+    /// Mesh view (nodes, faces, cells)
+    const Mesh& mesh_;
+
+    /// Reference to BCs
+    const BoundaryConditions& bcManager_;
+
+    /// Time-derivative discretization scheme
+    const TimeScheme& timeScheme_;
+
+    /// Reference to gradient scheme
+    const GradientScheme& gradientScheme_;
+
+    /// Turbulence model
+    TurbulenceModel& turbulence_;
+
+// Physical properties
+
+    /// Kinematic viscosity
+    Scalar nu_;
+
+// Algorithm parameters
+
+    /// Time step size [s]
+    Scalar deltaT_;
+
+    /// Maximum number of steady outer iterations
+    Count maxIterations_;
+
+    /// Fixed number of outer correctors per transient time step
+    Count nOuterCorrectors_;
+
+    /// Convergence tolerance
+    Scalar tolerance_;
+
+    /// Enable verbose console output
+    bool debug_;
+
+    /// Whether the inner loop should print per-iteration residual lines
+    bool reportPerIteration_ = true;
+
+// Solution fields
+
+    /// Velocity fields
+    ScalarField Ux_;
+    ScalarField Uy_;
+    ScalarField Uz_;
+
+    /// Pressure field
+    ScalarField p_;
+
+    /// Velocity from previous iteration (for the velocity residual)
+    ScalarField UxPrevIter_;
+    ScalarField UyPrevIter_;
+    ScalarField UzPrevIter_;
+
+// Gradient fields
+
+    /// Per-component velocity gradients
+    VectorField gradUx_;
+    VectorField gradUy_;
+    VectorField gradUz_;
+
+    /// Velocity gradient tensor field
+    TensorField gradU_;
+
+// Residual tracking for convergence
+
+    /// First-iteration reference values for scaled residuals
+    Scalar massImbalance0_ = S(0.0);
+    Scalar velocityResidual0_ = S(0.0);
+    Scalar pressureResidual0_ = S(0.0);
+    ScalarList turbulenceResidual0_;
+
+    /// Most recent scaled residuals
+    Scalar lastScaledMass_ = S(0.0);
+    Scalar lastScaledVelocity_ = S(0.0);
+    Scalar lastScaledPressure_ = S(0.0);
+    TurbulenceModel::ResidualPair lastScaledTurbulence_;
+};

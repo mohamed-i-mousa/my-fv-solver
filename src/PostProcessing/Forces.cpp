@@ -29,7 +29,7 @@
 #include "Field.h"
 #include "Logger.h"
 #include "Mesh.h"
-#include "SIMPLE.h"
+#include "MomentumTransport.h"
 #include "TurbulenceModel.h"
 #include "Vector.h"
 
@@ -78,13 +78,26 @@ FilePath forcesFilePath
 Scalar referenceDynamicLoad(const CaseConfiguration& config)
 {
     const Scalar referenceVelocity = magnitude(config.referenceVelocity);
-    return S(0.5) * config.rho * referenceVelocity * referenceVelocity
-         * config.referenceArea;
+    const Scalar dynamicLoad =
+        S(0.5) * config.rho * referenceVelocity * referenceVelocity
+      * config.referenceArea;
+
+    if (dynamicLoad <= vSmallValue)
+    {
+        FatalError
+        (
+            "Reference dynamic load is zero; force coefficients are "
+            "undefined. Check that density, referenceVelocity, and "
+            "referenceArea are all non-zero."
+        );
+    }
+
+    return dynamicLoad;
 }
 
 AeroForces computeForces
 (
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const Mesh& mesh,
     const BoundaryConditions& bcManager,
@@ -174,7 +187,7 @@ AeroForces computeForces
 
 void reportForces
 (
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const Mesh& mesh,
     const BoundaryConditions& bcManager,
@@ -299,7 +312,7 @@ void appendForceHistory
     Scalar time,
     const Mesh& mesh,
     const BoundaryConditions& bcManager,
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const CaseConfiguration& config
 )

@@ -83,6 +83,13 @@ public:
     /// Build transport equation matrix
     void buildMatrix(const TransportEquation& equation);
 
+    /// One explicit Jacobi sweep of the assembled system
+    void explicitJacobiUpdate
+    (
+        const ScalarField& phiOld,
+        ScalarField& phiNew
+    ) const;
+
 // ***************************** Accessor Methods *****************************
 
     /// Get assembled sparse matrix A (const)
@@ -145,10 +152,6 @@ private:
 
     /// Per-thread RHS contributions for parallel face-assembly scatter.
     std::vector<Vec> perThreadB_;
-
-    /// Cached face counts for triplet list reservation
-    Count numInternalFaces_ = 0;
-    Count numBoundaryFaces_ = 0;
 
     /// Relaxation factor from last relax() call (0 = not relaxed)
     Scalar lastRelaxationFactor_ = S(0.0);

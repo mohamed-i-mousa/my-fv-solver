@@ -43,6 +43,7 @@
 // Standard library headers
 #include <limits>
 #include <memory>
+#include <utility>
 
 // External library headers
 #include <eigen3/Eigen/SparseCore>
@@ -102,7 +103,7 @@ public:
         Count maxIterations = 1000
     )
     :
-        name_{name},
+        name_{std::move(name)},
         tolerance_{tolerance},
         maxIterations_{maxIterations}
     {}

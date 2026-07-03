@@ -25,7 +25,7 @@ class ConvectionSchemes;
 class TurbulenceModel;
 class LinearSolver;
 class Mesh;
-class SIMPLE;
+class MomentumTransport;
 struct CaseConfiguration;
 
 // *************************** struct SolverModules ***************************
@@ -79,8 +79,8 @@ struct SolverModules
     /// Turbulence model
     std::unique_ptr<TurbulenceModel> turbulenceModel;
 
-    /// SIMPLE solver; declared last so it is destroyed first
-    std::unique_ptr<SIMPLE> solver;
+    /// Momentum transport solver
+    std::unique_ptr<MomentumTransport> solver;
 };
 
 // *************************** namespace SolverSetup **************************
@@ -88,7 +88,7 @@ struct SolverModules
 namespace SolverSetup
 {
 
-/// Configure runtime services and construct SIMPLE
+/// Configure runtime and construct the momentum-transport solver
 void configure
 (
     SolverModules& modules,
@@ -97,7 +97,7 @@ void configure
     const CaseConfiguration& config
 );
 
-/// Print the SIMPLE solver setup banner
+/// Print the solver setup banner
 void logSetup
 (
     const SolverModules& modules,

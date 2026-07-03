@@ -1,0 +1,726 @@
+/******************************************************************************
+
+                                     Turblyze
+                           3D incompressible CFD solver
+                       Copyright (C) 2025-2026 Mohamed Mousa
+                        SPDX-License-Identifier: Apache-2.0
+
+ ------------------------------------------------------------------------------
+ * @file Segregated.cpp
+ * @brief Pressure-correction and Rhie-Chow methods for segregated algorithms
+ *****************************************************************************/
+
+// ********************************** Headers *********************************
+
+// Implementation header
+#include "Segregated.h"
+
+// Standard library headers
+#include <cmath>
+#include <iostream>
+#include <algorithm>
+
+// External library headers
+#include <omp.h>
+
+// Project headers
+#include "Scalar.h"
+#include "Logger.h"
+#include "LinearInterpolation.h"
+#include "TimeScheme.h"
+#include "TurbulenceModel.h"
+
+// ************************* Special Member Functions *************************
+
+Segregated::Segregated
+(
+    const Mesh& mesh,
+    const BoundaryConditions& bc,
+    const TimeScheme& timeScheme,
+    const GradientScheme& gradScheme,
+    const ConvectionSchemes& momentumConvectionScheme,
+    LinearSolver& momentumSolver,
+    LinearSolver& pressureSolver,
+    TurbulenceModel& turbulence,
+    const Vector& initialVelocity,
+    Scalar initialPressure,
+    Scalar deltaT,
+    Scalar rho,
+    Scalar mu,
+    Scalar alphaU,
+    Scalar alphaP,
+    Count maxIterations,
+    Scalar convergenceTolerance,
+    Count nNonOrthogonalCorrectors,
+    Count nOuterCorrectors,
+    bool debug
+)
+:
+    MomentumTransport
+    {
+        mesh,
+        bc,
+        timeScheme,
+        gradScheme,
+        turbulence,
+        initialVelocity,
+        initialPressure,
+        deltaT,
+        rho,
+        mu,
+        maxIterations,
+        convergenceTolerance,
+        nOuterCorrectors,
+        debug
+    },
+    momentumConvectionScheme_{momentumConvectionScheme},
+    momentumSolver_{momentumSolver},
+    pressureSolver_{pressureSolver},
+    matrixConstruct_{mesh, bc},
+    alphaU_{alphaU},
+    alphaP_{alphaP},
+    nNonOrthogonalCorrectors_{nNonOrthogonalCorrectors}
+{
+    UxAvgf_.setAll(initialVelocity.x());
+    UyAvgf_.setAll(initialVelocity.y());
+    UzAvgf_.setAll(initialVelocity.z());
+
+    // Initialize RhieChowFlowRate_ with linear interpolation
+    const Count numFaces = this->mesh().numFaces();
+
+    #pragma omp parallel for schedule(static)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+    {
+        const Face& face = this->mesh().faces()[faceIdx];
+        Vector Uf;
+
+        if (face.isBoundary())
+        {
+            Uf = Vector
+            (
+                bcManager().boundaryFaceValue(Field::Ux, Ux(), face),
+                bcManager().boundaryFaceValue(Field::Uy, Uy(), face),
+                bcManager().boundaryFaceValue(Field::Uz, Uz(), face)
+            );
+        }
+        else
+        {
+            Uf = Vector
+            (
+                interpolateToFace(face, Ux()),
+                interpolateToFace(face, Uy()),
+                interpolateToFace(face, Uz())
+            );
+        }
+
+        const Vector Sf = face.normal() * face.projectedArea();
+        RhieChowFlowRate_[faceIdx] = dot(Uf, Sf);
+    }
+}
+
+
+Scalar Segregated::pressureResidual() const noexcept
+{
+    // Normalize p' RMS by RMS(p)
+    Scalar sumP2 = S(0.0);
+
+    const Count numCells = mesh().numCells();
+
+    #pragma omp parallel for schedule(static) reduction(+:sumP2)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        sumP2 += pressure()[cellIdx] * pressure()[cellIdx];
+    }
+
+    const Scalar pRms = std::sqrt(sumP2 / S(numCells));
+
+    return lastPressureCorrectionRMS_ / (pRms + vSmallValue);
+}
+
+
+void Segregated::updateEffectiveViscosity()
+{
+    const Count numCells = mesh().numCells();
+    const Count numFaces = mesh().numFaces();
+
+    const ScalarField& nut = turbulence().turbulentViscosity();
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        nuEff_[cellIdx] = nu() + nut[cellIdx];
+    }
+
+    // Build face-based effective viscosity
+    #pragma omp parallel for schedule(static)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+    {
+        const Face& face = mesh().faces()[faceIdx];
+
+        if (face.isBoundary())
+        {
+            // Turbulent models may provide wall-function boundary nut.
+            nuEffFace_[faceIdx] =
+                nu()
+              + turbulence().boundaryTurbulentViscosity(face, bcManager());
+        }
+        else
+        {
+            // Internal faces: linear interpolation
+            nuEffFace_[faceIdx] = interpolateToFace(face, nuEff_);
+        }
+    }
+}
+
+
+void Segregated::assembleMomentum()
+{
+    const Count numCells = mesh().numCells();
+
+    // Reset diagonals accumulator
+    DU_.setAll(S(0.0));
+    DUComputed_ = false;
+
+    // Pressure gradient source term (depends on the current gradP_)
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        const Scalar volume = mesh().cells()[cellIdx].volume();
+        UxSource_[cellIdx] = -gradP_[cellIdx].x() * volume;
+        UySource_[cellIdx] = -gradP_[cellIdx].y() * volume;
+        UzSource_[cellIdx] = -gradP_[cellIdx].z() * volume;
+    }
+
+    // Reset interpolated diagonals accumulator
+    DUf_.setAll(S(0.0));
+
+    updateVelocityGradients();
+
+    // Add transpose gradient source term (only varies with turbulent nut)
+    if (turbulence().isTurbulent())
+    {
+        addTransposeGradientSource();
+    }
+}
+
+
+void Segregated::solveMomentum(const TransientFields* prevStep)
+{
+    // Lag the face velocities and mass flux for the next assembly
+    UxAvgPrevIterf_ = UxAvgf_;
+    UyAvgPrevIterf_ = UyAvgf_;
+    UzAvgPrevIterf_ = UzAvgf_;
+    RhieChowFlowRatePrevIter_ = RhieChowFlowRate_;
+
+    // Seed the pressure gradient for the momentum source and Rhie-Chow
+    gradientScheme().fieldGradient(Field::p, pressure(), gradP_);
+
+    // Effective viscosity is frozen until the turbulence solve at the end of
+    // the outer iteration, so refresh it once here; the PRIME correctors reuse
+    // the cached nuEff_/nuEffFace_.
+    updateEffectiveViscosity();
+    assembleMomentum();
+
+    const ConvectionTerm convection
+    {
+        RhieChowFlowRatePrevIter_,
+        momentumConvectionScheme_
+    };
+
+    TransportEquation equations[]
+    {
+        {
+            .field          = Field::Ux,
+            .phi            = Ux(),
+            .transient      = ddtTerm(prevStep,
+                &TransientFields::UxPrevStep, &TransientFields::UxDdtPrevStep),
+            .convection     = convection,
+            .GammaFace      = nuEffFace_,
+            .source         = UxSource_,
+            .gradPhi        = gradUx(),
+            .gradScheme     = gradientScheme()
+        },
+        {
+            .field          = Field::Uy,
+            .phi            = Uy(),
+            .transient      = ddtTerm(prevStep,
+                &TransientFields::UyPrevStep, &TransientFields::UyDdtPrevStep),
+            .convection     = convection,
+            .GammaFace      = nuEffFace_,
+            .source         = UySource_,
+            .gradPhi        = gradUy(),
+            .gradScheme     = gradientScheme()
+        },
+        {
+            .field          = Field::Uz,
+            .phi            = Uz(),
+            .transient      = ddtTerm(prevStep,
+                &TransientFields::UzPrevStep, &TransientFields::UzDdtPrevStep),
+            .convection     = convection,
+            .GammaFace      = nuEffFace_,
+            .source         = UzSource_,
+            .gradPhi        = gradUz(),
+            .gradScheme     = gradientScheme()
+        }
+    };
+
+    const ScalarField* prevIters[]
+    {
+        &UxPrevIter(),
+        &UyPrevIter(),
+        &UzPrevIter()
+    };
+
+    // Build and implicitly solve each under-relaxed component
+    for (Index i = 0; i < 3; ++i)
+    {
+        matrixConstruct_.buildMatrix(equations[i]);
+
+        matrixConstruct_.relax(alphaU_, *prevIters[i]);
+
+        diagonalDU();
+
+        // Map phi directly as Eigen vector: the zero-copy solve writes the
+        // result straight into the bound velocity component field
+        EigenVectorMap solutionMap
+        (
+            equations[i].phi.data(),
+            EigenIdx(mesh().numCells())
+        );
+
+        momentumSolver_.solve
+        (
+            solutionMap,
+            matrixConstruct_.matrixA(),
+            matrixConstruct_.vectorB()
+        );
+
+        if (debug())
+        {
+            const SolvePerformance& momentumPerformance =
+                momentumSolver_.lastPerformance();
+
+            Logger::residualRow
+            (
+                fieldToString(equations[i].field),
+                momentumPerformance.solverName,
+                momentumPerformance.iterations,
+                momentumPerformance.finalResidual
+            );
+        }
+    }
+
+    buildFaceDiagonal();
+}
+
+
+void Segregated::diagonalDU()
+{
+    // DU_ is identical for all 3 momentum components, so compute only once
+    if (DUComputed_)
+    {
+        return;
+    }
+
+    const auto& matrixA = matrixConstruct_.matrixA();
+    const Count numCells = mesh().numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        DU_[cellIdx] =
+            mesh().cells()[cellIdx].volume()
+          / (matrixA.coeff(EigenIdx(cellIdx), EigenIdx(cellIdx)) + vSmallValue);
+    }
+
+    DUComputed_ = true;
+}
+
+
+void Segregated::buildFaceDiagonal()
+{
+    const Count numFaces = mesh().numFaces();
+
+    #pragma omp parallel for schedule(static)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+    {
+        const Face& face = mesh().faces()[faceIdx];
+
+        if (face.isBoundary())
+        {
+            const BoundaryData& bc =
+                bcManager().fieldBC(face.patch()->get().patchName(), Field::p);
+
+            if (bc.type() == BCType::fixedValue)
+            {
+                // Fixed pressure boundary: normal pressure-velocity coupling
+                DUf_[faceIdx] = DU_[face.ownerCell()];
+            }
+            else
+            {
+                // Zero gradient pressure boundary
+                DUf_[faceIdx] = S(0.0);
+            }
+        }
+        else
+        {
+            // Internal faces
+            DUf_[faceIdx] = interpolateToFace(face, DU_);
+        }
+    }
+}
+
+
+void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
+{
+    const Count numFaces = mesh().numFaces();
+
+    #pragma omp parallel for schedule(static)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+    {
+        const Face& face = mesh().faces()[faceIdx];
+
+        if (face.isBoundary())
+        {
+            UxAvgf_[faceIdx] =
+                bcManager().boundaryFaceValue(Field::Ux, Ux(), face);
+            UyAvgf_[faceIdx] =
+                bcManager().boundaryFaceValue(Field::Uy, Uy(), face);
+            UzAvgf_[faceIdx] =
+                bcManager().boundaryFaceValue(Field::Uz, Uz(), face);
+
+            const Vector Uf
+            (
+                UxAvgf_[faceIdx],
+                UyAvgf_[faceIdx],
+                UzAvgf_[faceIdx]
+            );
+
+            RhieChowFlowRate_[faceIdx] =
+                dot(Uf, face.normal() * face.projectedArea());
+
+            continue;
+        }
+
+        const Index P = face.ownerCell();
+        const Index N = face.neighborCell().value();
+
+        // Linear-interpolated velocity at face
+        const Vector UfLinear
+        (
+            interpolateToFace(face, Ux()),
+            interpolateToFace(face, Uy()),
+            interpolateToFace(face, Uz())
+        );
+
+        const Vector gradPAvgf = interpolateToFace(face, gradP_);
+        const Vector Sf = face.normal() * face.projectedArea();
+        const Vector gradPf =
+            gradientScheme().faceGradient
+            (
+                Field::p,
+                pressure(),
+                gradP_[P],
+                gradP_[N],
+                faceIdx
+            );
+        const Vector UfPrevIter
+        (
+            UxAvgPrevIterf_[faceIdx],
+            UyAvgPrevIterf_[faceIdx],
+            UzAvgPrevIterf_[faceIdx]
+        );
+
+        RhieChowFlowRate_[faceIdx] =
+            dot(UfLinear, Sf)
+          - dot((DUf_[faceIdx] * (gradPf - gradPAvgf)), Sf)
+          + (S(1.0) - alphaU_)
+          * (RhieChowFlowRatePrevIter_[faceIdx] - dot(UfPrevIter, Sf));
+
+        // prevStep is non-null exactly on the transient path
+        if (timeScheme().isTransient() && prevStep != nullptr)
+        {
+            const Vector UfPrevStepLinear
+            (
+                interpolateToFace(face, prevStep->UxPrevStep),
+                interpolateToFace(face, prevStep->UyPrevStep),
+                interpolateToFace(face, prevStep->UzPrevStep)
+            );
+            const Scalar phiCorr =
+                prevStep->fluxPrevStep[faceIdx] - dot(UfPrevStepLinear, Sf);
+            const Scalar coeff = S(1.0) - std::min
+            (
+                std::abs(phiCorr)
+              / (std::abs(prevStep->fluxPrevStep[faceIdx]) + vSmallValue),
+                S(1.0)
+            );
+            const Scalar DTf = DUf_[faceIdx] * coeff / deltaT();
+            RhieChowFlowRate_[faceIdx] += DTf * phiCorr;
+        }
+    }
+}
+
+
+void Segregated::solvePressureCorrection()
+{
+    const Count numCells = mesh().numCells();
+
+    // Compute mass imbalance source term
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        Scalar net = S(0.0);
+        const auto& faceIndices = mesh().cells()[cellIdx].faceIndices();
+        const auto& signs = mesh().cells()[cellIdx].faceSigns();
+
+        for (Index j = 0; j < faceIndices.size(); ++j)
+        {
+            net += signs[j] * RhieChowFlowRate_[faceIndices[j]];
+        }
+
+        massImbalanceSrc_[cellIdx] = -net;
+    }
+
+    // p' restarts from zero every outer iteration
+    pCorr_.setAll(S(0.0));
+    gradPCorr_.setAll(Vector{S(0.0), S(0.0), S(0.0)});
+
+    TransportEquation equationPCorr
+    {
+        .field      = Field::pCorr,
+        .phi        = pCorr_,
+        .convection = std::nullopt,
+        .GammaFace  = DUf_,
+        .source     = massImbalanceSrc_,
+        .gradPhi    = gradPCorr_,
+        .gradScheme = gradientScheme()
+    };
+
+    // Map pCorr field storage as Eigen vector (zero-copy)
+    EigenVectorMap pCorrSolution(pCorr_.data(), EigenIdx(numCells));
+
+    for
+    (
+        Count corrector = 0;
+        corrector <= nNonOrthogonalCorrectors_;
+        ++corrector
+    )
+    {
+        matrixConstruct_.buildMatrix(equationPCorr);
+
+        pressureSolver_.solve
+        (
+            pCorrSolution,
+            matrixConstruct_.matrixA(),
+            matrixConstruct_.vectorB()
+        );
+
+        if (debug())
+        {
+            const SolvePerformance& pressurePerformance =
+                pressureSolver_.lastPerformance();
+
+            Logger::residualRow
+            (
+                "p'",
+                pressurePerformance.solverName,
+                pressurePerformance.iterations,
+                pressurePerformance.finalResidual
+            );
+        }
+
+        // grad(p') feeds the next corrector's non-orthogonal term
+        #pragma omp parallel for schedule(static)
+        for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+        {
+            gradPCorr_[cellIdx] =
+                gradientScheme().cellGradient(Field::pCorr, pCorr_, cellIdx);
+        }
+    }
+}
+
+
+void Segregated::correctVelocity()
+{
+    const Count numCells = mesh().numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        Ux()[cellIdx] -= DU_[cellIdx] * gradPCorr_[cellIdx].x();
+        Uy()[cellIdx] -= DU_[cellIdx] * gradPCorr_[cellIdx].y();
+        Uz()[cellIdx] -= DU_[cellIdx] * gradPCorr_[cellIdx].z();
+    }
+
+    // Update face velocities
+    const Count numFaces = mesh().numFaces();
+
+    #pragma omp parallel for schedule(static)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+    {
+        const Face& face = mesh().faces()[faceIdx];
+
+        if (face.isBoundary())
+        {
+            UxAvgf_[faceIdx] =
+                bcManager().boundaryFaceValue(Field::Ux, Ux(), face);
+            UyAvgf_[faceIdx] =
+                bcManager().boundaryFaceValue(Field::Uy, Uy(), face);
+            UzAvgf_[faceIdx] =
+                bcManager().boundaryFaceValue(Field::Uz, Uz(), face);
+        }
+        else
+        {
+            UxAvgf_[faceIdx] = interpolateToFace(face, Ux());
+            UyAvgf_[faceIdx] = interpolateToFace(face, Uy());
+            UzAvgf_[faceIdx] = interpolateToFace(face, Uz());
+        }
+    }
+}
+
+
+void Segregated::correctFlowRate()
+{
+    // Update mass flux on faces
+    const Count numFaces = mesh().numFaces();
+
+    #pragma omp parallel for schedule(static)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+    {
+        const Face& face = mesh().faces()[faceIdx];
+
+        if (face.isBoundary())
+        {
+            const BoundaryData& bc =
+                bcManager().fieldBC(face.patch()->get().patchName(), Field::p);
+
+            if
+            (
+                bc.type() == BCType::fixedValue
+             || bc.type() == BCType::zeroGradient
+            )
+            {
+                continue;
+            }
+
+            const Scalar gradn =
+                dot(gradPCorr_[face.ownerCell()], face.normal());
+
+            const Scalar flowRateCorrection =
+                DU_[face.ownerCell()] * gradn * face.projectedArea();
+
+            RhieChowFlowRate_[faceIdx] -= flowRateCorrection;
+            continue;
+        }
+
+        const Index ownerIdx = face.ownerCell();
+        const Index neighborIdx = face.neighborCell().value();
+
+        const Vector gradPCorrf =
+            gradientScheme().faceGradient
+            (
+                Field::pCorr,
+                pCorr_,
+                gradPCorr_[ownerIdx],
+                gradPCorr_[neighborIdx],
+                faceIdx
+            );
+
+        const Vector Sf = face.normal() * face.projectedArea();
+        const Scalar flowRateCorrection =
+            DUf_[faceIdx] * dot(gradPCorrf, Sf);
+
+        RhieChowFlowRate_[faceIdx] -= flowRateCorrection;
+    }
+}
+
+
+void Segregated::correctPressure()
+{
+    Scalar sumSq = S(0.0);
+
+    const Count numCells = mesh().numCells();
+
+    #pragma omp parallel for schedule(static) reduction(+:sumSq)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        sumSq += pCorr_[cellIdx] * pCorr_[cellIdx];
+    }
+
+    lastPressureCorrectionRMS_ = std::sqrt(sumSq / S(numCells));
+
+    // Apply pressure correction
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        pressure()[cellIdx] += alphaP_ * pCorr_[cellIdx];
+    }
+}
+
+
+void Segregated::addTransposeGradientSource()
+{
+    const Count numCells = mesh().numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        Scalar sumX = S(0.0);
+        Scalar sumY = S(0.0);
+        Scalar sumZ = S(0.0);
+
+        const auto& cell = mesh().cells()[cellIdx];
+        const auto faceIndices = cell.faceIndices();
+        const auto faceSigns = cell.faceSigns();
+
+        for (Index j = 0; j < faceIndices.size(); ++j)
+        {
+            const Index faceIdx = faceIndices[j];
+            const Scalar sign = S(faceSigns[j]);
+            const Face& face = mesh().faces()[faceIdx];
+
+            const Vector Sf = face.normal() * face.projectedArea() * sign;
+            const Scalar nuEfff = nuEffFace_[faceIdx];
+
+            Tensor gradUf;
+            if (face.isBoundary())
+            {
+                gradUf = gradU()[cellIdx];
+            }
+            else
+            {
+                gradUf = interpolateToFace(face, gradU());
+            }
+
+            sumX += nuEfff * dot(gradUf.col(0), Sf);
+            sumY += nuEfff * dot(gradUf.col(1), Sf);
+            sumZ += nuEfff * dot(gradUf.col(2), Sf);
+        }
+
+        UxSource_[cellIdx] += sumX;
+        UySource_[cellIdx] += sumY;
+        UzSource_[cellIdx] += sumZ;
+    }
+}
+
+
+std::optional<TransientTerm> Segregated::ddtTerm
+(
+    const TransientFields* prevStep,
+    ScalarField TransientFields::* phiPrevStep,
+    ScalarField TransientFields::* ddtPrevStep
+) const
+{
+    if (prevStep == nullptr)
+    {
+        return std::nullopt;
+    }
+
+    return 
+        TransientTerm
+        {
+            timeScheme(),
+            deltaT(),
+            prevStep->*phiPrevStep,
+            &(prevStep->*ddtPrevStep)
+        };
+}

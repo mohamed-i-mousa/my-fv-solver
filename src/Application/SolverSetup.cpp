@@ -15,10 +15,6 @@
 // Implementation header
 #include "SolverSetup.h"
 
-// Standard library headers
-#include <iomanip>
-#include <sstream>
-
 // Project headers
 #include "Mesh.h"
 #include "BoundaryConditions.h"
@@ -26,7 +22,7 @@
 #include "GradientScheme.h"
 #include "ConvectionSchemes.h"
 #include "LinearSolvers.h"
-#include "SIMPLE.h"
+#include "MomentumTransport.h"
 #include "TurbulenceModel.h"
 #include "Laminar.h"
 #include "CaseConfiguration.h"
@@ -205,8 +201,9 @@ void SolverSetup::configure
     }
 
     modules.solver =
-        std::make_unique<SIMPLE>
+        MomentumTransport::create
         (
+            config.algorithm,
             mesh,
             boundaryConditions,
             *modules.timeScheme,
@@ -219,22 +216,18 @@ void SolverSetup::configure
             *modules.momentumSolver,
             *modules.pressureSolver,
             *modules.turbulenceModel,
-            config.rho,
-            config.mu,
             config.initialVelocity,
             config.initialPressure,
             config.time.timeStep,
+            config.rho,
+            config.mu,
             config.alphaU,
             config.alphaP,
             config.maxIterations,
             config.convergenceTolerance,
             config.nNonOrthogonalCorrectors,
             config.time.nOuterCorrectors,
-            config.velocityConstraintEnabled,
-            config.pressureConstraintEnabled,
-            config.maxVelocityMagnitude,
-            config.minPressure,
-            config.maxPressure,
+            config.nPrimeCorrectors,
             config.debug
         );
 }
@@ -246,7 +239,7 @@ void SolverSetup::logSetup
     const CaseConfiguration& config
 )
 {
-    Logger::sectionHeader("Initializing SIMPLE Solver");
+    Logger::sectionHeader("Initializing " + config.algorithm + " Solver");
 
     Logger::subsection("Linear solvers");
     Logger::linearSolverConfigHeader();
@@ -270,7 +263,7 @@ void SolverSetup::logSetup
         );
     }
 
-    Logger::subsection("SIMPLE controls");
+    Logger::subsection(config.algorithm + " controls");
 
     if (!modules.timeScheme->isTransient())
     {
@@ -298,29 +291,9 @@ void SolverSetup::logSetup
         Logger::keyValue("Total time", config.time.totalTime, "s");
         Logger::keyValue("Write interval", config.time.writingIntervals);
         Logger::keyValue("Outer correctors", config.time.nOuterCorrectors);
-    }
-
-    if
-    (
-        config.velocityConstraintEnabled
-     || config.pressureConstraintEnabled
-    )
-    {
-        Logger::subsection("Field constraints");
-        if (config.velocityConstraintEnabled)
+        if (config.algorithm == "PISO")
         {
-            std::ostringstream os;
-            os << std::scientific << std::setprecision(6)
-               << config.maxVelocityMagnitude << " m/s";
-            Logger::keyValue("Velocity max", os.str());
-        }
-        if (config.pressureConstraintEnabled)
-        {
-            std::ostringstream os;
-            os << "[" << std::scientific << std::setprecision(6)
-               << config.minPressure << ", "
-               << config.maxPressure << "] Pa";
-            Logger::keyValue("Pressure range", os.str());
+            Logger::keyValue("PRIME correctors", config.nPrimeCorrectors);
         }
     }
 

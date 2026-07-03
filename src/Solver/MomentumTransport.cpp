@@ -1,0 +1,589 @@
+/******************************************************************************
+
+                                     Turblyze
+                           3D incompressible CFD solver
+                       Copyright (C) 2025-2026 Mohamed Mousa
+                        SPDX-License-Identifier: Apache-2.0
+
+ ------------------------------------------------------------------------------
+ * @file MomentumTransport.cpp
+ * @brief Shared methods for pressure-velocity coupling algorithms
+ *****************************************************************************/
+
+// ********************************** Headers *********************************
+
+// Implementation header
+#include "MomentumTransport.h"
+
+// Standard library headers
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+#include <algorithm>
+
+// External library headers
+#include <omp.h>
+
+// Project headers
+#include "Scalar.h"
+#include "Logger.h"
+#include "TimeScheme.h"
+#include "TurbulenceModel.h"
+#include "RuntimeSelection.h"
+#include "SIMPLE.h"
+#include "PISO.h"
+
+// ************************* Special Member Functions *************************
+
+MomentumTransport::MomentumTransport
+(
+    const Mesh& mesh,
+    const BoundaryConditions& bc,
+    const TimeScheme& timeScheme,
+    const GradientScheme& gradScheme,
+    TurbulenceModel& turbulence,
+    const Vector& initialVelocity,
+    Scalar initialPressure,
+    Scalar deltaT,
+    Scalar rho,
+    Scalar mu,
+    Count maxIterations,
+    Scalar convergenceTolerance,
+    Count nOuterCorrectors,
+    bool debug
+)
+:
+    mesh_{mesh},
+    bcManager_{bc},
+    timeScheme_{timeScheme},
+    gradientScheme_{gradScheme},
+    turbulence_{turbulence},
+    nu_{mu / rho},
+    deltaT_{deltaT},
+    maxIterations_{maxIterations},
+    nOuterCorrectors_{nOuterCorrectors},
+    tolerance_{convergenceTolerance},
+    debug_{debug}
+{
+    Ux_.setAll(initialVelocity.x());
+    Uy_.setAll(initialVelocity.y());
+    Uz_.setAll(initialVelocity.z());
+    p_.setAll(initialPressure);
+}
+
+// **************************** Runtime Selection *****************************
+
+std::unique_ptr<MomentumTransport> MomentumTransport::create
+(
+    const Name& algorithm,
+    const Mesh& mesh,
+    const BoundaryConditions& bc,
+    const TimeScheme& timeScheme,
+    const GradientScheme& gradScheme,
+    const ConvectionSchemes& momentumConvectionScheme,
+    LinearSolver& momentumSolver,
+    LinearSolver& pressureSolver,
+    TurbulenceModel& turbulence,
+    const Vector& initialVelocity,
+    Scalar initialPressure,
+    Scalar deltaT,
+    Scalar rho,
+    Scalar mu,
+    Scalar alphaU,
+    Scalar alphaP,
+    Count maxIterations,
+    Scalar convergenceTolerance,
+    Count nNonOrthogonalCorrectors,
+    Count nOuterCorrectors,
+    Count nPrimeCorrectors,
+    bool debug
+)
+{
+    if (algorithm == "SIMPLE")
+    {
+        return
+            std::make_unique<SIMPLE>
+            (
+                mesh,
+                bc,
+                timeScheme,
+                gradScheme,
+                momentumConvectionScheme,
+                momentumSolver,
+                pressureSolver,
+                turbulence,
+                initialVelocity,
+                initialPressure,
+                deltaT,
+                rho,
+                mu,
+                alphaU,
+                alphaP,
+                maxIterations,
+                convergenceTolerance,
+                nNonOrthogonalCorrectors,
+                nOuterCorrectors,
+                debug
+            );
+    }
+
+    if (algorithm == "PISO")
+    {
+        return
+            std::make_unique<PISO>
+            (
+                mesh,
+                bc,
+                timeScheme,
+                gradScheme,
+                momentumConvectionScheme,
+                momentumSolver,
+                pressureSolver,
+                turbulence,
+                initialVelocity,
+                initialPressure,
+                deltaT,
+                rho,
+                mu,
+                alphaU,
+                alphaP,
+                maxIterations,
+                convergenceTolerance,
+                nNonOrthogonalCorrectors,
+                nOuterCorrectors,
+                nPrimeCorrectors,
+                debug
+            );
+    }
+
+    RuntimeSelection::unknownSelection
+    (
+        "solution algorithm",
+        algorithm,
+        availableAlgorithms()
+    );
+}
+
+
+NameList MomentumTransport::availableAlgorithms()
+{
+    return {"SIMPLE", "PISO"};
+}
+
+// *********************************** Solve **********************************
+
+void MomentumTransport::solve
+(
+    Count step,
+    Count totalSteps,
+    Scalar time,
+    TransientFields* prevStep
+)
+{
+    if (prevStep)
+    {
+        // Previous-step fields phi^n for the transient term
+        prevStep->UxPrevStep = Ux_;
+        prevStep->UyPrevStep = Uy_;
+        prevStep->UzPrevStep = Uz_;
+
+        // Converged t^n face flux for the Rhie-Chow
+        prevStep->fluxPrevStep = faceMassFlux();
+
+        // Previous-time-step turbulence fields
+        turbulence_.beginTimeStep();
+    }
+    else
+    {
+        Logger::sectionHeader("Starting " + algorithmName() + " Loop");
+    }
+
+    reportPerIteration_ = prevStep ? debug_ : true;
+
+    const Count maxIters = prevStep ? nOuterCorrectors_ : maxIterations_;
+
+    // Reset first-iteration residual references
+    massImbalance0_ = S(0.0);
+    velocityResidual0_ = S(0.0);
+    pressureResidual0_ = S(0.0);
+    turbulenceResidual0_.clear();
+
+    Count iteration = 0;
+    bool converged = false;
+
+    while (iteration < maxIters && !converged)
+    {
+        if (debug_)
+        {
+            Logger::iterationHeader(iteration + 1);
+            Logger::residualTableHeader();
+        }
+        else if (reportPerIteration_)
+        {
+            std::cout << " Iteration " << iteration + 1 << '\n';
+        }
+
+        // Previous-iteration velocity for the velocity residual
+        UxPrevIter_ = Ux_;
+        UyPrevIter_ = Uy_;
+        UzPrevIter_ = Uz_;
+
+        converged = outerIteration(prevStep);
+
+        if (debug_)
+        {
+            Logger::iterationFooter();
+        }
+
+        iteration++;
+    }
+
+    if (prevStep)
+    {
+        // Roll the Crank-Nicolson stored time derivatives forward one step
+        updatePrevStepDerivatives(*prevStep);
+        turbulence_.updatePrevStepDerivatives();
+
+        const CourantNumber courant = computeCourant();
+
+        {
+            StreamStateGuard guard(std::cout);
+            std::cout
+                << std::scientific << std::setprecision(3)
+                << " Time = " << time << " s   step "
+                << step << "/" << totalSteps
+                << "   Courant max = " << courant.max
+                << " mean = " << courant.mean << '\n';
+        }
+
+        Logger::residualSummary
+        (
+            lastScaledMass_,
+            lastScaledVelocity_,
+            lastScaledPressure_,
+            lastScaledTurbulence_
+        );
+    }
+    else if (converged)
+    {
+        std::cout
+            << algorithmName() << " algorithm converged in "
+            << iteration << " iterations." << '\n';
+    }
+    else
+    {
+        std::cout
+            << "WARNING: " << algorithmName()
+            << " algorithm did not converge after " << maxIterations_
+            << " iterations." << '\n';
+    }
+}
+
+
+bool MomentumTransport::isTransient() const noexcept
+{
+    return timeScheme_.isTransient();
+}
+
+// **************************** Shared Driver Helpers *************************
+
+
+void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
+{
+    // Called only on the transient path
+    const Count numCells = mesh_.numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        const Scalar volume = mesh_.cells()[cellIdx].volume();
+
+        prevStep.UxDdtPrevStep[cellIdx] = 
+            timeScheme_.updateDdtPrevStep
+            (
+                volume,
+                deltaT_,
+                Ux_[cellIdx],
+                prevStep.UxPrevStep[cellIdx],
+                prevStep.UxDdtPrevStep[cellIdx]
+            );
+
+        prevStep.UyDdtPrevStep[cellIdx] =
+            timeScheme_.updateDdtPrevStep
+            (
+                volume,
+                deltaT_,
+                Uy_[cellIdx],
+                prevStep.UyPrevStep[cellIdx],
+                prevStep.UyDdtPrevStep[cellIdx]
+            );
+
+        prevStep.UzDdtPrevStep[cellIdx] =
+            timeScheme_.updateDdtPrevStep
+            (
+                volume,
+                deltaT_,
+                Uz_[cellIdx],
+                prevStep.UzPrevStep[cellIdx],
+                prevStep.UzDdtPrevStep[cellIdx]
+            );
+    }
+}
+
+
+void MomentumTransport::updateVelocityGradients()
+{
+    const Count numCells = mesh_.numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        gradUx_[cellIdx] =
+            gradientScheme_.cellGradient(Field::Ux, Ux_, cellIdx);
+        gradUy_[cellIdx] =
+            gradientScheme_.cellGradient(Field::Uy, Uy_, cellIdx);
+        gradUz_[cellIdx] =
+            gradientScheme_.cellGradient(Field::Uz, Uz_, cellIdx);
+    }
+
+    gradientScheme_.limitGradient(Field::Ux, Ux_, gradUx_);
+    gradientScheme_.limitGradient(Field::Uy, Uy_, gradUy_);
+    gradientScheme_.limitGradient(Field::Uz, Uz_, gradUz_);
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        gradU_[cellIdx] =
+            tensorFromRows
+            (
+                gradUx_[cellIdx],
+                gradUy_[cellIdx],
+                gradUz_[cellIdx]
+            );
+    }
+}
+
+
+void MomentumTransport::solveTurbulence()
+{
+    if (!turbulence_.isTurbulent())
+    {
+        return;
+    }
+
+    updateVelocityGradients();
+
+    turbulence_.solve
+    (
+        Ux_,
+        Uy_,
+        Uz_,
+        faceMassFlux(),
+        gradU_
+    );
+}
+
+
+bool MomentumTransport::checkConvergence()
+{
+    const TurbulenceModel::ResidualPair turbulenceResiduals =
+        turbulence_.residualOutputs();
+
+    // Compute raw residuals
+    const Scalar massImbalance = this->massImbalance();
+    const Scalar velocityResidual = this->velocityResidual();
+    const Scalar pressureResidual = this->pressureResidual();
+
+    // Store first-iteration references for scaling
+    if (massImbalance0_ < vSmallValue)
+    {
+        massImbalance0_ = massImbalance;
+        velocityResidual0_ = velocityResidual;
+        pressureResidual0_ = pressureResidual;
+
+        turbulenceResidual0_.clear();
+        for (const auto& residual : turbulenceResiduals)
+        {
+            turbulenceResidual0_.push_back(residual.second);
+        }
+    }
+
+    // Scale by first-iteration values
+    const Scalar scaledMass = massImbalance / (massImbalance0_ + vSmallValue);
+
+    const Scalar scaledVelocity =
+        velocityResidual / (velocityResidual0_ + vSmallValue);
+
+    const Scalar scaledPressure =
+        pressureResidual / (pressureResidual0_ + vSmallValue);
+
+    bool converged =
+        (scaledMass < tolerance_)
+     && (scaledVelocity < tolerance_)
+     && (scaledPressure < tolerance_);
+
+    std::vector<Logger::Residuals> scaledTurbulenceResiduals;
+
+    if (turbulence_.isTurbulent())
+    {
+        const Count residualCount =
+            std::min
+            (
+                turbulenceResiduals.size(),
+                turbulenceResidual0_.size()
+            );
+
+        scaledTurbulenceResiduals.reserve(residualCount);
+
+        for (Index i = 0; i < residualCount; ++i)
+        {
+            const Scalar scaled =
+                turbulenceResiduals[i].second
+              / (turbulenceResidual0_[i] + vSmallValue);
+
+            scaledTurbulenceResiduals.push_back
+            (
+                {turbulenceResiduals[i].first, scaled}
+            );
+
+            converged = converged && (scaled < tolerance_);
+        }
+
+        if (residualCount != turbulenceResiduals.size())
+        {
+            converged = false;
+        }
+    }
+
+    // Remember the latest scaled residuals for the per-time-step summary
+    lastScaledMass_ = scaledMass;
+    lastScaledVelocity_ = scaledVelocity;
+    lastScaledPressure_ = scaledPressure;
+    lastScaledTurbulence_ = scaledTurbulenceResiduals;
+
+    if (debug_)
+    {
+        Logger::subsection("Scaled residuals");
+        Logger::scaledResidual("mass",     scaledMass);
+        Logger::scaledResidual("velocity", scaledVelocity);
+        Logger::scaledResidual("pressure", scaledPressure);
+        if (turbulence_.isTurbulent())
+        {
+            for (const Logger::Residuals& residual : scaledTurbulenceResiduals)
+            {
+                Logger::scaledResidual(residual.first, residual.second);
+            }
+        }
+    }
+    else if (reportPerIteration_)
+    {
+        // Laminar runs carry an empty turbulence span, printing nothing extra
+        Logger::residualSummary
+        (
+            scaledMass,
+            scaledVelocity,
+            scaledPressure,
+            scaledTurbulenceResiduals
+        );
+    }
+
+    return converged;
+}
+
+
+Scalar MomentumTransport::massImbalance() const noexcept
+{
+    // Dimensionless normalized continuity residual per cell, averaged
+    const FaceFluxField& flux = faceMassFlux();
+
+    Scalar totalNormImbalance = S(0.0);
+
+    const Count numCells = mesh_.numCells();
+
+    #pragma omp parallel for schedule(static) reduction(+:totalNormImbalance)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        Scalar net = S(0.0);
+        Scalar sumAbs = S(0.0);
+
+        for
+        (
+            Index j = 0;
+            j < mesh_.cells()[cellIdx].faceIndices().size();
+            ++j
+        )
+        {
+            const Index faceIdx = mesh_.cells()[cellIdx].faceIndices()[j];
+            const int sign = mesh_.cells()[cellIdx].faceSigns()[j];
+            const Scalar mf = flux[faceIdx];
+            net += S(sign) * mf;
+            sumAbs += std::abs(mf);
+        }
+
+        const Scalar denom = sumAbs + vSmallValue;
+        totalNormImbalance += std::abs(net) / denom;
+    }
+
+    return totalNormImbalance / S(std::max<Count>(1, numCells));
+}
+
+
+Scalar MomentumTransport::velocityResidual() const noexcept
+{
+    // Normalized residual: ||U - U_prev||_2 / (||U_prev||_2 + eps)
+    Scalar num = S(0.0);
+    Scalar den = S(0.0);
+
+    const Count numCells = mesh_.numCells();
+
+    #pragma omp parallel for schedule(static) reduction(+:num, den)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        const Scalar dx = Ux_[cellIdx] - UxPrevIter_[cellIdx];
+        const Scalar dy = Uy_[cellIdx] - UyPrevIter_[cellIdx];
+        const Scalar dz = Uz_[cellIdx] - UzPrevIter_[cellIdx];
+
+        num += dx * dx + dy * dy + dz * dz;
+        den += UxPrevIter_[cellIdx] * UxPrevIter_[cellIdx]
+             + UyPrevIter_[cellIdx] * UyPrevIter_[cellIdx]
+             + UzPrevIter_[cellIdx] * UzPrevIter_[cellIdx];
+    }
+
+    num = std::sqrt(num + vSmallValue);
+    den = std::sqrt(den + vSmallValue);
+
+    return num / den;
+}
+
+
+MomentumTransport::CourantNumber
+MomentumTransport::computeCourant() const noexcept
+{
+    const FaceFluxField& flux = faceMassFlux();
+
+    const Count numCells = mesh_.numCells();
+
+    Scalar maxCourant = S(0.0);
+    Scalar sumCourant = S(0.0);
+
+    #pragma omp parallel for schedule(static) \
+        reduction(max:maxCourant) reduction(+:sumCourant)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        const auto& cell = mesh_.cells()[cellIdx];
+        const auto& faceIndices = cell.faceIndices();
+
+        Scalar sumFlux = S(0.0);
+        for (Index j = 0; j < faceIndices.size(); ++j)
+        {
+            sumFlux += std::abs(flux[faceIndices[j]]);
+        }
+
+        const Scalar courant =
+            S(0.5) * sumFlux * deltaT_ / cell.volume();
+        maxCourant = std::max(maxCourant, courant);
+        sumCourant += courant;
+    }
+
+    return {maxCourant, sumCourant / S(std::max<Count>(1, numCells))};
+}

@@ -6,16 +6,17 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file SIMPLE.h
- * @brief SIMPLE algorithm for incompressible Navier-Stokes equations
+ * @file PISO.h
+ * @brief PISO algorithm for transient incompressible Navier-Stokes equations
  *
- * @details SIMPLE (Semi-Implicit Method for Pressure-Linked Equations) is a
- * segregated pressure-correction algorithm. It inherits from MomentumTransport
- * and Segregated. its only contribution is the body of one outer iteration:
- * implicit momentum predictor, Rhie-Chow flux, pressure correction, and the
- * velocity, correction, and the velocity, flux, and pressure corrections
+ * @details PISO (Pressure-Implicit with Splitting of Operators) is a
+ * transient segregated algorithm. Each outer iteration runs one SIMPLE
+ * predictor step followed by a fixed number of explicit PRIME corrector
+ * steps: the momentum equation is re-assembled with the current flux and
+ * advanced explicitly (a single Jacobi sweep) before each pressure correction
+ * PISO is transient-only and is run without under-relaxation (alpha = 1)
  *
- * @class SIMPLE
+ * @class PISO
  *****************************************************************************/
 
 #pragma once
@@ -24,16 +25,16 @@
 
 #include "Segregated.h"
 
-// ******************************* class SIMPLE *******************************
+// ******************************** class PISO ********************************
 
-class SIMPLE final : public Segregated
+class PISO final : public Segregated
 {
 public:
 
 // ************************* Special Member Functions *************************
 
     /// Constructor
-    SIMPLE
+    PISO
     (
         const Mesh& mesh,
         const BoundaryConditions& bc,
@@ -54,25 +55,36 @@ public:
         Scalar convergenceTolerance,
         Count nNonOrthogonalCorrectors,
         Count nOuterCorrectors,
+        Count nPrimeCorrectors,
         bool debug
     );
 
     /// Copy constructor and assignment - Not copyable (const T& members)
-    SIMPLE(const SIMPLE&) = delete;
-    SIMPLE& operator=(const SIMPLE&) = delete;
+    PISO(const PISO&) = delete;
+    PISO& operator=(const PISO&) = delete;
 
     /// Move constructor and assignment - Not movable (const T& members)
-    SIMPLE(SIMPLE&&) = delete;
-    SIMPLE& operator=(SIMPLE&&) = delete;
+    PISO(PISO&&) = delete;
+    PISO& operator=(PISO&&) = delete;
 
     /// Destructor
-    ~SIMPLE() noexcept override = default;
+    ~PISO() noexcept override = default;
 
-// ****************************** Private Methods *****************************
+// ****************************** Private Members *****************************
 
 private:
 
-    /// One SIMPLE outer iteration
+    /// Number of explicit PRIME correctors per outer iteration
+    Count nPrimeCorrectors_;
+
+    /// Scratch read buffers for the explicit Jacobi velocity sweep
+    ScalarField UxStar_;
+    ScalarField UyStar_;
+    ScalarField UzStar_;
+
+// ****************************** Private Methods *****************************
+
+    /// One PISO outer iteration
     [[nodiscard]] bool outerIteration
     (
         const TransientFields* prevStep
@@ -81,6 +93,9 @@ private:
     /// Algorithm label for banners and convergence messages
     [[nodiscard]] Name algorithmName() const noexcept override
     {
-        return "SIMPLE";
+        return "PISO";
     }
+
+    /// Explicit PRIME momentum
+    void solveMomentumExplicit(const TransientFields* prevStep);
 };

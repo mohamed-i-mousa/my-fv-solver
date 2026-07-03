@@ -24,6 +24,7 @@
 #include "ErrorHandler.h"
 #include "GradientScheme.h"
 #include "LinearSolvers.h"
+#include "MomentumTransport.h"
 #include "RuntimeSelection.h"
 #include "TimeScheme.h"
 #include "TurbulenceModel.h"
@@ -282,23 +283,16 @@ void readTimeControl
     CaseConfiguration& config
 )
 {
-    // Default: steady-state
-    config.time.timeScheme = "steadyState";
+    // Defaults for the steadyState case (transient keys stay unused)
     config.time.timeStep = S(0.0);
     config.time.totalTime = S(0.0);
     config.time.writingIntervals = 1;
     config.time.nOuterCorrectors = 1;
     config.time.CrankNicolsonCoeff = S(1.0);
 
-    if (!reader.hasSection("time"))
-    {
-        return;
-    }
-
     const auto& time = reader.section("time");
 
-    config.time.timeScheme =
-        time.lookupOrDefault<Name>("timeScheme", "steadyState");
+    config.time.timeScheme = time.lookup<Name>("timeScheme");
 
     validateSelection
     (
@@ -314,9 +308,10 @@ void readTimeControl
 
     config.time.timeStep = time.lookup<Scalar>("timeStep");
     config.time.totalTime = time.lookup<Scalar>("totalTime");
-    config.time.writingIntervals = time.lookup<Count>("writingIntervals");
+    config.time.writingIntervals =
+        time.lookupOrDefault<Count>("writingIntervals", 1);
     config.time.nOuterCorrectors =
-        time.lookupOrDefault<Count>("nOuterCorrectors", 50);
+        time.lookupOrDefault<Count>("nOuterCorrectors", 1);
     config.time.CrankNicolsonCoeff =
         time.lookupOrDefault<Scalar>("CrankNicolsonCoeff", S(1.0));
 
@@ -340,6 +335,166 @@ void readTimeControl
      || config.time.CrankNicolsonCoeff > S(1.0))
     {
         FatalError("time.CrankNicolsonCoeff must be in [0, 1].");
+    }
+}
+
+
+void readVelocityCoupling
+(
+    const CaseReader& reader,
+    CaseConfiguration& config
+)
+{
+    // Default if there's no velocityCoupling section
+    config.algorithm = "SIMPLE";
+    config.nPrimeCorrectors = 1;
+
+    if (reader.hasSection("velocityCoupling"))
+    {
+        const auto& velocityCoupling = reader.section("velocityCoupling");
+
+        config.algorithm =
+            velocityCoupling.lookupOrDefault<Name>("algorithm", "SIMPLE");
+
+        validateSelection
+        (
+            config.algorithm,
+            MomentumTransport::availableAlgorithms(),
+            "velocityCoupling.algorithm"
+        );
+    }
+
+    const bool transient = config.time.timeScheme != "steadyState";
+
+    if (transient && config.algorithm == "SIMPLE")
+    {
+        Warning
+        (
+            "a transient time scheme cannot proceed with SIMPLE; "
+            "switching algorithm to PISO."
+        );
+        config.algorithm = "PISO";
+    }
+    else if (!transient && config.algorithm == "PISO")
+    {
+        Warning
+        (
+            "the steadyState time scheme requires SIMPLE; "
+            "switching algorithm to SIMPLE."
+        );
+        config.algorithm = "SIMPLE";
+    }
+}
+
+void readSimpleControls
+(
+    const CaseReader& reader,
+    CaseConfiguration& config
+)
+{
+    const auto& simple = reader.section("SIMPLE");
+
+    config.maxIterations = simple.lookup<Count>("numIterations");
+    if (config.maxIterations == 0)
+    {
+        FatalError("SIMPLE.numIterations must be a positive integer.");
+    }
+
+    config.convergenceTolerance =
+        simple.lookup<Scalar>("convergenceTolerance");
+    if (config.convergenceTolerance <= S(0.0))
+    {
+        FatalError("SIMPLE.convergenceTolerance must be positive.");
+    }
+
+    config.nNonOrthogonalCorrectors =
+        simple.lookupOrDefault<Count>("nNonOrthogonalCorrectors", 0);
+
+    const auto& relaxFactors = simple.section("relaxationFactors");
+    config.alphaU = relaxFactors.lookup<Scalar>("U");
+    config.alphaP = relaxFactors.lookup<Scalar>("p");
+    config.alphaK = relaxFactors.lookupOrDefault<Scalar>("k", S(0.5));
+    config.alphaOmega =
+        relaxFactors.lookupOrDefault<Scalar>("omega", S(0.5));
+
+    if (config.alphaU <= S(0.0) || config.alphaU > S(2.0))
+    {
+        FatalError("SIMPLE.relaxationFactors.U must be in (0, 2].");
+    }
+    if (config.alphaP <= S(0.0) || config.alphaP > S(2.0))
+    {
+        FatalError("SIMPLE.relaxationFactors.p must be in (0, 2].");
+    }
+    if (config.alphaK <= S(0.0) || config.alphaK > S(2.0))
+    {
+        FatalError("SIMPLE.relaxationFactors.k must be in (0, 2].");
+    }
+    if (config.alphaOmega <= S(0.0) || config.alphaOmega > S(2.0))
+    {
+        FatalError("SIMPLE.relaxationFactors.omega must be in (0, 2].");
+    }
+}
+
+void readPisoControls
+(
+    const CaseReader& reader,
+    CaseConfiguration& config
+)
+{
+    const auto& piso = reader.section("PISO");
+
+    // PISO never runs the steady solve(); maxIterations is unused.
+    config.maxIterations = 1;
+
+    config.convergenceTolerance =
+        piso.lookup<Scalar>("convergenceTolerance");
+    if (config.convergenceTolerance <= S(0.0))
+    {
+        FatalError("PISO.convergenceTolerance must be positive.");
+    }
+
+    config.nNonOrthogonalCorrectors =
+        piso.lookupOrDefault<Count>("nNonOrthogonalCorrectors", 0);
+
+    config.nPrimeCorrectors =
+        piso.lookupOrDefault<Count>("nPrimeCorrectors", 1);
+    if (config.nPrimeCorrectors == 0)
+    {
+        FatalError("PISO.nPrimeCorrectors must be a positive integer.");
+    }
+
+    // No under-relaxation by default: the transient V/dt diagonal dominance
+    // is what stabilizes PISO, not relaxation factors
+    config.alphaU = S(1.0);
+    config.alphaP = S(1.0);
+    config.alphaK = S(1.0);
+    config.alphaOmega = S(1.0);
+
+    if (piso.hasSection("relaxationFactors"))
+    {
+        const auto& relaxFactors = piso.section("relaxationFactors");
+        config.alphaU = relaxFactors.lookupOrDefault<Scalar>("U", S(1.0));
+        config.alphaP = relaxFactors.lookupOrDefault<Scalar>("p", S(1.0));
+        config.alphaK = relaxFactors.lookupOrDefault<Scalar>("k", S(1.0));
+        config.alphaOmega =
+            relaxFactors.lookupOrDefault<Scalar>("omega", S(1.0));
+    }
+
+    if (config.alphaU <= S(0.0) || config.alphaU > S(2.0))
+    {
+        FatalError("PISO.relaxationFactors.U must be in (0, 2].");
+    }
+    if (config.alphaP <= S(0.0) || config.alphaP > S(2.0))
+    {
+        FatalError("PISO.relaxationFactors.p must be in (0, 2].");
+    }
+    if (config.alphaK <= S(0.0) || config.alphaK > S(2.0))
+    {
+        FatalError("PISO.relaxationFactors.k must be in (0, 2].");
+    }
+    if (config.alphaOmega <= S(0.0) || config.alphaOmega > S(2.0))
+    {
+        FatalError("PISO.relaxationFactors.omega must be in (0, 2].");
     }
 }
 
@@ -400,48 +555,6 @@ CaseConfiguration loadConfiguration(const CaseReader& reader)
 
     readGradientScheme(reader, config);
     readConvectionSchemes(reader, config);
-
-    const auto& simple = reader.section("SIMPLE");
-
-    config.maxIterations = simple.lookup<Count>("numIterations");
-    if (config.maxIterations == 0)
-    {
-        FatalError("SIMPLE.numIterations must be a positive integer.");
-    }
-
-    config.convergenceTolerance =
-        simple.lookup<Scalar>("convergenceTolerance");
-    if (config.convergenceTolerance <= S(0.0))
-    {
-        FatalError("SIMPLE.convergenceTolerance must be positive.");
-    }
-
-    config.nNonOrthogonalCorrectors =
-        simple.lookupOrDefault<Count>("nNonOrthogonalCorrectors", 0);
-
-    const auto& relaxFactors = simple.section("relaxationFactors");
-    config.alphaU = relaxFactors.lookup<Scalar>("U");
-    config.alphaP = relaxFactors.lookup<Scalar>("p");
-    config.alphaK = relaxFactors.lookupOrDefault<Scalar>("k", S(0.5));
-    config.alphaOmega =
-        relaxFactors.lookupOrDefault<Scalar>("omega", S(0.5));
-
-    if (config.alphaU <= S(0.0) || config.alphaU > S(2.0))
-    {
-        FatalError("SIMPLE.relaxationFactors.U must be in (0, 2].");
-    }
-    if (config.alphaP <= S(0.0) || config.alphaP > S(2.0))
-    {
-        FatalError("SIMPLE.relaxationFactors.p must be in (0, 2].");
-    }
-    if (config.alphaK <= S(0.0) || config.alphaK > S(2.0))
-    {
-        FatalError("SIMPLE.relaxationFactors.k must be in (0, 2].");
-    }
-    if (config.alphaOmega <= S(0.0) || config.alphaOmega > S(2.0))
-    {
-        FatalError("SIMPLE.relaxationFactors.omega must be in (0, 2].");
-    }
 
     const auto& turbulence = reader.section("turbulence");
     config.turbulenceModel = turbulence.lookup<Name>("model");
@@ -512,6 +625,17 @@ CaseConfiguration loadConfiguration(const CaseReader& reader)
 
     readTimeControl(reader, config);
 
+    readVelocityCoupling(reader, config);
+
+    if (config.algorithm == "SIMPLE")
+    {
+        readSimpleControls(reader, config);
+    }
+    else if (config.algorithm == "PISO")
+    {
+        readPisoControls(reader, config);
+    }
+
     config.vtkOutputFilename = outputDict.lookup<FilePath>("filename");
     if (config.vtkOutputFilename.empty())
     {
@@ -520,66 +644,6 @@ CaseConfiguration loadConfiguration(const CaseReader& reader)
 
     std::cout
         << "Case file loaded." << '\n';
-
-    config.velocityConstraintEnabled = false;
-    config.pressureConstraintEnabled = false;
-    config.maxVelocityMagnitude = S(0.0);
-    config.minPressure = S(0.0);
-    config.maxPressure = S(0.0);
-
-    if (reader.hasSection("constraints"))
-    {
-        const auto& constraintsDict = reader.section("constraints");
-
-        if (constraintsDict.hasSection("velocity"))
-        {
-            const auto& velConstraint =
-                constraintsDict.section("velocity");
-
-            config.velocityConstraintEnabled =
-                velConstraint.lookup<bool>("enabled");
-            config.maxVelocityMagnitude =
-                velConstraint.lookup<Scalar>("maxVelocity");
-
-            if
-            (
-                config.velocityConstraintEnabled
-             && config.maxVelocityMagnitude <= S(0.0)
-            )
-            {
-                FatalError
-                (
-                    "constraints.velocity.maxVelocity must be positive."
-                );
-            }
-        }
-
-        if (constraintsDict.hasSection("pressure"))
-        {
-            const auto& presConstraint =
-                constraintsDict.section("pressure");
-
-            config.pressureConstraintEnabled =
-                presConstraint.lookup<bool>("enabled");
-            config.minPressure =
-                presConstraint.lookup<Scalar>("minPressure");
-            config.maxPressure =
-                presConstraint.lookup<Scalar>("maxPressure");
-
-            if
-            (
-                config.pressureConstraintEnabled
-             && config.minPressure >= config.maxPressure
-            )
-            {
-                FatalError
-                (
-                    "constraints.pressure.minPressure must be "
-                    "less than maxPressure."
-                );
-            }
-        }
-    }
 
     config.forcesEnabled = false;
     config.forcesPatch = "";

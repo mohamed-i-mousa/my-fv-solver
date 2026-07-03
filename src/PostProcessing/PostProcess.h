@@ -23,7 +23,7 @@
 
 class TurbulenceModel;
 class Mesh;
-class SIMPLE;
+class MomentumTransport;
 struct CaseConfiguration;
 
 // *************************** namespace PostProcess **************************
@@ -32,12 +32,12 @@ namespace PostProcess
 {
 
 /// Extract solution fields and print flow statistics
-void reportStatistics(const SIMPLE& solver);
+void reportStatistics(const MomentumTransport& solver);
 
 /// Write VTK volume and wall-boundary results
 void exportResults
 (
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const Mesh& mesh,
     const CaseConfiguration& config
@@ -53,7 +53,7 @@ void exportTimeStep
     Scalar time,
     Count step,
     const Mesh& mesh,
-    const SIMPLE& solver,
+    const MomentumTransport& solver,
     const TurbulenceModel& turbulence,
     const CaseConfiguration& config
 );

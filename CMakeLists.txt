@@ -66,8 +66,10 @@ add_executable(${PROJECT_NAME}
     src/Schemes/TimeSchemes/TimeScheme.cpp
     src/LinearSystem/Matrix.cpp
     src/LinearSystem/LinearSolvers.cpp
+    src/Solver/MomentumTransport.cpp
+    src/Solver/Segregated.cpp
     src/Solver/SIMPLE.cpp
-    src/Solver/Constraint.cpp
+    src/Solver/PISO.cpp
     src/Models/Turbulence/TurbulenceModel.cpp
     src/Models/Turbulence/RANS.cpp
     src/Models/Turbulence/kOmegaSST.cpp
