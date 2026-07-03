@@ -276,7 +276,7 @@ else
 ```
 
 ## Error Handling
-Two macros from `ErrorHandler.h` for all error reporting:
+Two functions from `ErrorHandler.h` for all error reporting:
 
 **Fatal errors** (unrecoverable, prints message with file/line and aborts):
 ```cpp
@@ -328,7 +328,7 @@ std::cerr << "\n" << "Error: " << msg << "\n";
 
 ## Naming Conventions
 - **Classes**: PascalCase (e.g., `LinearSolver`, `GradientScheme`)
-- **Methods**: camelCase (e.g., `solveMomentum`, `computeGradient`)
+- **Methods**: camelCase (e.g., `solveMomentum`, `cellGradient`)
 - **Member variables**: camelCase with trailing underscore (e.g., `tolerance_`, `fieldName_`)
 - **Local variables**: camelCase (e.g., `cellVolume`, `faceArea`)
 - **Type aliases**: PascalCase (e.g., `VectorField`, `ScalarField`)

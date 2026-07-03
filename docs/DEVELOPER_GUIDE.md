@@ -40,7 +40,7 @@ following the OpenFOAM convention.
   - `BoundaryData.h/.cpp`, `BoundaryConditions.h/.cpp`,
     `BoundaryConditionsLoader.h/.cpp`
 - **`src/Schemes/`**: discretization schemes, grouped by family
-  - `ConvectionSchemes/`: `ConvectionSchemes.h` (abstract base) plus one
+  - `ConvectionSchemes/`: `ConvectionSchemes.h/.cpp` (abstract base + runtime selection) plus one
     header/implementation pair per concrete scheme: `UpwindScheme.h/.cpp`,
     `CentralDifferenceScheme.h/.cpp`, `SecondOrderUpwindScheme.h/.cpp`
   - `GradientSchemes/`: `GradientScheme.h/.cpp` (abstract base),
@@ -51,9 +51,25 @@ following the OpenFOAM convention.
     `CrankNicolson.h`, each reporting the d/dt contribution to the implicit
     diagonal and explicit source
 - **`src/LinearSystem/`**: algebraic system assembly and solving
-  - `Matrix.h/.cpp`, `LinearSolvers.h`, `TransportEquation.h`
-- **`src/Solver/`**: SIMPLE pressure–velocity algorithm and field constraints
-  - `SIMPLE.h/.cpp`, `Constraint.h/.cpp`
+  - `Matrix.h/.cpp`, `LinearSolvers.h/.cpp`, `TransportEquation.h`
+- **`src/Solver/`**: segregated pressure–velocity algorithms (a three-level
+  hierarchy)
+  - `MomentumTransport.h/.cpp`: abstract base and the single driver `solve()`
+    (steady with no arguments, transient per step with a `TransientFields*`),
+    turbulence advance, convergence/Courant/residual orchestration,
+    velocity-gradient reconstruction, and the runtime-selection factory
+    `create()` / `availableAlgorithms()` (returns `{"SIMPLE", "PISO"}`). It
+    reaches family-specific state through the virtual hooks `faceMassFlux()`
+    and `pressureResidual()`; the per-iteration body is the pure-virtual
+    `outerIteration()`
+  - `Segregated.h/.cpp`: abstract, derives from `MomentumTransport`; the
+    pressure-correction / Rhie–Chow machinery shared by all segregated
+    algorithms (implicit momentum assembly, the p' Poisson solve,
+    velocity/flux/pressure corrections, the momentum diagonal `DU_`/`DUf_`)
+  - `SIMPLE.h/.cpp` and `PISO.h/.cpp`: `final : Segregated` leaves that each
+    implement only `outerIteration()` + `algorithmName()`. A future
+    fully-coupled block-matrix solver would be a sibling of `Segregated`
+    under `MomentumTransport`
 - **`src/Models/`**: physical models
   - `Turbulence/TurbulenceModel.h` (abstract interface),
     `Turbulence/RANS.h/.cpp` (two-equation eddy-viscosity base),
@@ -98,17 +114,17 @@ following the OpenFOAM convention.
 ### Mesh entities
 - `Face`
   - Topology: `nodeIndices`, `ownerCell`, optional `neighborCell` (boundary if empty).
-  - Geometry computed in `calculateGeometricProperties(allNodes)`:
+  - Geometry computed in `geometricProperties(allNodes)`:
     - Triangles via cross product; polygons triangulated about the face center.
     - Fields: `centroid`, `normal` (unit), `projectedArea`,
       `contactArea`, and returned `FaceIntegrals` (`x2`, `y2`, `z2`,
       `volume`).
-  - Metric distances `calculateDistanceProperties(cellCentroids)`:
+  - Metric distances `distances(allCells)`:
     - `dPf`, optional `dNf`, and their stored magnitudes.
 - `Cell`
   - Topology: lists of `faceIndices`, `neighborCellIndices`, and
     `faceSigns` (owner `+1`, neighbor `-1`).
-  - `calculateGeometricProperties(allFaces, allFaceIntegrals)`:
+  - `geometricProperties(allFaces, allFaceIntegrals)`:
     - Volume via divergence theorem: `V = (1/3) Σ (rf · Sf)` using face integrals.
     - Centroid via second-moment accumulation.
 
@@ -332,8 +348,8 @@ struct TransientTerm
 {
     const TimeScheme& scheme;            // d(phi)/dt discretization
     Scalar deltaT;                       // Time step size
-    const ScalarField& phiOld;           // Field at previous time step (phi^n)
-    const ScalarField* oldDdt;           // Stored old time derivative (CN; nullptr otherwise)
+    const ScalarField& phiPrevStep;      // Field at previous time step (phi^n)
+    const ScalarField* ddtPrevStep;      // Stored previous-step derivative (CN; nullptr otherwise)
 };
 
 struct TransportEquation
@@ -360,12 +376,19 @@ struct TransportEquation
 - Deferred-correction for CDS/SOU added to RHS
 - Transient term (when `eq.transient` is set): a per-cell pass adds the time
   scheme's `V/Δt`-based contribution to the diagonal and the corresponding
-  explicit source from `phi^n` (and, for Crank-Nicolson, the stored old time
-  derivative). The coefficients are kinematic (no `rho`); `steadyState` leaves
+  explicit source from `phi^n` (and, for Crank-Nicolson, the stored
+  previous-step derivative). The coefficients are kinematic (no `rho`); `steadyState` leaves
   `eq.transient` empty so the loop is skipped.
 
 ### Under-relaxation
 `relax(α, φ_prev)` performs Patankar-style implicit relaxation by scaling the diagonal and adjusting RHS with the previous state.
+
+### Explicit PRIME sweep
+`explicitJacobiUpdate()` performs the explicit PRIME momentum sweep: a single
+Jacobi update of the velocity components from the assembled diagonal, the
+off-diagonal neighbor contributions, and the RHS — with no linear solve and no
+relaxation. PISO's corrector steps use it to advance momentum with the current
+flux before each pressure correction.
 
 
 ## Parallelization (OpenMP)
@@ -397,7 +420,7 @@ and `vectorB_`. The chosen strategy is thread-local buffers + serial merge:
 
 ```cpp
 // T tracks the OpenMP runtime thread count
-// (set in Runtime::initParallelism via omp_set_num_threads)
+// (set in CFDApplication.cpp's initParallelism helper via omp_set_num_threads)
 const Count T = static_cast<Count>(omp_get_max_threads());
 std::vector<std::vector<Eigen::Triplet<Scalar>>> perThreadTriplets_(T);
 std::vector<Matrix::Vec> perThreadB_(T, Matrix::Vec::Zero(eIdx(numCells)));
@@ -446,7 +469,7 @@ is a scatter loop with a write race. There are two safe approaches:
    loop over cells instead of faces; inside each cell loop, iterate
    `cell.faceIndices()` + `cell.faceSigns()` to sum face contributions.
 
-`SIMPLE::addTransposeGradientSource` and `RANS::velocityDivergence` use the
+`Segregated::addTransposeGradientSource` and `RANS::velocityDivergence` use the
 gather approach. Prefer gather for new code: it is race-free, avoids temporary
 allocations, and often has better cache behavior.
 
@@ -493,9 +516,9 @@ builds.
 
 ## SIMPLE algorithm
 
-Entry point: `SIMPLE::solve()` performs the outer iteration until convergence or `maxIterations`:
+Entry point: the shared driver `MomentumTransport::solve()` loops `SIMPLE::outerIteration()` until convergence or `maxIterations`:
 1) Store previous-iteration fields (U, face velocities, flow rates), compute gradP.
-2) `solveMomentumEquations()`: computes velocity gradients once into the `gradU_` member, then solves the `Ux_`/`Uy_`/`Uz_` component fields the solver owns directly, each via `solveMomentumEquation()` with `buildMatrix()` + Patankar relaxation.
+2) `solveMomentum()`: computes velocity gradients once into the `gradU_` member, then loops the `Ux_`/`Uy_`/`Uz_` component equations the solver owns directly, each with `buildMatrix()` + Patankar relaxation + implicit solve.
 3) `updateRhieChowFlowRate()`: compute Rhie-Chow face mass fluxes.
 4) `solvePressureCorrection()`: pre-compute mass imbalance source, reset p' and grad(p') to zero, then build and solve the p' equation using `buildMatrix()` with face-based diffusion (DUf), no convection. `SIMPLE.nNonOrthogonalCorrectors` extra loop passes re-assemble with the explicit non-orthogonal correction from the latest grad(p') and re-solve (simpleFoam's non-orthogonal pressure corrector loop, where the first solve always carries a zero correction because p' restarts from zero).
 5) `correctVelocity()`: update U using `U = U* - D ∇p'`.
@@ -506,7 +529,7 @@ Entry point: `SIMPLE::solve()` performs the outer iteration until convergence or
 
 Controls:
 - `SIMPLE` is fully initialized by its constructor. Runtime controls (rho, mu,
-  initial fields, under-relaxation factors, tolerances, constraints, debug
+  initial fields, under-relaxation factors, tolerances, debug
   flag) are passed as individual constructor parameters, OpenFOAM-style, with no
   intermediate POD config struct. The two linear solvers (`momentum`,
   `pressure`) are likewise passed as plain `LinearSolver&` parameters.
@@ -525,34 +548,43 @@ Controls:
 
 ### Transient (URANS) solve
 
-`SIMPLE` holds a `const TimeScheme&` plus the time-step controls (`deltaT_`,
-`nOuterCorrectors_`). `isTransient()` simply forwards `TimeScheme::isTransient()`,
+`MomentumTransport` (the abstract base of `SIMPLE`/`PISO`) holds a
+`const TimeScheme&` plus the time-step controls (`deltaT_`, `nOuterCorrectors_`).
+`isTransient()` simply forwards `TimeScheme::isTransient()`,
 which `CFDApplication::run()` uses to branch between two private paths:
 
-- `runSteady()`: calls `SIMPLE::solve()` once (the loop above), then
-  post-processes and exports once.
+- `runSteady()`: calls `solve()` once (the loop above), then post-processes
+  and exports once.
 - `runTransient()`: sets up the `.pvd` time series (and the optional forces
   history CSV), exports the t = 0 state, then for each step
-  `1 … round(totalTime/deltaT)` calls `SIMPLE::solveTimeStep(step, totalSteps, time)`
+  `1 … round(totalTime/deltaT)` calls `solve(step, totalSteps, time, &prevStep)`
   and writes output at the `writingIntervals` cadence (the final step is always
   written). It finalizes the PVD collection and prints the final-step statistics
-  afterward.
+  afterward. `runTransient()` also owns one value-owning `TransientFields`
+  bundle (the previous-step `phi^n` and the converged `t^n` face flux) as a
+  local and threads its address into `solve()`, so the solver keeps no
+  transient-only members.
 
-`SIMPLE::solveTimeStep()` per step:
-1. Snapshots `phi^n` (`Ux/Uy/UzOld_`) and the converged `t^n` face flux
-   (`RhieChowFlowRateOld_`, used for the Rhie–Chow ddt consistency term), and
-   calls `turbulence_.beginTimeStep()`.
-2. Runs a **fixed** `nOuterCorrectors_` outer iterations (the same inner sequence
-   as the steady solve), with no per-step convergence check. Per-iteration
-   residual lines are emitted only in debug mode, so a non-debug run prints one
-   summary line per time step.
-3. Rolls the Crank-Nicolson stored old time derivatives forward
-   (`updateOldTimeDerivatives()` for momentum and `turbulence_`).
+`MomentumTransport::solve()` per step (the shared `SIMPLE`/`PISO` driver):
+1. Snapshots `phi^n` and the converged `t^n` face flux (used for the Rhie–Chow
+   ddt consistency term) into the caller-owned `TransientFields` bundle whose
+   address `runTransient()` passes in, and calls
+   `turbulence_.beginTimeStep()`. There are no transient-only solver members;
+   the shared read path takes a nullable `const TransientFields*` (`nullptr`
+   when steady).
+2. Runs up to `nOuterCorrectors_` outer iterations — the transient path is
+   PISO-only, so each is one PISO `outerIteration()` (predictor plus
+   `nPrimeCorrectors` PRIME correctors) and the loop stops as soon as the step
+   reaches per-step convergence (drop the tolerance to force more iterations).
+   Per-iteration residual lines are emitted only in debug mode, so a non-debug
+   run prints one summary line per time step.
+3. Rolls the Crank-Nicolson stored previous-step derivatives forward
+   (`updatePrevStepDerivatives()` for momentum and `turbulence_`).
 
 Each momentum, k, and omega `TransportEquation` carries a `TransientTerm` on the
 transient path; the pressure-correction equation never does. `RANS` mirrors the
-old-time bookkeeping (`kOld`/`ddt0`) so URANS turbulence transport is consistent
-with the momentum time scheme.
+previous-step bookkeeping (`kPrevStep`/`kDdtPrevStep`) so URANS turbulence
+transport is consistent with the momentum time scheme.
 
 
 ## Rhie–Chow face-velocity interpolation
@@ -676,7 +708,7 @@ Class `kOmegaSST`:
 The steady path calls `PostProcess::exportResults()` once. The transient path
 (`CFDApplication::runTransient()`) instead drives a ParaView time series:
 - `PostProcess::pvdPathFor(config)` derives `<base>.pvd`; `VTK::writePVDTimeSeriesHeader`
-  / `appendPVDTimeStep` / `closePVDTimeSeries` (in `VTK/PvdTimeSeries`) manage the
+  / `appendPVDTimeStep` (in `VTK/PvdTimeSeries`) manage the
   collection file.
 - `PostProcess::exportTimeStep()` writes one indexed volume file
   `<base>_NNNNNN.vtu` (6-digit zero-padded step) plus its `_boundary.vtp` sibling,
@@ -697,9 +729,7 @@ pressure-correction system:
 - Per-field solver instances with independent convergence parameters.
 - Configurable relative residual tolerance and max iterations.
 - `solve(x, A, b)` updates the supplied solution vector in place and caches
-  diagnostics in `lastPerformance()`.
-- Last-solve diagnostics are also available through `lastIterations()` and
-  `lastResidual()`.
+  diagnostics in `lastPerformance()` (iterations + final residual).
 - Factorization failures emit a `Warning` and reset diagnostics to `0`
   iterations and `NaN` residual. Non-convergence after `solveWithGuess()`
   is recorded silently into `lastPerformance().converged = false`; callers
@@ -740,7 +770,7 @@ virtual ~GradientScheme() noexcept = default;
 ```
 
 Used by: `GradientScheme` (abstract base; `LeastSquares` derives from it),
-`Matrix`, `kOmegaSST`, `SIMPLE`, `Constraint`, `StreamStateGuard`. Note the
+`Matrix`, `kOmegaSST`, `SIMPLE`, `StreamStateGuard`. Note the
 destructor is `virtual` only for the polymorphic `GradientScheme`; the
 non-polymorphic borrowers keep a non-virtual `= default` destructor.
 
@@ -758,7 +788,7 @@ SolverModules(SolverModules&&) = delete;
 SolverModules& operator=(SolverModules&&) = delete;
 
 std::unique_ptr<ConvectionSchemes> momentumConvectionScheme;
-std::unique_ptr<SIMPLE> solver;  // declared last, destroyed first
+std::unique_ptr<MomentumTransport> solver;  // declared last, destroyed first
 ```
 
 Used by: `SolverModules`.
@@ -807,7 +837,7 @@ the data is patch-indexed and field-specific.
 the services and model whose references are stored by `SIMPLE`.
 
 `SIMPLE` owns the flow solution fields, pressure-correction state,
-Rhie-Chow fields, constraints, and matrix assembler. It borrows a non-null
+Rhie-Chow fields, and matrix assembler. It borrows a non-null
 `TurbulenceModel&` for the non-const turbulence solve step; it does not own the
 model, parse case input, or own linear solver objects.
 
@@ -846,7 +876,7 @@ construction).
 7) Apply under-relaxation via `matrix.relax(alpha, phiPrev)` if needed.
 
 ### Add a new convection scheme
-1) Derive from `ConvectionSchemes` (base `getFluxCoefficients` returns `FluxCoefficients` struct).
+1) Derive from `ConvectionSchemes` and override the pure-virtual `correction()` (the explicit high-order deferred-correction term); the stable first-order upwind coefficients are applied by `Matrix`.
 2) Optionally add high-order face value and correction methods (see CDS/SOU) and integrate as deferred-correction in `Matrix`.
 3) Add the case-file name to `ConvectionSchemes::availableSchemes()` and a
    matching `if (schemeName == "...")` branch to `ConvectionSchemes::create()`
@@ -854,7 +884,7 @@ construction).
    document it under `numericalSchemes.convection` in `docs/CASE.md`.
 
 ### Add a new gradient scheme
-1) Create `src/Schemes/MyScheme.h/.cpp` with
+1) Create `src/Schemes/GradientSchemes/MyScheme.h/.cpp` with
    `class MyScheme final : public GradientScheme`. Forward `(mesh, bc)` to the
    `protected` base constructor; delete copy/move; give it an
    `override` destructor.
@@ -881,6 +911,26 @@ Follow the existing `fixedValue` and `fixedGradient` pattern: add a
 lower-camel `BCType` enumerator, store any needed scalar payload in
 `BoundaryData`, register it through `BoundaryConditions`, and handle it in the
 three evaluation/assembly call sites listed above.
+
+### Add a new velocity-coupling algorithm
+1) Derive from `Segregated` for a pressure-correction (segregated) algorithm —
+   like `SIMPLE` and `PISO` — or directly from `MomentumTransport` for a
+   non-pressure-correction family (e.g. a fully-coupled block-matrix solver, a
+   sibling of `Segregated`).
+2) Implement the virtual seam: `outerIteration()` (the per-iteration body) and
+   `algorithmName()`. A `Segregated`-derived algorithm inherits `faceMassFlux()`
+   and `pressureResidual()` from `Segregated`; a family deriving straight from
+   `MomentumTransport` must implement those two hooks itself.
+3) Add a matching `if (algorithm == "...")` branch to
+   `MomentumTransport::create()` AND the case-file name to
+   `MomentumTransport::availableAlgorithms()` (both in
+   `src/Solver/MomentumTransport.cpp`); the parser validates
+   `velocityCoupling.algorithm` against that list, mirroring the
+   gradient/convection factories.
+4) Read the algorithm's controls from its own dedicated case-file section
+   (mirroring `readSimpleControls`/`readPisoControls`), dispatched on
+   `config.algorithm` in `loadConfiguration()`, and document the selector plus
+   that section in `docs/CASE.md`.
 
 ### Expose new solver or model parameters
 - Add the case entry to `defaultCase` and document it in `docs/CASE.md`.
@@ -926,7 +976,7 @@ setFixedGradient("inlet", Field::k, 100.0);
 
 #### Convection Scheme Checks
 Verify coefficient calculation and face values:
-1. **Coefficient Logic**: Test `getFluxCoefficients()` for +/- mass flow rates
+1. **Coefficient Logic**: Verify the upwind implicit coefficients (`a_P_conv = max(F, 0)`, `a_N_conv = min(F, 0)`) assembled in `Matrix` for +/- mass flow rates
 2. **Flow Direction**: Verify upwind cell selection
 3. **Face Values**: Test interpolation and extrapolation methods
 4. **Correction Terms**: Verify deferred correction calculations
@@ -1061,7 +1111,6 @@ SIMPLE { numIterations int; convergenceTolerance scalar; relaxationFactors { U s
 linearSolvers { U { solver type; preconditioner type; tolerance scalar; maxIter int; } p { ... } }
 turbulence { model string; turbulenceIntensity scalar; hydraulicDiameter scalar; }
 output { filename string; debug bool; }
-constraints { velocity { enabled bool; maxVelocity scalar; } pressure { enabled bool; ... } }
 forces { enabled bool; patch name; dragDirection vector; liftDirection vector; referenceVelocity vector; referenceArea scalar; }
 ```
 
@@ -1111,16 +1160,16 @@ runtime.solver =
 flowchart TD
   A[main.cpp / CFDApplication] --> B[CaseReader]
   B --> C[CaseConfig::loadConfiguration]
-  C --> D[Runtime::initParallelism]
+  C --> D[initParallelism]
   D --> E[MeshCreator::create]
   E --> F[BCLoader]
   F --> G[SolverSetup::configure]
   G --> G2{isTransient?}
-  G2 -->|no| H[SIMPLE.solve]
-  G2 -->|yes| H2[runTransient: per-step SIMPLE.solveTimeStep]
+  G2 -->|no| H[solve]
+  G2 -->|yes| H2[runTransient: per-step solve with prevStep]
   H2 --> H
   H --> I[compute gradP]
-  I --> J[solveMomentumEquations]
+  I --> J[solveMomentum]
   J --> K[updateRhieChowFlowRate]
   K --> L[solvePressureCorrection]
   L --> M[correctVelocity]

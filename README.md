@@ -18,7 +18,7 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 ### Core Capabilities
 - **3D Incompressible Flow**: Solves momentum equations with the pressure correction via the SIMPLE algorithm
 
-- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson time schemes using a fixed number of SIMPLE outer correctors per step. Selected by the `time` case section; transient runs write a ParaView `.pvd` time series
+- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson time schemes using a fixed number of PISO outer correctors per step. Selected by the `time` case section; transient runs write a ParaView `.pvd` time series
 
 - **Collocated Grid**: Uses Rhie-Chow face-velocity interpolation to prevent pressure checkerboarding
 
@@ -123,9 +123,9 @@ The default `defaultCase` file contains:
   - Inlet: Fixed velocity (0, 0, -0.043821) m/s, zero gradient pressure
   - Outlet: Zero gradient velocity, fixed pressure (0 Pa)
   - Walls (`sphere`, `wall1`–`wall4`): No-slip velocity, zero gradient pressure; `kWallFunction`, `omegaWallFunction`, `nutWallFunction` for turbulence
-- **Time**: Transient simulation, implicit-Euler stepping (timeStep 0.1 s, totalTime 200 s, 20 outer correctors per step)
+- **Time**: Transient simulation, implicit-Euler stepping (timeStep 0.1 s, totalTime 200 s, 1 outer corrector per step)
 - **Discretization**: Second-Order Upwind convection scheme for momentum and Upwind convection scheme for turbulence equations. Least-squares for gradients computation
-- **SIMPLE Parameters**: αU = 0.7, αp = 0.3, αk = 0.5, αω = 0.5, tolerance = 1e-3 (scaled residuals), max iterations = 500
+- **SIMPLE Parameters**: αU = 1.0, αp = 1.0, αk = 0.5, αω = 0.5, tolerance = 1e-3 (scaled residuals), max iterations = 500
 - **Turbulence**: `Laminar` (k-omega SST is available via `model kOmegaSST`)
 - **Output**: `../outputFiles/sphere.vtu` (plus `sphere_boundary.vtp`, and `sphere_forces.txt` when forces are enabled).
 
@@ -137,7 +137,7 @@ The default `defaultCase` file contains:
 ## Input/Output
 
 ### Mesh Requirements
-- **Format**: Fluent `.msh` files (ASCII format)
+- **Format**: Fluent `.msh` files (ASCII and binary)
 - **Dimension**: 3D only (2D meshes are not supported)
 - **Cell Types**: Tetrahedra, hexahedra, prisms, pyramids
 - **Boundary Patches**: Named patches for boundary condition assignment
@@ -238,7 +238,7 @@ OpenFOAM convention:
   evaluation, and case loading
 - **`src/Schemes/`**: Gradient, interpolation, and convection schemes
 - **`src/LinearSystem/`**: Matrix assembly, transport equations, linear solvers
-- **`src/Solver/`**: SIMPLE algorithm and solution constraints
+- **`src/Solver/`**: Pressure-velocity coupling (SIMPLE and PISO algorithms)
 - **`src/Models/`**: Physical models
   - **`src/Models/Turbulence/`**: Turbulence modeling
     (`kOmegaSST.h/.cpp`)
@@ -290,7 +290,6 @@ For developers wanting to extend the solver, see `docs/DEVELOPER_GUIDE.md` for:
 
 Directions under consideration for future development, aspirational, not commitments. This list will evolve over time.
 
-- [ ] Dedicated PISO pressure-velocity coupling for transient runs
 - [ ] Fully-coupled implicit solver
 - [ ] Additional turbulence models
 - [ ] Additional mesh formats (e.g. OpenFOAM polyMesh, CGNS)

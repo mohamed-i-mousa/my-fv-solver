@@ -16,15 +16,16 @@ This document provides a comprehensive reference for configuring the Turblyze so
   - [2. physicalProperties](#2-physicalproperties)
   - [3. initialConditions](#3-initialconditions)
   - [4. boundaryConditions](#4-boundaryconditions)
-  - [5. time](#5-time-optional)
+  - [5. time](#5-time)
   - [6. numericalSchemes](#6-numericalschemes)
-  - [7. SIMPLE](#7-simple)
-  - [8. linearSolvers](#8-linearsolvers)
-  - [9. turbulence](#9-turbulence)
-  - [10. constraints](#10-constraints-optional)
-  - [11. forces](#11-forces-optional)
-  - [12. output](#12-output)
-  - [13. parallelism](#13-parallelism-optional)
+  - [7. velocityCoupling](#7-velocitycoupling-optional)
+  - [8. SIMPLE](#8-simple)
+  - [9. PISO](#9-piso)
+  - [10. linearSolvers](#10-linearsolvers)
+  - [11. turbulence](#11-turbulence)
+  - [12. forces](#12-forces-optional)
+  - [13. output](#13-output)
+  - [14. parallelism](#14-parallelism-optional)
 
 ## Overview
 
@@ -108,7 +109,7 @@ initialConditions
 - `k` and `omega` are only used when `model` is not `Laminar`
 - When omitted, they are auto-computed from initial velocity using
   `turbulenceIntensity` and `hydraulicDiameter` from the `turbulence`
-  section (see [turbulence](#9-turbulence)):
+  section (see [turbulence](#11-turbulence)):
   - `l = 0.07 * hydraulicDiameter`
   - `k = 1.5 * (I * |U|)^2`
   - `omega = sqrt(k) / (C_mu^0.25 * l)`
@@ -196,13 +197,18 @@ planned for future work.
 **Calculated values:** For `k` and `omega` boundary conditions, `value`
 can be set to `calculated` instead of a numeric value. The solver will
 compute the value from `turbulenceIntensity` and `hydraulicDiameter`
-(see [turbulence](#9-turbulence)):
+(see [turbulence](#11-turbulence)):
 - `k = 1.5 * (I * |U|)^2`
 - `omega = sqrt(k) / (C_mu^0.25 * 0.07 * D_h)`
 
-### 5. time (Optional)
-Controls the transient solve. When this section is omitted, or `timeScheme` is `steadyState`, the solver runs the steady SIMPLE algorithm and every other key
-in this section is ignored. Any other `timeScheme` switches to the transient (URANS) path, which runs a transient solve with a fixed number of SIMPLE outer correctors per step.
+### 5. time
+**Required in every case file.** Declares the time scheme, which is
+**authoritative** for the velocity-coupling algorithm: `steadyState` selects
+**SIMPLE** and any transient scheme selects **PISO** (see
+[velocityCoupling](#7-velocitycoupling-optional)). For a steady run, set
+`timeScheme steadyState`; every other key in this section is then ignored. A
+transient `timeScheme` switches to the transient (URANS) path, which runs with a
+fixed number of PISO outer correctors per step.
 
 ```cpp
 time
@@ -213,13 +219,13 @@ time
     timeStep            0.1;        // Time step size [s]
     totalTime           10;         // Total simulated time [s]
     writingIntervals    1;          // Write output every N steps (>= 1, default 1)
-    nOuterCorrectors    20;         // SIMPLE outer correctors per step (>= 1, default 20)
-    CrankNicolsonCoeff  0.5;        // Crank-Nicolson coefficient [0, 1], default 0.5
+    nOuterCorrectors    20;         // Iterations per step (>= 1, default 1)
+    CrankNicolsonCoeff  0.5;        // Crank-Nicolson coefficient [0, 1], default 1.0
 }
 ```
 
 **Time Scheme Options:**
-- `steadyState`: No time term; the run is a steady SIMPLE solve (default).
+- `steadyState`: No time term; the run is a steady SIMPLE solve.
 - `implicitEuler`: First-order backward Euler, fully implicit.
 - `CrankNicolson`: Second-order trapezoidal. Blended toward implicit Euler by
   `CrankNicolsonCoeff`: `1.0` is pure Crank-Nicolson and
@@ -232,14 +238,13 @@ time
   `round(totalTime / timeStep)` (at least one).
 - `writingIntervals` (default `1`) writes VTK output every N steps; the initial
   condition (t = 0) and the final step are always written. Must be `>= 1`.
-- `nOuterCorrectors` (default `50`) is the fixed number of SIMPLE outer
-  correctors performed each time step, with no per-step convergence check.
-  Must be `>= 1`. The `SIMPLE.numIterations`/`convergenceTolerance` keys only
-  govern the steady path.
+- `nOuterCorrectors` (default `1`) is the number of PISO outer correctors
+  performed each time step. Must be `>= 1`. The `SIMPLE.numIterations`/
+  `convergenceTolerance` keys only govern the steady path.
 - `CrankNicolsonCoeff` (default `1.0`) is consumed only by `CrankNicolson`; it
   must lie in `[0, 1]`.
 - Transient output is written as a ParaView `.pvd` time series, see
-  [output](#12-output).
+  [output](#13-output).
 
 ### 6. numericalSchemes
 Selects discretization schemes.
@@ -274,9 +279,43 @@ An unknown name is rejected at startup.
 - `CentralDifference`: Second-order central difference (accurate, may oscillate)
 - `SecondOrderUpwind`: Second-order upwind (balance of accuracy and stability)
 
-### 7. SIMPLE
-SIMPLE algorithm parameters. These govern the steady-state path; for the
-transient path see [time](#5-time-optional).
+### 7. velocityCoupling (Optional)
+Selects the pressure–velocity coupling algorithm. The two algorithms are tied
+1:1 to the time scheme (see [time](#5-time)): **SIMPLE is steady-only** and
+**PISO is transient-only**. The [time](#5-time) section is authoritative — if
+`algorithm` disagrees with it, the parser **switches the algorithm to match and
+prints a `[WARNING]`** rather than aborting. When this section is omitted,
+`algorithm` defaults to `SIMPLE` (then corrected to `PISO` if the time scheme is
+transient).
+
+```cpp
+velocityCoupling
+{
+    algorithm           PISO;          // SIMPLE (steady) | PISO (transient)
+}
+```
+
+**Algorithm Options:**
+- `SIMPLE`: Semi-implicit pressure-linked algorithm. **Steady-only.** Relies on
+  under-relaxation; reads its controls from the [SIMPLE](#8-simple) section.
+- `PISO`: Pressure-implicit with splitting of operators. **Transient-only.**
+  Each outer iteration is one implicit momentum predictor followed by
+  `nPrimeCorrectors` explicit PRIME corrector steps: the momentum equation is
+  re-assembled with the current flux and advanced by a single explicit Jacobi
+  sweep — no linear solve — before each pressure correction. Reads its controls
+  from the [PISO](#9-piso) section.
+
+**Notes**:
+- The section is **optional**; when absent, `algorithm` is inferred from the
+  time scheme.
+- On a mismatch the time scheme wins: a transient scheme with `algorithm SIMPLE`
+  ⇒ `[WARNING]` + switch to PISO; `steadyState` with `algorithm PISO` ⇒
+  `[WARNING]` + switch to SIMPLE.
+- Only the active algorithm's section is read (`SIMPLE{}` or `PISO{}`); the other
+  may be absent.
+
+### 8. SIMPLE
+Steady-state SIMPLE controls. Read only when SIMPLE is the active algorithm.
 
 ```cpp
 SIMPLE
@@ -297,7 +336,36 @@ SIMPLE
 
 **Non-orthogonal correctors** (`nNonOrthogonalCorrectors`, optional, default `0`): number of pressure-correction re-solves per SIMPLE iteration, matching simpleFoam's non-orthogonal pressure corrector loop. Because p' restarts from zero every iteration, its first solve carries no non-orthogonal correction; each corrector recomputes grad(p') and re-solves with the explicit correction term. Use `0` for orthogonal (hexahedral) meshes and `1`–`2` for tetrahedral or polyhedral meshes. Each corrector adds one pressure solve per iteration.
 
-### 8. linearSolvers
+### 9. PISO
+Transient PISO controls. Read only when PISO is the active algorithm. The
+time-marching cadence (`timeStep`, `totalTime`, `nOuterCorrectors`) lives in the
+[time](#5-time) section.
+
+```cpp
+PISO
+{
+    convergenceTolerance        1e-3;   // Per-time-step convergence criterion
+    nNonOrthogonalCorrectors    0;      // p' corrector re-solves (default 0)
+    nPrimeCorrectors            2;      // Explicit PRIME correctors (>= 1, default 1)
+
+    relaxationFactors
+    {
+        U                   1.0;        // Velocity under-relaxation
+        p                   1.0;        // Pressure under-relaxation
+        k                   1.0;        // Turbulent kinetic energy relaxation
+        omega               1.0;        // Specific dissipation rate relaxation
+    }
+}
+```
+
+**Notes**:
+- `nPrimeCorrectors` (default `1`, must be `>= 1`) is the number of explicit
+  PRIME corrector steps per outer iteration.
+- PISO is stable because the transient term makes the momentum diagonal
+  dominant; very high Courant numbers can destabilize the explicit sweep. Keep
+  `U` and `p` relaxation at `1.0`.
+
+### 10. linearSolvers
 Linear solver settings for each field.
 
 ```cpp
@@ -353,7 +421,7 @@ Algorithm/equation pairing is not validated. Picking `PCG` for a
 non-symmetric equation will compile and run but will not converge to the
 correct solution.
 
-### 9. turbulence
+### 11. turbulence
 Turbulence model configuration.
 
 ```cpp
@@ -379,28 +447,7 @@ turbulence
 - Wall distance is computed using meshWave iterative propagation method
   (not configurable)
 
-### 10. constraints (Optional)
-Solution field constraints.
-
-```cpp
-constraints
-{
-    velocity                        // Velocity limiting
-    {
-        enabled         false;      // Enable velocity constraint
-        maxVelocity     0.3;        // Maximum velocity magnitude [m/s]
-    }
-
-    pressure                        // Pressure limiting
-    {
-        enabled         false;      // Enable pressure constraint
-        minPressure     -0.05;      // Minimum pressure [Pa]
-        maxPressure     0.05;       // Maximum pressure [Pa]
-    }
-}
-```
-
-### 11. forces (Optional)
+### 12. forces (Optional)
 Aerodynamic force and coefficient reporting on one wall patch.
 
 ```cpp
@@ -431,7 +478,7 @@ forces
   `time,pressureDrag,frictionDrag,totalDrag,pressureLift,frictionLift,totalLift,Cd,Cl`
   (one row per step, including t = 0), and still print the final-step summary.
 
-### 12. output
+### 13. output
 Output configuration.
 
 ```cpp
@@ -472,7 +519,7 @@ output
   `false`, only essential output is shown (phase headers, iteration residuals,
   convergence status, flow statistics, and error/warning messages).
 
-### 13. parallelism (Optional)
+### 14. parallelism (Optional)
 Shared-memory parallelism settings.
 
 ```cpp
