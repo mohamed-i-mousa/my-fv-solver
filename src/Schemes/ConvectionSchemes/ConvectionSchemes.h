@@ -20,7 +20,6 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
-#include <algorithm>
 #include <memory>
 
 // Project headers
@@ -60,28 +59,7 @@ public:
     /// Names of every selectable convection scheme
     [[nodiscard]] static NameList availableSchemes();
 
-// ************************** struct FluxCoefficients *************************
-
-    struct FluxCoefficients
-    {
-        Scalar owner;
-        Scalar neighbor;
-    };
-
 // ****************************** Public Methods ******************************
-
-    /// Get implicit upwind flux coefficients for matrix assembly
-    [[nodiscard]] static FluxCoefficients getFluxCoefficients
-    (
-        Scalar flowRate
-    ) noexcept
-    {
-        return
-        {
-            .owner    = std::max(flowRate, S(0.0)),
-            .neighbor = std::min(flowRate, S(0.0))
-        };
-    }
 
     /// Calculate higher-order deferred correction term
     [[nodiscard]] virtual Scalar correction

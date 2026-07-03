@@ -157,16 +157,13 @@ namespace Logger
     /// Print one labelled scaled-residual line
     void scaledResidual(const Name& name, Scalar value);
 
-    /// Print the non-debug one-line per-iteration residual summary
-    void residualSummary(Scalar mass, Scalar velocity, Scalar pressure);
-
-    /// Print the non-debug one-line residual summary with named extra terms
+    /// Print the non-debug one-line per-iteration residual summary,
     void residualSummary
     (
         Scalar mass,
         Scalar velocity,
         Scalar pressure,
-        std::span<const Residuals> residuals
+        std::span<const Residuals> residuals = {}
     );
 
 } // namespace Logger

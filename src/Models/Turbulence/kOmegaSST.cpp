@@ -83,8 +83,17 @@ kOmegaSST::kOmegaSST
     k().setAll(initialK);
     omega_.setAll(initialOmega);
 
-    // initialize nut = k/omega
-    initializeTurbulentViscosity();
+    // Initialize nut with the simple k-omega estimate nut = k/omega, used
+    // before strain rate & F23 are available for the SST limiter
+    const Count numCells = mesh.numCells();
+
+    #pragma omp parallel for schedule(static)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        nut()[cellIdx] =
+            std::max(k()[cellIdx] / (omega_[cellIdx] + vSmallValue), S(0.0));
+    }
+
     updateYPlus();
     updateNutWall();
 }
@@ -163,7 +172,48 @@ void kOmegaSST::solve
     updateResiduals(omega_, omegaPrev_);
 
     // Log min/max/mean of k, omega, nut
-    logFieldDiagnostics();
+    const Count numCells = mesh().numCells();
+
+    if (debug() && numCells > 0)
+    {
+        Scalar kMin = k()[0];
+        Scalar kMax = k()[0];
+        Scalar kSum = S(0.0);
+
+        Scalar omegaMin = omega_[0];
+        Scalar omegaMax = omega_[0];
+        Scalar omegaSum = S(0.0);
+
+        Scalar nutMin = nut()[0];
+        Scalar nutMax = nut()[0];
+        Scalar nutSum = S(0.0);
+
+        #pragma omp parallel for schedule(static) \
+            reduction(+:kSum, omegaSum, nutSum) \
+            reduction(min:kMin, omegaMin, nutMin) \
+            reduction(max:kMax, omegaMax, nutMax)
+        for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+        {
+            kMin = std::min(kMin, k()[cellIdx]);
+            kMax = std::max(kMax, k()[cellIdx]);
+            kSum += k()[cellIdx];
+
+            omegaMin = std::min(omegaMin, omega_[cellIdx]);
+            omegaMax = std::max(omegaMax, omega_[cellIdx]);
+            omegaSum += omega_[cellIdx];
+
+            nutMin = std::min(nutMin, nut()[cellIdx]);
+            nutMax = std::max(nutMax, nut()[cellIdx]);
+            nutSum += nut()[cellIdx];
+        }
+
+        const Scalar n = S(numCells);
+
+        Logger::subsection("Turbulence field statistics");
+        Logger::scalarStat("k", kMin, kMax, kSum / n);
+        Logger::scalarStat("omega", omegaMin, omegaMax, omegaSum / n);
+        Logger::scalarStat("nut", nutMin, nutMax, nutSum / n);
+    }
 }
 
 // ************************ Inlet Condition Calculators ***********************
@@ -184,21 +234,6 @@ Scalar kOmegaSST::inletOmega
 }
 
 // ****************************** Private Methods *****************************
-
-void kOmegaSST::initializeTurbulentViscosity()
-{
-    // Simple k-omega estimate: nut = k / omega
-    // Used before strain rate & F23 are available for the SST limiter.
-    const Count numCells = mesh().numCells();
-
-    #pragma omp parallel for schedule(static)
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
-    {
-        nut()[cellIdx] =
-            std::max(k()[cellIdx] / (omega_[cellIdx] + vSmallValue), S(0.0));
-    }
-}
-
 
 void kOmegaSST::updateNutWall()
 {
@@ -653,17 +688,15 @@ void kOmegaSST::solveOmegaEquation
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
+        const Eigen::Index row = EigenIdx(cellIdx);
+        Scalar& diagonal = matrixA.coeffRef(row, row);
 
         // Production term: add the limited omega production POmega to RHS
-        vectorB(EigenIdx(cellIdx)) += POmega[cellIdx] * cellVolume;
+        vectorB(row) += POmega[cellIdx] * cellVolume;
 
         // Destruction term: -β·ω² (implicit: β·ω on diagonal)
         const Scalar beta = blend(f1[cellIdx], coeffs_.beta1, coeffs_.beta2);
-        matrixA.coeffRef
-        (
-            EigenIdx(cellIdx),
-            EigenIdx(cellIdx)
-        ) += beta * omega_[cellIdx] * cellVolume;
+        diagonal += beta * omega_[cellIdx] * cellVolume;
 
         // Cross-diffusion: linearization of (1-F1)*CDkOmega
         const Scalar CDkOmegaLineared =
@@ -672,15 +705,11 @@ void kOmegaSST::solveOmegaEquation
 
         if (CDkOmegaLineared < S(0.0))
         {
-            matrixA.coeffRef
-            (
-                EigenIdx(cellIdx),
-                EigenIdx(cellIdx)
-            ) += -CDkOmegaLineared * cellVolume;
+            diagonal += -CDkOmegaLineared * cellVolume;
         }
         else
         {
-            vectorB(EigenIdx(cellIdx)) +=
+            vectorB(row) +=
                 CDkOmegaLineared * omega_[cellIdx] * cellVolume;
         }
 
@@ -690,13 +719,9 @@ void kOmegaSST::solveOmegaEquation
         const Scalar suspOmega =
             (S(2.0) / S(3.0)) * gamma * divU[cellIdx];
 
-        matrixA.coeffRef
-        (
-            EigenIdx(cellIdx),
-            EigenIdx(cellIdx)
-        ) += std::max(suspOmega, S(0.0)) * cellVolume;
+        diagonal += std::max(suspOmega, S(0.0)) * cellVolume;
 
-        vectorB(EigenIdx(cellIdx)) +=
+        vectorB(row) +=
             std::max(-suspOmega, S(0.0)) * omega_[cellIdx] * cellVolume;
     }
 
@@ -783,21 +808,21 @@ void kOmegaSST::solveKEquation
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
+        const Eigen::Index row = EigenIdx(cellIdx);
+        Scalar& diagonal = matrixA.coeffRef(row, row);
 
-        vectorB(EigenIdx(cellIdx)) += Pk[cellIdx] * cellVolume;
+        vectorB(row) += Pk[cellIdx] * cellVolume;
 
         // Destruction term: -β*·kω
         const Scalar destruction = coeffs_.betaStar * omega_[cellIdx];
-        matrixA.coeffRef(EigenIdx(cellIdx),EigenIdx(cellIdx)) +=
-            destruction * cellVolume;
+        diagonal += destruction * cellVolume;
 
         // -(2/3)*divU SuSp term (continuity correction)
         const Scalar suspK = (S(2.0) / S(3.0)) * divU[cellIdx];
 
-        matrixA.coeffRef(EigenIdx(cellIdx),EigenIdx(cellIdx)) +=
-            std::max(suspK, S(0.0)) * cellVolume;
+        diagonal += std::max(suspK, S(0.0)) * cellVolume;
 
-        vectorB(EigenIdx(cellIdx)) +=
+        vectorB(row) +=
             std::max(-suspK, S(0.0)) * k()[cellIdx] * cellVolume;
     }
 
@@ -859,51 +884,4 @@ ScalarField kOmegaSST::computeTurbulentViscosity
     }
 
     return nut;
-}
-
-
-void kOmegaSST::logFieldDiagnostics() const
-{
-    if (!debug()) return;
-
-    const Count numCells = mesh().numCells();
-    if (numCells == 0) return;
-
-    Scalar kMin = k()[0];
-    Scalar kMax = k()[0];
-    Scalar kSum = S(0.0);
-
-    Scalar omegaMin = omega_[0];
-    Scalar omegaMax = omega_[0];
-    Scalar omegaSum = S(0.0);
-
-    Scalar nutMin = nut()[0];
-    Scalar nutMax = nut()[0];
-    Scalar nutSum = S(0.0);
-
-    #pragma omp parallel for schedule(static) \
-        reduction(+:kSum, omegaSum, nutSum) \
-        reduction(min:kMin, omegaMin, nutMin) \
-        reduction(max:kMax, omegaMax, nutMax)
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
-    {
-        kMin = std::min(kMin, k()[cellIdx]);
-        kMax = std::max(kMax, k()[cellIdx]);
-        kSum += k()[cellIdx];
-
-        omegaMin = std::min(omegaMin, omega_[cellIdx]);
-        omegaMax = std::max(omegaMax, omega_[cellIdx]);
-        omegaSum += omega_[cellIdx];
-
-        nutMin = std::min(nutMin, nut()[cellIdx]);
-        nutMax = std::max(nutMax, nut()[cellIdx]);
-        nutSum += nut()[cellIdx];
-    }
-
-    const Scalar n = S(numCells);
-
-    Logger::subsection("Turbulence field statistics");
-    Logger::scalarStat("k", kMin, kMax, kSum / n);
-    Logger::scalarStat("omega", omegaMin, omegaMax, omegaSum / n);
-    Logger::scalarStat("nut", nutMin, nutMax, nutSum / n);
 }

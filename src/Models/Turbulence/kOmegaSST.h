@@ -97,16 +97,10 @@ public:
 
 // ***************************** Accessor Methods *****************************
 
-    /// Get specific dissipation rate field (native k-omega accessor)
-    [[nodiscard]] const ScalarField& omega() const noexcept
-    {
-        return omega_;
-    }
-
     /// Dissipation field for the base contract (omega for k-omega SST)
     [[nodiscard]] const ScalarField& dissipation() const noexcept override
     {
-        return omega();
+        return omega_;
     }
 
     /// Dissipation field name for output labelling
@@ -166,16 +160,6 @@ public:
     };
 
 // ************************ Inlet Condition Calculators ***********************
-
-    /// Calculate inlet/initial turbulent kinetic energy
-    [[nodiscard]] static Scalar inletK
-    (
-        const Vector& velocity,
-        Scalar turbulenceIntensity
-    ) noexcept
-    {
-        return RANS::inletK(velocity, turbulenceIntensity);
-    }
 
     /// Calculate inlet/initial specific dissipation rate
     [[nodiscard]] static Scalar inletOmega
@@ -248,11 +232,6 @@ private:
     {
         return f * (cInner - cOuter) + cOuter;
     }
-
-// Initialization helpers
-
-    /// Initialize turbulent viscosity with k/omega estimate
-    void initializeTurbulentViscosity();
 
 // Wall-function helpers
 
@@ -366,7 +345,4 @@ private:
         const ScalarField& f23,
         const ScalarField& strainRateMag
     ) const;
-
-    /// Log min/max/mean for k, omega, nut fields
-    void logFieldDiagnostics() const;
 };

@@ -148,18 +148,6 @@ public:
     /// Name of the dissipation field for output labelling ("omega"/"epsilon")
     [[nodiscard]] virtual Name dissipationName() const noexcept = 0;
 
-    /// Get normalised k change from the most recent solve
-    [[nodiscard]] Scalar lastKResidual() const noexcept
-    {
-        return lastKResidual_;
-    }
-
-    /// Get normalised dissipation change from the most recent solve
-    [[nodiscard]] Scalar lastDissipationResidual() const noexcept
-    {
-        return lastDissipationResidual_;
-    }
-
     /// Whether wall-distance initialization converged
     [[nodiscard]] bool wallDistanceConverged() const noexcept override
     {

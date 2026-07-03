@@ -177,22 +177,6 @@ void Logger::residualSummary
 (
     Scalar mass,
     Scalar velocity,
-    Scalar pressure
-)
-{
-    StreamStateGuard guard(std::cout);
-
-    std::cout
-        << " - Mass: " << std::scientific << mass
-        << ", Velocity: " << velocity
-        << ", Pressure: " << pressure << '\n';
-}
-
-
-void Logger::residualSummary
-(
-    Scalar mass,
-    Scalar velocity,
     Scalar pressure,
     std::span<const Residuals> residuals
 )
