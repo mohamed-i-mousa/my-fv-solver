@@ -112,13 +112,21 @@ private:
     /// All boundary patches
     PatchList boundaryPatches_;
 
-    /// Fluent mesh-file section identifier tokens
+    /// Fluent mesh-file section identifier tokens (ASCII data blocks)
     inline static const Token MSH_COMMENT    = "(0";
     inline static const Token MSH_DIMENSION  = "(2";
     inline static const Token MSH_NODES      = "(10";
     inline static const Token MSH_CELLS      = "(12";
     inline static const Token MSH_FACES      = "(13";
     inline static const Token MSH_BOUNDARIES = "(45";
+
+    /// Fluent binary data-block identifiers (ASCII id + 2000 single / + 3000 double)
+    inline static const Token MSH_NODES_SP   = "(2010";
+    inline static const Token MSH_NODES_DP   = "(3010";
+    inline static const Token MSH_CELLS_SP   = "(2012";
+    inline static const Token MSH_CELLS_DP   = "(3012";
+    inline static const Token MSH_FACES_SP   = "(2013";
+    inline static const Token MSH_FACES_DP   = "(3013";
 
     /// Lookup table for Fluent BC type string to enum mapping
     inline static const std::array<BCMapping, 13> bcMappings_ =
@@ -154,11 +162,25 @@ private:
     /// Parse the nodes section
     void parseNodesSection(std::ifstream& ifs, const Token& token);
 
+    /// Parse a binary nodes data block (single or double precision)
+    void parseNodesSectionBinary
+    (
+        std::ifstream& ifs,
+        const Token& token,
+        bool doublePrecision
+    );
+
     /// Parse the cells section
     void parseCellsSection(std::ifstream& ifs, const Token& token);
 
+    /// Consume a binary cells data block (cell types are unused)
+    void parseCellsSectionBinary(std::ifstream& ifs, const Token& token);
+
     /// Parse the faces section
     void parseFacesSection(std::ifstream& ifs, const Token& token);
+
+    /// Parse a binary faces data block (int32 connectivity)
+    void parseFacesSectionBinary(std::ifstream& ifs, const Token& token);
 
     /// Parse the boundaries section
     void parseBoundariesSection(std::ifstream& ifs, const Token& token);
