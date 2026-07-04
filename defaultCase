@@ -382,7 +382,7 @@ forces
 // ============================================================================
 output
 {
-    filename        ../outputFiles/sphere.vtu;
+    filename        ../outputFiles/sphere.vtkhdf;
     debug           false;      // Enable verbose console output
 }
 

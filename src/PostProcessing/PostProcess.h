@@ -15,7 +15,6 @@
 // ********************************** Headers *********************************
 
 // Project headers
-#include "Integer.h"
 #include "Scalar.h"
 #include "StringTypes.h"
 
@@ -26,6 +25,12 @@ class Mesh;
 class MomentumTransport;
 struct CaseConfiguration;
 
+namespace VTK
+{
+class HDF5CellData;
+class HDF5BoundaryData;
+}
+
 // *************************** namespace PostProcess **************************
 
 namespace PostProcess
@@ -34,7 +39,7 @@ namespace PostProcess
 /// Extract solution fields and print flow statistics
 void reportStatistics(const MomentumTransport& solver);
 
-/// Write VTK volume and wall-boundary results
+/// Write the CellData and BoundaryData VTKHDF results
 void exportResults
 (
     const MomentumTransport& solver,
@@ -43,19 +48,20 @@ void exportResults
     const CaseConfiguration& config
 );
 
-/// PVD collection-file path derived from the configured VTK output filename
-[[nodiscard]] FilePath pvdPathFor(const CaseConfiguration& config);
+/// CellData .vtkhdf path derived from the output file name
+[[nodiscard]] FilePath cellDataPath(const CaseConfiguration& config);
 
-/// Write one time step's VTK results and append it to the PVD time series
-void exportTimeStep
+/// BoundaryData _boundary.vtkhdf path derived from the output file name
+[[nodiscard]] FilePath boundaryDataPath(const CaseConfiguration& config);
+
+/// Gather the solution fields and append one time step to both writers
+void appendTimeStep
 (
-    const FilePath& pvdFile,
+    VTK::HDF5CellData& volumeWriter,
+    VTK::HDF5BoundaryData& boundaryWriter,
     Scalar time,
-    Count step,
-    const Mesh& mesh,
     const MomentumTransport& solver,
-    const TurbulenceModel& turbulence,
-    const CaseConfiguration& config
+    const TurbulenceModel& turbulence
 );
 
 } // namespace PostProcess

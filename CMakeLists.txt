@@ -34,13 +34,8 @@ endif()
 
 find_package(OpenMP REQUIRED)
 
-# Find VTK package with required components
-find_package(VTK 9 REQUIRED COMPONENTS
-  CommonCore
-  CommonDataModel
-  FiltersGeneral
-  IOXML
-)
+# Find the HDF5 C library
+find_package(HDF5 REQUIRED COMPONENTS C)
 
 # --- List your source files ---
 add_executable(${PROJECT_NAME}
@@ -73,9 +68,9 @@ add_executable(${PROJECT_NAME}
     src/Models/Turbulence/TurbulenceModel.cpp
     src/Models/Turbulence/RANS.cpp
     src/Models/Turbulence/kOmegaSST.cpp
-    src/PostProcessing/VTK/VtkWriter.cpp
-    src/PostProcessing/VTK/VtkBoundaryWriter.cpp
-    src/PostProcessing/VTK/PvdTimeSeries.cpp
+    src/PostProcessing/VTK/HDF5Wrapper.cpp
+    src/PostProcessing/VTK/HDF5CellData.cpp
+    src/PostProcessing/VTK/HDF5BoundaryData.cpp
     src/PostProcessing/PostProcess.cpp
     src/PostProcessing/DerivedFields.cpp
     src/PostProcessing/Forces.cpp
@@ -146,18 +141,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     endif()
 endif()
 
-# Link executable against the VTK, Eigen3, and OpenMP libraries
+# Link executable against the HDF5, Eigen3, and OpenMP libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    VTK::CommonCore
-    VTK::CommonDataModel
-    VTK::FiltersGeneral
-    VTK::IOXML
+    HDF5::HDF5
     Eigen3::Eigen
     OpenMP::OpenMP_CXX
-)
-
-# VTK 9 needs autoinit to register module factories at link time.
-vtk_module_autoinit(
-    TARGETS ${PROJECT_NAME}
-    MODULES VTK::CommonCore VTK::CommonDataModel VTK::FiltersGeneral VTK::IOXML
 )

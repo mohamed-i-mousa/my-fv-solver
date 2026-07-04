@@ -34,7 +34,8 @@
 #include "PostProcess.h"
 #include "SolverSetup.h"
 #include "MomentumTransport.h"
-#include "PvdTimeSeries.h"
+#include "HDF5BoundaryData.h"
+#include "HDF5CellData.h"
 
 // ***************************** Internal Helpers *****************************
 
@@ -97,10 +98,6 @@ void runTransient
 {
     Logger::sectionHeader("Starting Transient Loop");
 
-    // Set up the PVD time series and the optional force-history CSV
-    const FilePath pvdFile = PostProcess::pvdPathFor(config);
-    VTK::writePVDTimeSeriesHeader(pvdFile);
-
     if (config.forcesEnabled)
     {
         Forces::writeForceHistoryHeader(config);
@@ -115,16 +112,31 @@ void runTransient
         numSteps = 1;
     }
 
-    // Export the initial condition (t = 0) before the transient solve
-    PostProcess::exportTimeStep
+    // One VTKHDF file per grid: geometry once, cell data appended per step
+    VTK::HDF5CellData volumeWriter
     (
-        pvdFile,
-        S(0.0),
-        0,
+        PostProcess::cellDataPath(config),
         mesh,
+        config.debug
+    );
+    VTK::HDF5BoundaryData boundaryWriter
+    (
+        PostProcess::boundaryDataPath(config),
+        mesh,
+        config.debug
+    );
+
+    volumeWriter.writeGeometry();
+    boundaryWriter.writeGeometry();
+
+    // Export the initial condition (t = 0) before the transient solve
+    PostProcess::appendTimeStep
+    (
+        volumeWriter,
+        boundaryWriter,
+        S(0.0),
         *modules.solver,
-        *modules.turbulenceModel,
-        config
+        *modules.turbulenceModel
     );
 
     if (config.forcesEnabled)
@@ -166,18 +178,19 @@ void runTransient
 
         if (writeNow)
         {
-            PostProcess::exportTimeStep
+            PostProcess::appendTimeStep
             (
-                pvdFile,
+                volumeWriter,
+                boundaryWriter,
                 time,
-                step,
-                mesh,
                 *modules.solver,
-                *modules.turbulenceModel,
-                config
+                *modules.turbulenceModel
             );
         }
     }
+
+    volumeWriter.finalize();
+    boundaryWriter.finalize();
 
     // Final reporting on the last time step's state
     PostProcess::reportStatistics(*modules.solver);

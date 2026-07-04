@@ -26,7 +26,7 @@ echo "Re,Cd,Cl,CdPressure,CdFriction" > "$OUT"
 for Re in 1 2 5 10 20 50 100 200 500 1000 2000 5000; do
     mu=$(python3 -c "print(2.45/$Re)")
     sed -e "s|mu .*Pa.s.*|mu ${mu};|" \
-        -e "s|filename .*\\.vtu;|filename /tmp/laminarRe${Re}.vtu;|" \
+        -e "s|filename .*\\.vtkhdf;|filename /tmp/laminarRe${Re}.vtkhdf;|" \
         "$CASE" > "/tmp/laminarRe${Re}.case"
     ./Turblyze "/tmp/laminarRe${Re}.case" > "/tmp/laminarRe${Re}.log" 2>&1
     f="/tmp/laminarRe${Re}_forces.txt"
@@ -50,7 +50,7 @@ for Re in 10000 50000 100000; do
     mu=$(python3 -c "print(2.45/$Re)")
     sed -e "s|mu .*Pa.s.*|mu ${mu};|" \
         -e "s|numIterations  *[0-9][0-9]*;|numIterations 1000;|" \
-        -e "s|filename .*\\.vtu;|filename /tmp/turbRe${Re}.vtu;|" \
+        -e "s|filename .*\\.vtkhdf;|filename /tmp/turbRe${Re}.vtkhdf;|" \
         "$CASE" > "/tmp/turbRe${Re}.case"
     ./Turblyze "/tmp/turbRe${Re}.case" > "/tmp/turbRe${Re}.log" 2>&1
     f="/tmp/turbRe${Re}_forces.txt"

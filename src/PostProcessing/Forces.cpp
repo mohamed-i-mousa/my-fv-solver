@@ -16,11 +16,13 @@
 #include "Forces.h"
 
 // Standard library headers
+#include <array>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 
 // Project headers
+#include "Vector.h"
 #include "BoundaryConditions.h"
 #include "BoundaryPatch.h"
 #include "CaseConfiguration.h"
@@ -31,7 +33,6 @@
 #include "Mesh.h"
 #include "MomentumTransport.h"
 #include "TurbulenceModel.h"
-#include "Vector.h"
 
 // ***************************** namespace Forces ****************************
 
@@ -52,26 +53,33 @@ struct AeroForces
     Scalar frictionLift;
 };
 
-// Derive a forces output-file path from the VTK output filename
+// Derive a forces output-file path from the configured output file name
 FilePath forcesFilePath
 (
-    const FilePath& vtkOutputFilename,
+    const FilePath& outputFilename,
     const FilePath& suffix
 )
 {
-    FilePath path = vtkOutputFilename;
-    const Index dotPos = path.rfind(".vtu");
-
-    if (dotPos != FilePath::npos)
+    static const std::array<FilePath, 4> extensions =
     {
-        path.replace(dotPos, 4, suffix);
-    }
-    else
+        FilePath{".vtkhdf"},
+        FilePath{".vtu"},
+        FilePath{".vtp"},
+        FilePath{".pvd"}
+    };
+
+    FilePath path = outputFilename;
+
+    for (const FilePath& extension : extensions)
     {
-        path += suffix;
+        if (path.ends_with(extension))
+        {
+            path.resize(path.size() - extension.size());
+            break;
+        }
     }
 
-    return path;
+    return path + suffix;
 }
 
 // Dynamic load 0.5 * rho * Vref^2 * A used to non-dimensionalize forces

@@ -18,10 +18,7 @@
 // Standard library headers
 #include <algorithm>
 #include <array>
-#include <iomanip>
 #include <iostream>
-#include <map>
-#include <sstream>
 
 // Project headers
 #include "CaseConfiguration.h"
@@ -30,125 +27,43 @@
 #include "Logger.h"
 #include "Mesh.h"
 #include "MomentumTransport.h"
-#include "VTK/PvdTimeSeries.h"
-#include "VTK/VtkBoundaryWriter.h"
-#include "VTK/VtkWriter.h"
 #include "TurbulenceModel.h"
+#include "HDF5BoundaryData.h"
+#include "HDF5CellData.h"
 
 // *************************** namespace PostProcess **************************
 
 namespace PostProcess
 {
 
-    using ScalarFieldMap = std::map<Name, const ScalarField*>;
-    using VectorFieldMap = std::map<Name, std::array<const ScalarField*, 3>>;
-    using BoundaryScalarFieldMap = std::map<Name, const FaceData<Scalar>*>;
-
 // ***************************** Internal Helpers *****************************
 
 namespace
 {
 
-// Output base path with any trailing ".vtu" extension removed
-FilePath outputBase(const FilePath& filename)
+// Output base path with any known trailing extension removed
+FilePath outputBase(const FilePath& fileName)
 {
-    FilePath base = filename;
-    static const FilePath extension = ".vtu";
-    if (base.ends_with(extension))
+    static const std::array<FilePath, 4> extensions =
     {
-        base.resize(base.size() - extension.size());
+        FilePath{".vtkhdf"},
+        FilePath{".vtu"},
+        FilePath{".vtp"},
+        FilePath{".pvd"}
+    };
+
+    FilePath base = fileName;
+
+    for (const FilePath& extension : extensions)
+    {
+        if (base.ends_with(extension))
+        {
+            base.resize(base.size() - extension.size());
+            break;
+        }
     }
+
     return base;
-}
-
-// Text after the last path separator (PVD references are directory-relative)
-FilePath fileName(const FilePath& path)
-{
-    const Index slash = path.find_last_of('/');
-    return slash == FilePath::npos ? path : path.substr(slash + 1);
-}
-
-// Collect the volume and boundary fields and write the .vtu and .vtp files
-void writeFields
-(
-    const FilePath& vtuFilename,
-    const FilePath& vtpFilename,
-    const Mesh& mesh,
-    const MomentumTransport& solver,
-    const TurbulenceModel& turbulence,
-    bool debug
-)
-{
-    const ScalarField& Ux = solver.Ux();
-    const ScalarField& Uy = solver.Uy();
-    const ScalarField& Uz = solver.Uz();
-    const ScalarField& pressure = solver.pressure();
-
-    const ScalarField velocityMag = VTK::velocityMagnitude(Ux, Uy, Uz);
-
-    ScalarFieldMap scalarFieldsToVtk;
-    scalarFieldsToVtk["pressure"] = &pressure;
-    scalarFieldsToVtk["velocityMagnitude"] = &velocityMag;
-
-    for (const auto& output : turbulence.cellDataOutputs())
-    {
-        if (output.second != nullptr)
-        {
-            scalarFieldsToVtk[Name{output.first}] = output.second;
-        }
-    }
-
-    VectorFieldMap vectorFieldsToVtk;
-    vectorFieldsToVtk["velocity"] = {&Ux, &Uy, &Uz};
-
-    VTK::writeVtkUnstructuredGrid
-    (
-        vtuFilename,
-        mesh,
-        scalarFieldsToVtk,
-        vectorFieldsToVtk,
-        debug
-    );
-
-    BoundaryScalarFieldMap boundaryScalarFields;
-
-    for (const auto& output : turbulence.boundaryDataOutputs())
-    {
-        if (output.second != nullptr)
-        {
-            boundaryScalarFields[Name{output.first}] = output.second;
-        }
-    }
-
-    const FaceData<Scalar> wallShearStress =
-        turbulence.wallShearStress(Ux, Uy, Uz);
-    boundaryScalarFields["wallShearStress"] = &wallShearStress;
-
-    VTK::writeBoundaryData
-    (
-        vtpFilename,
-        mesh,
-        boundaryScalarFields,
-        debug
-    );
-}
-
-// Derive the "<base>_boundary.vtp" path from a ".vtu" path
-FilePath boundaryPath(const FilePath& vtuFilename)
-{
-    FilePath vtpFilename = vtuFilename;
-    const Index dotPos = vtpFilename.rfind(".vtu");
-
-    if (dotPos != FilePath::npos)
-    {
-        vtpFilename.replace(dotPos, 4, "_boundary.vtp");
-    }
-    else
-    {
-        vtpFilename += "_boundary.vtp";
-    }
-
-    return vtpFilename;
 }
 
 } // namespace
@@ -211,73 +126,97 @@ void exportResults
     std::cout << '\n';
     Logger::sectionHeader("Exporting Results");
 
-    const FilePath vtuFilename = outputBase(config.vtkOutputFilename) + ".vtu";
-    const FilePath vtpFilename = boundaryPath(vtuFilename);
+    const FilePath cellDataFile = cellDataPath(config);
+    const FilePath boundaryFile = boundaryDataPath(config);
 
-    if (config.debug)
-    {
-        std::cout
-            << '\n' << "Exporting results to VTK UnstructuredGrid..." << '\n';
-    }
-
-    writeFields
+    VTK::HDF5CellData volumeWriter
     (
-        vtuFilename,
-        vtpFilename,
+        cellDataFile,
         mesh,
-        solver,
-        turbulence,
+        config.debug
+    );
+    VTK::HDF5BoundaryData boundaryWriter
+    (
+        boundaryFile,
+        mesh,
         config.debug
     );
 
-    Logger::keyValue("Volume field", vtuFilename);
-    Logger::keyValue("Boundary field", vtpFilename);
+    volumeWriter.writeGeometry();
+    boundaryWriter.writeGeometry();
+
+    // A steady result is a single-step VTKHDF series at t = 0
+    appendTimeStep(volumeWriter, boundaryWriter, S(0.0), solver, turbulence);
+
+    volumeWriter.finalize();
+    boundaryWriter.finalize();
+
+    Logger::keyValue("Cell data", cellDataFile);
+    Logger::keyValue("Boundary data", boundaryFile);
     Logger::iterationFooter();
 }
 
 
-FilePath pvdPathFor(const CaseConfiguration& config)
+FilePath cellDataPath(const CaseConfiguration& config)
 {
-    return outputBase(config.vtkOutputFilename) + ".pvd";
+    return outputBase(config.vtkOutputFilename) + ".vtkhdf";
 }
 
 
-void exportTimeStep
+FilePath boundaryDataPath(const CaseConfiguration& config)
+{
+    return outputBase(config.vtkOutputFilename) + "_boundary.vtkhdf";
+}
+
+
+void appendTimeStep
 (
-    const FilePath& pvdFile,
+    VTK::HDF5CellData& volumeWriter,
+    VTK::HDF5BoundaryData& boundaryWriter,
     Scalar time,
-    Count step,
-    const Mesh& mesh,
     const MomentumTransport& solver,
-    const TurbulenceModel& turbulence,
-    const CaseConfiguration& config
+    const TurbulenceModel& turbulence
 )
 {
-    const FilePath base = outputBase(config.vtkOutputFilename);
+    const ScalarField& Ux = solver.Ux();
+    const ScalarField& Uy = solver.Uy();
+    const ScalarField& Uz = solver.Uz();
+    const ScalarField& pressure = solver.pressure();
 
-    // Zero-padded step suffix, e.g. step 42 -> "000042"
-    std::ostringstream stepSuffix;
-    stepSuffix << std::setw(6) << std::setfill('0') << step;
+    const ScalarField velocityMag = VTK::velocityMagnitude(Ux, Uy, Uz);
 
-    const FilePath vtuFilename =
-        base + "_" + stepSuffix.str() + ".vtu";
-    const FilePath vtpFilename = boundaryPath(vtuFilename);
+    VTK::ScalarFieldMap scalarFieldsToVtk;
+    scalarFieldsToVtk["pressure"] = &pressure;
+    scalarFieldsToVtk["velocityMagnitude"] = &velocityMag;
 
-    writeFields
-    (
-        vtuFilename,
-        vtpFilename,
-        mesh,
-        solver,
-        turbulence,
-        config.debug
-    );
+    for (const auto& output : turbulence.cellDataOutputs())
+    {
+        if (output.second != nullptr)
+        {
+            scalarFieldsToVtk[Name{output.first}] = output.second;
+        }
+    }
 
-    // PVD references are relative to the collection file's directory.
-    // Volume (.vtu) and wall-boundary (.vtp) share the timestep as parts 0/1
-    // so ParaView animates them together as one multiblock.
-    VTK::appendPVDTimeStep(pvdFile, fileName(vtuFilename), time, 0);
-    VTK::appendPVDTimeStep(pvdFile, fileName(vtpFilename), time, 1);
+    VTK::VectorFieldMap vectorFieldsToVtk;
+    vectorFieldsToVtk["velocity"] = {&Ux, &Uy, &Uz};
+
+    volumeWriter.appendTimeStep(time, scalarFieldsToVtk, vectorFieldsToVtk);
+
+    VTK::FaceDataMap boundaryScalarFields;
+
+    for (const auto& output : turbulence.boundaryDataOutputs())
+    {
+        if (output.second != nullptr)
+        {
+            boundaryScalarFields[Name{output.first}] = output.second;
+        }
+    }
+
+    const FaceData<Scalar> wallShearStress =
+        turbulence.wallShearStress(Ux, Uy, Uz);
+    boundaryScalarFields["wallShearStress"] = &wallShearStress;
+
+    boundaryWriter.appendTimeStep(time, boundaryScalarFields);
 }
 
 } // namespace PostProcess
