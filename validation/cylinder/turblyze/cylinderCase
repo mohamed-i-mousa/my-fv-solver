@@ -1,0 +1,216 @@
+// ****************************************************************************
+// SPDX-FileCopyrightText: 2025-2026 Mohamed Mousa
+// SPDX-License-Identifier: Apache-2.0
+// ****************************************************************************
+//
+// Laminar von Karman vortex shedding behind a circular cylinder.
+// Re = rho * U * D / mu = 1.225 * 0.02191 * 0.1 / 1.7894e-5 ~= 150.
+
+// ============================================================================
+// Parallelism
+// ============================================================================
+parallelism
+{
+    numThreads      4;      // OpenMP thread count (must be > 0)
+}
+
+// ============================================================================
+// Mesh Configuration
+// ============================================================================
+mesh
+{
+    file            ../inputFiles/cylinder_fine4.msh;
+    checkQuality    true;
+}
+
+// ============================================================================
+// Physical Properties
+// ============================================================================
+physicalProperties
+{
+    rho             1.225;          // Density [kg/m^3]
+    mu              1.7894e-5;      // Dynamic viscosity [Pa.s]
+}
+
+// ============================================================================
+// Initial Conditions
+// ============================================================================
+initialConditions
+{
+    U               (0 0 -0.02191);     // Initial velocity [m/s]
+    p               0;                  // Initial pressure [Pa]
+}
+
+// ============================================================================
+// Boundary Conditions
+// ============================================================================
+boundaryConditions
+{
+    U
+    {
+        inlet
+        {
+            type        fixedValue;
+            value       (0 0 -0.02191);
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        cylinder
+        {
+            type        noSlip;
+        }
+
+        // symmetry planes boundary conditions are derived from the mesh
+    }
+
+    p   // kinematic Pressure [m2/s2]
+    {
+        inlet
+        {
+            type        zeroGradient;
+        }
+
+        outlet
+        {
+            type        fixedValue;
+            value       0;
+        }
+
+        cylinder
+        {
+            type        zeroGradient;
+        }
+    }
+}
+
+// ============================================================================
+// Velocity-Pressure Coupling
+// ============================================================================
+velocityCoupling
+{
+    // Options: SIMPLE, PISO
+    algorithm           PISO;
+}
+
+// ============================================================================
+// Time Control
+// ============================================================================
+time
+{
+    // Options: steadyState, implicitEuler, CrankNicolson
+    timeScheme          implicitEuler;
+
+    timeStep            0.05;       // Time step size [s] (Courant ~0.68)
+    totalTime           600.0;      // Total simulated time [s]
+    writingIntervals    10;         // Write output every N steps (>= 1)
+    nOuterCorrectors    1;          // Outer correctors per step (PISO, >= 1)
+}
+
+// ============================================================================
+// Numerical Schemes
+// ============================================================================
+numericalSchemes
+{
+    // Options: leastSquares
+    gradient        leastSquares;
+
+    // Options: Upwind, CentralDifference, SecondOrderUpwind
+    convection
+    {
+        default     Upwind;
+        U           SecondOrderUpwind;
+    }
+}
+
+// ============================================================================
+// SIMPLE Algorithm Settings (unused; steady-only)
+// ============================================================================
+SIMPLE
+{
+    numIterations               500;
+    convergenceTolerance        1e-3;
+    nNonOrthogonalCorrectors    0;
+
+    relaxationFactors
+    {
+        U                   1.0;
+        p                   1.0;
+    }
+}
+
+// ============================================================================
+// PISO Algorithm Settings
+// ============================================================================
+PISO
+{
+    convergenceTolerance        1e-3;
+    nNonOrthogonalCorrectors    1;
+    nPrimeCorrectors    2;
+
+    relaxationFactors
+    {
+        U                   1.0;
+        p                   1.0;
+    }
+}
+
+// ============================================================================
+// Linear Solvers
+// ============================================================================
+linearSolvers
+{
+    U
+    {
+        solver          BiCGSTAB;
+        preconditioner  Jacobi;
+        tolerance       1e-6;
+        maxIter         100;
+    }
+
+    p
+    {
+        solver          PCG;
+        preconditioner  Jacobi;
+        tolerance       1e-6;
+        maxIter         100;
+    }
+}
+
+// ============================================================================
+// Turbulence Modeling
+// ============================================================================
+turbulence
+{
+    model               Laminar;    // Options: Laminar, kOmegaSST
+}
+
+// ============================================================================
+// Aerodynamic Forces
+// ============================================================================
+forces
+{
+    enabled             true;
+    patch               cylinder;
+    dragDirection       (0 0 -1);
+    liftDirection       (1 0 0);
+    referenceVelocity   (0 0 -0.02191);
+    referenceArea       0.02;           // D * span = 0.1 * 0.2 [m^2]
+}
+
+// ============================================================================
+// Output Configuration
+// ============================================================================
+output
+{
+    // Local disk (not iCloud) to avoid HDF5 file-lock aborts on append
+    filename        ../outputFiles.nosync/cylinder.vtkhdf;
+    debug           false;
+}
+
+// ============================================================================
+// End of Case Setup
+// ============================================================================

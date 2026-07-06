@@ -11,7 +11,7 @@ parallelism
 // ============================================================================
 mesh
 {
-    file            ../validation/turblyze/meshes/sphere.msh;
+    file            ../validation/sphere/turblyze/meshes/sphere.msh;
     checkQuality    true;
 }
 
@@ -21,7 +21,7 @@ mesh
 physicalProperties
 {
     rho             1.225;          // Density [kg/m^3]
-    mu              0.0245;         // Dynamic viscosity [Pa.s] -> Re = 2.45/mu = 100
+    mu              1.7894e-5;      // Dynamic viscosity [Pa.s]
 }
 
 // ============================================================================
@@ -51,29 +51,29 @@ boundaryConditions
             type        zeroGradient;
         }
 
-        sphere
-        {
-            type        noSlip;
+        sphere           
+        { 
+            type        noSlip; 
         }
 
-        wall1
-        {
-            type        zeroGradient;
+        wall1           
+        { 
+            type        noSlip; 
         }
 
-        wall2
-        {
-            type        zeroGradient;
+        wall2           
+        { 
+            type        noSlip; 
         }
-
-        wall3
-        {
-            type        zeroGradient;
+        
+        wall3           
+        { 
+            type        noSlip; 
         }
-
-        wall4
-        {
-            type        zeroGradient;
+        
+        wall4           
+        { 
+            type        noSlip; 
         }
     }
 
@@ -90,63 +90,146 @@ boundaryConditions
             value       0;
         }
 
-        sphere
-        {
-            type        zeroGradient;
+        sphere           
+        { 
+            type        zeroGradient; 
         }
 
-        wall1
-        {
-            type        zeroGradient;
+        wall1           
+        { 
+            type        zeroGradient; 
         }
-
-        wall2
-        {
-            type        zeroGradient;
+       
+        wall2           
+        { 
+            type        zeroGradient; 
         }
-
-        wall3
-        {
-            type        zeroGradient;
+        
+        wall3           
+        { 
+            type        zeroGradient; 
         }
-
-        wall4
-        {
-            type        zeroGradient;
+      
+        wall4           
+        { 
+            type        zeroGradient; 
         }
     }
 
-    k   // turbulence is disabled
+    k   // Turbulent kinetic energy [m^2/s^2]
     {
-        inlet      { type fixedValue;  value calculated; }
-        outlet     { type zeroGradient; }
-        sphere     { type kWallFunction; }
-        wall1      { type kWallFunction; }
-        wall2      { type kWallFunction; }
-        wall3      { type kWallFunction; }
-        wall4      { type kWallFunction; }
+        inlet
+        {
+            type        fixedValue;
+            value       calculated;
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        kWallFunction; 
+        }
+
+        wall1           
+        { 
+            type        kWallFunction; 
+        }
+        
+        wall2           
+        { 
+            type        kWallFunction; 
+        }
+        
+        wall3           
+        { 
+            type        kWallFunction; 
+        }
+        
+        wall4          
+        { 
+            type        kWallFunction; 
+        }
     }
 
-    omega   // turbulence is disabled
+    omega   // Specific dissipation rate [1/s]
     {
-        inlet      { type fixedValue;  value calculated; }
-        outlet     { type zeroGradient; }
-        sphere     { type omegaWallFunction; }
-        wall1      { type omegaWallFunction; }
-        wall2      { type omegaWallFunction; }
-        wall3      { type omegaWallFunction; }
-        wall4      { type omegaWallFunction; }
+        inlet
+        {
+            type        fixedValue;
+            value       calculated;
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        omegaWallFunction; 
+        }
+
+        wall1           
+        { 
+            type        omegaWallFunction; 
+        }
+        
+        wall2           
+        { 
+            type        omegaWallFunction; 
+        }
+        
+        wall3           
+        { 
+            type        omegaWallFunction; 
+        }
+        
+        wall4           
+        { 
+            type        omegaWallFunction; 
+        }
     }
 
-    nut   // turbulence is disabled
+    nut // Turbulent kinematic viscosity [m^2/s]
     {
-        inlet      { type zeroGradient; }
-        outlet     { type zeroGradient; }
-        sphere     { type nutWallFunction; }
-        wall1      { type nutWallFunction; }
-        wall2      { type nutWallFunction; }
-        wall3      { type nutWallFunction; }
-        wall4      { type nutWallFunction; }
+        inlet
+        {
+            type        zeroGradient;
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        nutWallFunction; 
+        }
+
+        wall1           
+        { 
+            type        nutWallFunction; 
+        }
+        
+        wall2           
+        { 
+            type        nutWallFunction; 
+        }
+        
+        wall3           
+        { 
+            type        nutWallFunction; 
+        }
+        
+        wall4           
+        { 
+            type        nutWallFunction; 
+        }
     }
 }
 
@@ -181,15 +264,15 @@ time
 // ============================================================================
 SIMPLE
 {
-    numIterations           1000;
-    convergenceTolerance    1e-3;
+    numIterations           2000;
+    convergenceTolerance    1e-3;       // Convergence criterion
 
     relaxationFactors
     {
-        U                   0.7;        // Velocity under-relaxation
+        U                   0.5;        // Velocity under-relaxation
         p                   0.3;        // Pressure under-relaxation
-        k                   0.3;        // (inert)
-        omega               0.3;        // (inert)
+        k                   0.3;        // TKE under-relaxation
+        omega               0.3;        // Omega under-relaxation
     }
 }
 
@@ -214,7 +297,7 @@ linearSolvers
         maxIter         100;
     }
 
-    k       // (disabled)
+    k   // Turbulent kinetic energy
     {
         solver          BiCGSTAB;
         preconditioner  Jacobi;
@@ -222,7 +305,7 @@ linearSolvers
         maxIter         100;
     }
 
-    omega   // (disabled)
+    omega   // Specific dissipation rate
     {
         solver          BiCGSTAB;
         preconditioner  Jacobi;
@@ -236,9 +319,9 @@ linearSolvers
 // ============================================================================
 turbulence
 {
-    model               Laminar;        // Options: Laminar, kOmegaSST
-    turbulenceIntensity 0.05;
-    hydraulicDiameter   0.01;
+    model               kOmegaSST;      // Options: Laminar, kOmegaSST
+    turbulenceIntensity 0.05;           // Turbulence intensity (5%)
+    hydraulicDiameter   0.01;           // Hydraulic diameter [m]
 }
 
 // ============================================================================
@@ -278,7 +361,7 @@ forces
 // ============================================================================
 output
 {
-    filename        ../validation/results/sphereLaminar.vtkhdf;
+    filename        ../validation/sphere/results/sphereSST.vtkhdf;
     debug           false;      // Enable verbose console output
 }
 

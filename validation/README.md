@@ -3,32 +3,22 @@ SPDX-FileCopyrightText: 2025-2026 Mohamed Mousa
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Validation: Sphere Drag Curve
+# Validation
 
-This folder validates Turblyze against the Morrison (2013) smooth-sphere drag
-correlation.
+Comparison of Turblyze against experimental correlations and benchmark data.
+Each study is self-contained in its own folder (case files, scripts, results,
+and figures).
 
-The validation figure separates two regimes:
+| Study | Regime | Benchmark | Folder |
+|---|---|---|---|
+| Sphere drag curve | Steady, laminar + k-omega SST | Morrison (2013) correlation | [`sphere/`](sphere/) |
+| Cylinder vortex street | Transient (PISO), laminar | von Kármán shedding, Re ≈ 150 | [`cylinder/`](cylinder/) |
 
-- laminar low-Re with turbulence disabled
-- subcritical k-omega SST benchmark points
+- **`sphere/`** : steady-state drag over a wide Re range, exercising the
+  SIMPLE algorithm with turbulence off (low-Re) and k-omega SST.
+- **`cylinder/`** : transient von Kármán vortex shedding behind a
+  cylinder, exercising the transient (implicit-Euler time scheme +
+  PISO pressure-velocity coupling) and the symmetry-plane boundary condition.
 
-## Figure
-
-![Sphere drag curve](figures/dragCurve.png)
-
-## Data
-
-| Series | File |
-|---|---|
-| Laminar | `results/laminarCasesResults.csv` |
-| Subcritical SST points | `results/turbulentCasesResults.csv` |
-| Reference correlation | `reference/morrison2013.py` |
-
-## Reproduce
-
-```bash
-python3 validation/scripts/plotDragCurve.py
-```
-
-The plot script requires `numpy` and `matplotlib`.
+See each folder's `README.md` for the figure and results, and its `runGuide.md`
+to reproduce.

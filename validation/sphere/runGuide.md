@@ -12,15 +12,15 @@ Commands assume the Turblyze executable is in `build.nosync/`.
 Meshes are not shipped. Generate or copy the sphere Fluent mesh to:
 
 ```text
-validation/turblyze/meshes/sphere.msh
+validation/sphere/turblyze/meshes/sphere.msh
 ```
 
 ## Laminar Sweep
 
 ```bash
 cd build.nosync
-CASE=../validation/turblyze/sphereLaminarCase
-OUT=../validation/results/laminarCasesResults.csv
+CASE=../validation/sphere/turblyze/sphereLaminarCase
+OUT=../validation/sphere/results/laminarCasesResults.csv
 echo "Re,Cd,Cl,CdPressure,CdFriction" > "$OUT"
 
 for Re in 1 2 5 10 20 50 100 200 500 1000 2000 5000; do
@@ -42,8 +42,8 @@ done
 
 ```bash
 cd build.nosync
-CASE=../validation/turblyze/sphereSSTCase
-OUT=../validation/results/turbulentCasesResults.csv
+CASE=../validation/sphere/turblyze/sphereSSTCase
+OUT=../validation/sphere/results/turbulentCasesResults.csv
 echo "Re,Cd,Cl,CdPressure,CdFriction" > "$OUT"
 
 for Re in 10000 50000 100000; do
@@ -68,5 +68,5 @@ The existing Re ~= 1.37e5 SST operating point is included in
 ## Plot
 
 ```bash
-python3 validation/scripts/plotDragCurve.py
+python3 validation/sphere/scripts/plotDragCurve.py
 ```
