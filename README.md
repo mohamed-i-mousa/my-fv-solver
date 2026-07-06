@@ -11,14 +11,14 @@ SPDX-License-Identifier: Apache-2.0
 
 <p align="center">3D Incompressible CFD Solver</p>
 
-A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SST turbulence modeling. The solver reads Fluent `.msh` meshes, solves steady-state or transient (URANS) incompressible flow, and exports results to VTK format for visualization in ParaView.
+A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SST turbulence modeling. The solver reads Fluent `.msh` meshes, solves steady-state or transient (URANS) incompressible flow, and exports results in the VTKHDF format (`.vtkhdf`) for visualization in ParaView.
 
 ## Features
 
 ### Core Capabilities
 - **3D Incompressible Flow**: Solves momentum equations with the pressure correction via the SIMPLE algorithm
 
-- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson time schemes using a fixed number of PISO outer correctors per step. Selected by the `time` case section; transient runs write a ParaView `.pvd` time series
+- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson time schemes using a fixed number of PISO outer correctors per step. Selected by the `time` case section; transient runs append every written step into one temporal `.vtkhdf` file (geometry stored once)
 
 - **Collocated Grid**: Uses Rhie-Chow face-velocity interpolation to prevent pressure checkerboarding
 
@@ -34,7 +34,7 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 
 - **Shared-Memory Parallelism (OpenMP)**: All major compute loops (matrix assembly, gradient reconstruction, cell-update sweeps, turbulence transport) use OpenMP. Eigen's `BiCGSTAB` and `ConjugateGradient` solvers also use OpenMP via a RowMajor sparse-matrix layout. Thread count is set via `parallelism.numThreads` in the case file.
 
-- **VTK Export**: Comprehensive output including all flow variables and turbulence quantities
+- **VTKHDF Export**: Comprehensive output including all flow variables and turbulence quantities, written directly through the HDF5 library in VTK's modern `.vtkhdf` format.
 
 - **Aerodynamic Force Reporting**: Optional post-solve integration of pressure and skin-friction loads over a named wall patch, decomposed into drag/lift along user-supplied directions, with non-dimensional `Cd`/`Cl` coefficients; printed to the console and written to a `<name>_forces.txt` file
 
@@ -52,19 +52,18 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 
 ### Dependencies
 - **Eigen 3**: Linear algebra library (header-only)
-- **VTK 9**: Visualization toolkit (`CommonCore`, `CommonDataModel`,
-  `FiltersGeneral`, `IOXML`)
+- **HDF5**: C library used to write the VTKHDF output format
 - **OpenMP**: Shared-memory parallelism (bundled with GCC/Clang on Linux;
   Homebrew `libomp` on macOS)
 
 #### Installation on Ubuntu/Debian:
 ```bash
-sudo apt install build-essential cmake libeigen3-dev libvtk9-dev
+sudo apt install build-essential cmake libeigen3-dev libhdf5-dev
 ```
 
 #### Installation on MacOS:
 ```bash
-brew install cmake eigen vtk libomp
+brew install cmake eigen hdf5 libomp
 ```
 
 > **Note (OpenMP setup)**: The `CMakeLists.txt` is tailored to two configurations:
@@ -127,7 +126,7 @@ The default `defaultCase` file contains:
 - **Discretization**: Second-Order Upwind convection scheme for momentum and Upwind convection scheme for turbulence equations. Least-squares for gradients computation
 - **SIMPLE Parameters**: αU = 1.0, αp = 1.0, αk = 0.5, αω = 0.5, tolerance = 1e-3 (scaled residuals), max iterations = 500
 - **Turbulence**: `Laminar` (k-omega SST is available via `model kOmegaSST`)
-- **Output**: `../outputFiles/sphere.vtu` (plus `sphere_boundary.vtp`, and `sphere_forces.txt` when forces are enabled).
+- **Output**: `../outputFiles/sphere.vtkhdf` (plus `sphere_boundary.vtkhdf`, and `sphere_forces.txt` when forces are enabled).
 
 ### Flow Physics
 - **Fluid Properties**: Air (ρ = 1.225 kg/m³, μ = 1.7894e-5 Pa·s)
@@ -143,27 +142,36 @@ The default `defaultCase` file contains:
 - **Boundary Patches**: Named patches for boundary condition assignment
 
 ### Output Visualization
-- **Format**: VTK UnstructuredGrid (`.vtu`) and boundary PolyData
-  (`_boundary.vtp`) for ParaView
+- **Format**: VTKHDF (format version 2.4), an HDF5-based container read
+  natively by ParaView. Use **ParaView 6.1 or newer** (VTK 9.6): earlier
+  versions (5.13–6.0, VTK 9.5) open the files but load the polyhedral volume
+  grid pathologically slowly through a per-cell decomposition path that VTK
+  9.6 replaced with a bulk read. Each run writes a volume UnstructuredGrid
+  (`<name>.vtkhdf`) and a boundary PolyData (`<name>_boundary.vtkhdf`)
 - **Fields Exported**:
-  - Main `.vtu`: `pressure`, `velocityMagnitude`, vector `velocity`,
+  - Volume `.vtkhdf`: `pressure`, `velocityMagnitude`, vector `velocity`,
     and, when `model` is not `Laminar`, `k`, `omega`, `nut`, `wallDistance`
-  - Boundary `.vtp` (e.g. `sphere_boundary.vtp`): all boundary patches  with integer `patchIdx`, `patchZoneIdx`, `patchTypeIdx`, and `isWall` metadata.
+  - Boundary `_boundary.vtkhdf` (e.g. `sphere_boundary.vtkhdf`): all boundary patches with integer `patchIdx`, `patchZoneIdx`, `patchTypeIdx`, and `isWall` metadata.
     `wallShearStress` is included for all runs; `yPlus` is added only when `model` is not `Laminar`
 - **Cell Encoding**: volume cells are written as `VTK_POLYHEDRON` to preserve
   Turblyze's face topology. This is more robust for mixed/polyhedral meshes,
-  but files can be larger and some ParaView filters may run slower than with
-  native tetra/hex/wedge/pyramid cells.
-- **Transient runs**: output is written as a ParaView `.pvd` time series, one
-  indexed `<name>_NNNNNN.vtu` (and `_boundary.vtp` sibling) per written step.
-  Open the `.pvd` file in ParaView to load and animate all steps together. The
-  write cadence is set by `time.writingIntervals`; the initial condition and the final step are always written.
+  but some ParaView filters may run slower than with native
+  tetra/hex/wedge/pyramid cells.
+- **Transient runs**: every written step is appended into the same two
+  `.vtkhdf` files, the mesh geometry is stored once and only the field data
+  grows per step, so a long series stays a small fraction of the equivalent
+  per-step file size. The write cadence is set by `time.writingIntervals`;
+  the initial condition and the final step are always written. The files are
+  fully closed between writes, so they can be opened (e.g. in ParaView) to
+  monitor a run in progress, and an interrupted run still leaves a readable
+  series.
 
-### ParaView Visualization
-1. Open the `.vtu` file in ParaView
+### ParaView Visualization (6.1 or newer recommended)
+1. Open the `.vtkhdf` file in ParaView
 2. Apply the file and click the "eye" icon to make it visible
-3. Color by desired field (e.g., `pressure`, `velocityMagnitude`)
-4. Open the corresponding `_boundary.vtp` file to inspect boundary patches
+3. Color by desired field (e.g., `pressure`, `velocityMagnitude`); for a
+   transient run, scrub the time slider to animate the series
+4. Open the corresponding `_boundary.vtkhdf` file to inspect boundary patches
    or wall quantities (`wallShearStress` always, `yPlus` when turbulent)
 5. Note: volume fields are cell-centered data; boundary metadata and wall
    diagnostics are boundary-face data
@@ -244,7 +252,8 @@ OpenFOAM convention:
     (`kOmegaSST.h/.cpp`)
 - **`src/PostProcessing/`**: Derived fields and output orchestration
   (`PostProcess.h/.cpp`)
-  - **`src/PostProcessing/VTK/`**: VTK/PVD volume and boundary writers
+  - **`src/PostProcessing/VTK/`**: VTKHDF volume and boundary writers
+    (direct HDF5, no VTK library dependency)
 - **`src/Case/`**: Case file system
   (`CaseReader.h/.cpp`, `CaseConfiguration.h/.cpp`)
 

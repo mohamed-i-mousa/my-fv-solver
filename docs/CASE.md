@@ -175,6 +175,20 @@ boundaryConditions
 - `fixedValue`: Fixed value at boundary (requires `value`)
 - `zeroGradient`: Zero normal gradient
 - `noSlip`: No-slip condition for velocity (equivalent to `fixedValue (0 0 0)`)
+- Symmetry-plane (mirror) condition : **mesh-derived, not a case-file type**.
+  The Fluent `.msh` zone type determines which patches are symmetry planes;
+  at load time every field on such a patch is set to the internal symmetry
+  condition automatically. Scalars get a zero normal gradient and zero normal
+  flux; velocity has its wall-normal component driven to zero while the
+  tangential components are mirrored (`U_f = U_P - (U_P·n) n`), so the face
+  carries no mass flux. Symmetry patches should be **omitted** from
+  `boundaryConditions`: any entry for one (including an OpenFOAM-style
+  `type symmetry;`) is ignored with a `[WARNING]` , the user has no say over
+  a symmetry boundary. Writing `type symmetry;` on a patch whose mesh zone
+  is *not* a symmetry plane is a fatal error. A symmetry patch must be
+  planar. Wall functions and wall-distance seeding key off the mesh zone
+  type (`wall`), not this condition, so a symmetry patch, never a wall
+  zone, is automatically excluded from both.
 - `kWallFunction` / `omegaWallFunction` / `nutWallFunction`: Wall-function
   conditions for `k`, `omega`, and `nut` on wall patches. They must be
   configured as a complete triplet on a given wall patch (all three) or
@@ -236,15 +250,15 @@ time
 - `timeStep` and `totalTime` are **required** and must be positive whenever a
   transient scheme is selected. The number of steps is
   `round(totalTime / timeStep)` (at least one).
-- `writingIntervals` (default `1`) writes VTK output every N steps; the initial
+- `writingIntervals` (default `1`) writes output every N steps; the initial
   condition (t = 0) and the final step are always written. Must be `>= 1`.
 - `nOuterCorrectors` (default `1`) is the number of PISO outer correctors
   performed each time step. Must be `>= 1`. The `SIMPLE.numIterations`/
   `convergenceTolerance` keys only govern the steady path.
 - `CrankNicolsonCoeff` (default `1.0`) is consumed only by `CrankNicolson`; it
   must lie in `[0, 1]`.
-- Transient output is written as a ParaView `.pvd` time series, see
-  [output](#13-output).
+- Transient output is appended into one temporal `.vtkhdf` file per grid
+  (geometry stored once), see [output](#13-output).
 
 ### 6. numericalSchemes
 Selects discretization schemes.
@@ -282,7 +296,7 @@ An unknown name is rejected at startup.
 ### 7. velocityCoupling (Optional)
 Selects the pressure–velocity coupling algorithm. The two algorithms are tied
 1:1 to the time scheme (see [time](#5-time)): **SIMPLE is steady-only** and
-**PISO is transient-only**. The [time](#5-time) section is authoritative — if
+**PISO is transient-only**. The [time](#5-time) section is authoritative. If
 `algorithm` disagrees with it, the parser **switches the algorithm to match and
 prints a `[WARNING]`** rather than aborting. When this section is omitted,
 `algorithm` defaults to `SIMPLE` (then corrected to `PISO` if the time scheme is
@@ -302,7 +316,7 @@ velocityCoupling
   Each outer iteration is one implicit momentum predictor followed by
   `nPrimeCorrectors` explicit PRIME corrector steps: the momentum equation is
   re-assembled with the current flux and advanced by a single explicit Jacobi
-  sweep — no linear solve — before each pressure correction. Reads its controls
+  sweep (no linear solve) before each pressure correction. Reads its controls
   from the [PISO](#9-piso) section.
 
 **Notes**:
@@ -471,8 +485,8 @@ forces
   referenceArea`.
 - Pressure loads are integrated with the face projected area vector. Friction
   loads use the model-provided wall shear stress and face contact area.
-- **Steady runs** write a single summary next to the configured VTK volume file
-  as `<name>_forces.txt`.
+- **Steady runs** write a single summary next to the configured volume output
+  file as `<name>_forces.txt`.
 - **Transient runs** additionally write a per-time-step history as
   `<name>_forces.csv` with columns
   `time,pressureDrag,frictionDrag,totalDrag,pressureLift,frictionLift,totalLift,Cd,Cl`
@@ -484,38 +498,39 @@ Output configuration.
 ```cpp
 output
 {
-    filename        ../outputFiles/result.vtu;           // Output file path
+    filename        ../outputFiles/result.vtkhdf;        // Output file path
     debug           false;      // Optional: verbose console output
 }
 ```
 
 **Notes**:
-- Output format is always VTK. The configured filename writes the volume
-  `.vtu`; a sibling `_boundary.vtp` file is also written for all boundary
-  patches.
-- All computed volume fields are written to the `.vtu` file. Boundary patch
+- Output format is always VTKHDF (format version 2.4; read with ParaView 6.1. The configured filename writes the volume
+  `<name>.vtkhdf` (UnstructuredGrid); a sibling `<name>_boundary.vtkhdf`
+  (PolyData) is also written for all boundary patches. A known legacy
+  extension on `filename` (`.vtu`, `.vtp`, `.pvd`, `.vtkhdf`) is stripped
+  before the `.vtkhdf` names are formed, so older case files keep working.
+- All computed volume fields are written to the volume file. Boundary patch
   metadata (`patchIdx`, `patchZoneIdx`, `patchTypeIdx`, `isWall`) is written to
-  `_boundary.vtp`; `wallShearStress` is written for all runs, while
+  `_boundary.vtkhdf`; `wallShearStress` is written for all runs, while
   turbulence-only wall diagnostics such as `yPlus` are added only when
   turbulence is enabled.
 - Volume cells are encoded as `VTK_POLYHEDRON` to preserve the mesh's
-  face-based topology. This can produce larger files and may make some
-  downstream ParaView filters slower than native tetra/hex/wedge/pyramid
-  output.
-- **Steady runs** write output once, at the end of the simulation.
-- **Transient runs** write a ParaView time series instead: a `<name>.pvd`
-  collection file alongside one indexed `<name>_NNNNNN.vtu` volume file (and its
-  `<name>_NNNNNN_boundary.vtp` sibling) per written step, where `NNNNNN` is the
-  zero-padded step index. The t = 0 initial condition and the final step are
-  always written; intermediate steps follow `time.writingIntervals`. Open the
-  `.pvd` in ParaView to animate the series.
+  face-based topology. Some downstream ParaView filters may run slower than
+  with native tetra/hex/wedge/pyramid output.
+- **Steady runs** write a single-step VTKHDF series (one time value at t = 0).
+- **Transient runs** append every written step into the same two `.vtkhdf`
+  files: the mesh geometry is stored exactly once and only the per-step field
+  data grows, which keeps long series far smaller than one file per step.
+  The t = 0 initial condition and the final step are always written;
+  intermediate steps follow `time.writingIntervals`. Open the `.vtkhdf` in
+  ParaView and scrub the time slider to animate the series. The files are
+  fully closed between writes, so they can be opened mid-run to monitor
+  progress, and an interrupted run still leaves a readable series.
 - `debug` (default: `false`): When `true`, enables verbose
   console output including mesh geometry details, boundary
   condition summaries, solver configuration, per-equation
-  solver convergence, turbulence field diagnostics, and VTK
-  export statistics. VTK cell validation is also run in debug mode; structural
-  validation issues are reported as warnings and pure non-convexity is reported
-  as mesh-quality information. Validation does not block writing the files. When
+  solver convergence, turbulence field diagnostics, and
+  export statistics. When
   `false`, only essential output is shown (phase headers, iteration residuals,
   convergence status, flow statistics, and error/warning messages).
 

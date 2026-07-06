@@ -17,7 +17,7 @@ This document explains the internal architecture and implementation details of t
 - SIMPLE algorithm (pressure–velocity coupling)
 - Rhie–Chow face-velocity interpolation
 - Turbulence model (k–omega SST)
-- Post-processing and VTK export
+- Post-processing and VTKHDF export
 - Linear solvers
 - Precision and numerical tolerances
 - Extending the codebase (recipes)
@@ -77,11 +77,11 @@ following the OpenFOAM convention.
     `Turbulence/kOmegaSST.h/.cpp` (k–omega SST model)
 - **`src/PostProcessing/`**: derived fields and output orchestration
   - `DerivedFields.h/.cpp` (velocity/vorticity magnitude, Q-criterion, strain rate)
-  - `PostProcess.h/.cpp` (after-solve statistics and VTK export orchestration)
+  - `PostProcess.h/.cpp` (after-solve statistics and export orchestration)
   - `Forces.h/.cpp` (wall-patch aerodynamic force/coefficient reporting)
-  - `VTK/VtkWriter.h/.cpp` (`.vtu` polyhedron unstructured grid writer)
-  - `VTK/VtkBoundaryWriter.h/.cpp` (`.vtp` boundary patch writer)
-  - `VTK/PvdTimeSeries.h/.cpp` (PVD transient collection file helpers)
+  - `VTK/HDF5Wrapper.h/.cpp` (thin helpers over the HDF5 C API for VTKHDF authoring)
+  - `VTK/HDF5CellData.h/.cpp` (`.vtkhdf` polyhedral cell/volume data writer)
+  - `VTK/HDF5BoundaryData.h/.cpp` (`.vtkhdf` wall/patch boundary face writer)
 - **`src/Case/`**: OpenFOAM-style case file parser
   - `CaseReader.h/.cpp`, `CaseConfiguration.h/.cpp`
 - **`src/Application/`**: top-level orchestration and solver assembly
@@ -162,6 +162,7 @@ Notes:
 - `fixedGradient`: Neumann boundary conditions
 - `zeroGradient`: Natural boundary conditions
 - `noSlip`: Special case for velocity (each component fixed to 0)
+- `symmetry`: Symmetry-plane condition, mesh-derived from `PatchType::symmetry` (never a case-file type; enforces zero normal flux with tangential-only gradients)
 - `kWallFunction`: Wall function for turbulent kinetic energy
 - `omegaWallFunction`: Wall function for specific dissipation rate
 - `nutWallFunction`: Wall function for turbulent viscosity
@@ -187,6 +188,9 @@ Notes:
 - **fixedGradient**: `φf = φOwner + gradient × dn`
   where `dn = dot(dPf, faceNormal)`
 - **noSlip**: `φf = 0` (velocity components `Ux`/`Uy`/`Uz`)
+- **symmetry**: `φf = φOwner` (zero normal gradient for scalars, grouped with
+  the wall functions in generic scalar face-value lookups); velocity components
+  additionally get a zero-normal-flux constraint applied during matrix assembly.
 - **wall functions**: `kWallFunction`, `omegaWallFunction`, and
   `nutWallFunction` evaluate as owner-cell values in generic scalar face
   value lookups; model-specific wall values are handled inside `kOmegaSST`.
@@ -386,7 +390,7 @@ struct TransportEquation
 ### Explicit PRIME sweep
 `explicitJacobiUpdate()` performs the explicit PRIME momentum sweep: a single
 Jacobi update of the velocity components from the assembled diagonal, the
-off-diagonal neighbor contributions, and the RHS — with no linear solve and no
+off-diagonal neighbor contributions, and the RHS with no linear solve and no
 relaxation. PISO's corrector steps use it to advance momentum with the current
 flux before each pressure correction.
 
@@ -555,11 +559,12 @@ which `CFDApplication::run()` uses to branch between two private paths:
 
 - `runSteady()`: calls `solve()` once (the loop above), then post-processes
   and exports once.
-- `runTransient()`: sets up the `.pvd` time series (and the optional forces
-  history CSV), exports the t = 0 state, then for each step
-  `1 … round(totalTime/deltaT)` calls `solve(step, totalSteps, time, &prevStep)`
-  and writes output at the `writingIntervals` cadence (the final step is always
-  written). It finalizes the PVD collection and prints the final-step statistics
+- `runTransient()`: constructs the two stateful VTKHDF writers as locals
+  (and the optional forces history CSV), writes the geometry once, appends
+  the t = 0 state, then for each step `1 … round(totalTime/deltaT)` calls
+  `solve(step, totalSteps, time, &prevStep)` and appends output at the
+  `writingIntervals` cadence (the final step is always written). It
+  finalizes both writers and prints the final-step statistics
   afterward. `runTransient()` also owns one value-owning `TransientFields`
   bundle (the previous-step `phi^n` and the converged `t^n` face flux) as a
   local and threads its address into `solve()`, so the solver keeps no
@@ -572,8 +577,8 @@ which `CFDApplication::run()` uses to branch between two private paths:
    `turbulence_.beginTimeStep()`. There are no transient-only solver members;
    the shared read path takes a nullable `const TransientFields*` (`nullptr`
    when steady).
-2. Runs up to `nOuterCorrectors_` outer iterations — the transient path is
-   PISO-only, so each is one PISO `outerIteration()` (predictor plus
+2. Runs up to `nOuterCorrectors_` outer iterations (the transient path is
+   PISO-only) so each is one PISO `outerIteration()` (predictor plus
    `nPrimeCorrectors` PRIME correctors) and the loop stops as soon as the step
    reaches per-step convergence (drop the tolerance to force more iterations).
    Per-iteration residual lines are emitted only in debug mode, so a non-debug
@@ -655,43 +660,74 @@ Class `kOmegaSST`:
   faces.
 
 
-## Post-processing and VTK export
+## Post-processing and VTKHDF export
 
-`writeVtkUnstructuredGrid(filename, mesh, scalarCellFields, vectorCellFields)`:
-- Writes VTK UnstructuredGrid (`.vtu`) with every volume cell encoded as
-  `VTK_POLYHEDRON`.
-- Uses the full mesh node table directly; volume cell face streams reference
-  global node indices and do not build a local point remap.
+Output is written in the VTKHDF format (format version 2.4) directly through
+the HDF5 C library. The solver has no dependency on the VTK library itself.
+Read the files with ParaView 6.1+ (VTK 9.6): VTK 9.5-based readers
+(ParaView 5.13–6.0) load VTK_POLYHEDRON VTKHDF grids through a per-cell
+decomposition path that is pathologically slow at production mesh sizes;
+VTK 9.6 replaced it with a bulk array attach (verified: 281k cells load in
+under a second on 6.1 vs 10+ minutes on 9.5.2). Three pairs under
+`src/PostProcessing/VTK/` implement the export:
+
+`HDF5Wrapper.h/.cpp` (namespace `VTK::HDF5`):
+- Thin helpers over the HDF5 C API shared by both writers: file/group
+  creation, attribute writing (`Version`, `Type`, `NSteps`), fixed
+  write-once datasets, and extensible append-per-step datasets grown in
+  place via `H5Dset_extent` + hyperslab writes.
+- Every failing HDF5 status funnels into `FatalError`; datasets use explicit
+  little-endian file types; large arrays are chunked with shuffle + gzip.
+- Dataset rank is encoded by the `columns` parameter (`0` = one-dimensional)
+  because VTKHDF distinguishes `[NSteps]` arrays from `[NSteps, NTopologies]`
+  even when `NTopologies` is 1.
+
+`HDF5CellData` (volume):
+- A stateful writer holding the open HDF5 file across a run:
+  construct -> `writeGeometry()` (once) -> `appendTimeStep()` per written
+  step -> `finalize()`. Owned as a local in `runTransient()`; the steady
+  path constructs and finalizes it inside `PostProcess::exportResults()`.
+- `writeGeometry()` writes every volume cell as `VTK_POLYHEDRON` (type 42):
+  per-cell unique point lists in `Connectivity`/`Offsets`/`Types` plus the
+  polyhedron face datasets `FaceConnectivity`/`FaceOffsets`/
+  `PolyhedronToFaces`/`PolyhedronOffsets`. Faces are emitted once per owning
+  cell (no global dedup), so `PolyhedronToFaces` is the identity and
+  `PolyhedronOffsets` a running face count.
 - Orients each exported polyhedron face with a Newell normal compared against
   `face.centroid() - cell.centroid()`. It does not use `Cell::faceSigns()`,
   because mesh normal correction can flip stored normals without reordering
   face nodes.
-- Exports cell-centered scalar fields (pressure, turbulence quantities) and vector fields (velocity).
-- Used by `PostProcess::exportResults()` to export pressure,
-  `velocityMagnitude`, vector field `velocity`, and, when turbulence is enabled:
-  `k`, `omega`, `nut`, and `wallDistance`.
-- In debug output mode, runs `vtkCellValidator` with VTK's default tolerance.
-  Structural invalid states are reported as warnings with sample IDs/states;
-  cells flagged only as `Nonconvex` are reported separately as mesh-quality
-  information. Validation does not block file writing.
-- Polyhedron output preserves Turblyze's face topology for mixed and
-  polyhedral meshes, but it can produce larger files and may make some
-  downstream VTK/ParaView filters slower.
+- `appendTimeStep()` packs cell fields to 32-bit float, appends them to
+  `CellData/<name>`, records the per-array offset under
+  `Steps/CellDataOffsets/<name>`, and appends the all-zero geometry offset
+  rows (static mesh). `NSteps` is refreshed and the file fully closed after
+  every write (reopened on the next), so the series can be read mid-run and
+  an interrupted run still leaves a valid file. The field-name set must be
+  identical on every step (checked, fatal on mismatch).
 
-`writeBoundaryData(filename, mesh, scalarFaceFields)`:
-- Writes all boundary patches to `_boundary.vtp` by iterating
-  `mesh.patches()` in order and then each patch's face-index range.
-- Builds a deterministic boundary-only global-to-local point remap for the
-  `.vtp` file.
-- Adds integer cell arrays `patchIdx`, `patchZoneIdx`, `patchTypeIdx`, and
-  `isWall`. `patchIdx` is the zero-based ordinal in `mesh.patches()` order;
-  `patchZoneIdx` is the Fluent zone ID.
-- Adds `wallShearStress` for all runs, indexed by global `face.idx()`. Adds
-  `yPlus` only when turbulence is enabled.
+`HDF5BoundaryData` (boundary):
+- Same lifecycle, `Type = "PolyData"`. Writes all boundary patches by
+  iterating `mesh.patches()` in order and each patch's face-index range,
+  over a deterministic boundary-only global-to-local point remap. Boundary
+  faces fill the `Polygons` topology; `Vertices`/`Lines`/`Strips` exist but
+  stay empty.
+- Re-appends the static integer metadata arrays `patchIdx`, `patchZoneIdx`,
+  `patchTypeIdx`, and `isWall` every step (a temporal reader expects a
+  `CellDataOffsets` entry for every cell-data array at every step; the small
+  arrays are cheap to repeat). `patchIdx` is the zero-based ordinal in
+  `mesh.patches()` order; `patchZoneIdx` is the Fluent zone ID.
+- Adds `wallShearStress` for all runs, reduced from global face indexing to
+  boundary-face order. Adds `yPlus` only when turbulence is enabled.
+
+`PostProcess::appendTimeStep(volumeWriter, boundaryWriter, time, solver,
+turbulence)` gathers the field maps (pressure, `velocityMagnitude`, vector
+`velocity`, turbulence cell outputs, boundary outputs + `wallShearStress`)
+and feeds both writers; `exportResults()` reuses it for the steady
+single-step file.
 
 `Forces::reportForces()`:
-- Runs after the SIMPLE solve and VTK export when the optional `forces` case
-  section is enabled.
+- Runs after the SIMPLE solve and result export when the optional `forces`
+  case section is enabled.
 - Integrates one configured wall patch by reading converged `SIMPLE` velocity
   and pressure fields, mesh face geometry, boundary pressure values, and
   `TurbulenceModel::wallShearStress(Ux, Uy, Uz)`.
@@ -706,14 +742,16 @@ Class `kOmegaSST`:
 ### Transient output
 
 The steady path calls `PostProcess::exportResults()` once. The transient path
-(`CFDApplication::runTransient()`) instead drives a ParaView time series:
-- `PostProcess::pvdPathFor(config)` derives `<base>.pvd`; `VTK::writePVDTimeSeriesHeader`
-  / `appendPVDTimeStep` (in `VTK/PvdTimeSeries`) manage the
-  collection file.
-- `PostProcess::exportTimeStep()` writes one indexed volume file
-  `<base>_NNNNNN.vtu` (6-digit zero-padded step) plus its `_boundary.vtp` sibling,
-  reusing the same `writeFields()` helper as the steady export, and appends both
-  to the PVD as parts 0/1 so ParaView animates them together.
+(`CFDApplication::runTransient()`) owns the two stateful writers as locals
+for the lifetime of the time loop:
+- `PostProcess::cellDataPath(config)` / `boundaryDataPath(config)` derive
+  `<base>.vtkhdf` and `<base>_boundary.vtkhdf` from `output.filename`
+  (stripping any known legacy extension such as `.vtu`).
+- Both writers are constructed before the loop, `writeGeometry()` runs once,
+  the t = 0 initial condition is appended as the first step, each written
+  step appends per `time.writingIntervals` (the final step always writes),
+  and `finalize()` closes both files after the loop. Both files share
+  identical `Steps/Values`, so ParaView animates them in lockstep.
 - When `forces.enabled`, `Forces::writeForceHistoryHeader()` /
   `appendForceHistory()` write a `<base>_forces.csv` row per step (including
   t = 0); `Forces::reportForces()` still prints the final-step summary.
@@ -913,8 +951,8 @@ lower-camel `BCType` enumerator, store any needed scalar payload in
 three evaluation/assembly call sites listed above.
 
 ### Add a new velocity-coupling algorithm
-1) Derive from `Segregated` for a pressure-correction (segregated) algorithm —
-   like `SIMPLE` and `PISO` — or directly from `MomentumTransport` for a
+1) Derive from `Segregated` for a pressure-correction (segregated) algorithm,
+   like `SIMPLE` and `PISO`,  or directly from `MomentumTransport` for a
    non-pressure-correction family (e.g. a fully-coupled block-matrix solver, a
    sibling of `Segregated`).
 2) Implement the virtual seam: `outerIteration()` (the per-iteration body) and
@@ -1178,7 +1216,7 @@ flowchart TD
   O -.-> T[solveTurbulence]
   T --> P[steady: checkConvergence / transient: fixed nOuterCorrectors]
   P -->|loop| I
-  P --> Q[PostProcess: reportStatistics + exportResults / exportTimeStep]
+  P --> Q[PostProcess: reportStatistics + exportResults / appendTimeStep]
   Q --> R{forces enabled?}
   R -->|yes| S[Forces::reportForces / appendForceHistory]
 ```
