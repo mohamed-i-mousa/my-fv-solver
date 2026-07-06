@@ -82,6 +82,18 @@ public:
         Index cellIdx
     ) const = 0;
 
+    /// Update the symmetry-plane contribution to the velocity gradients
+    /// (U_f = U_P - (U_P.n) n)
+    virtual void updateSymmetryVelocityGradient
+    (
+        const ScalarField& Ux,
+        const ScalarField& Uy,
+        const ScalarField& Uz,
+        VectorField& gradUx,
+        VectorField& gradUy,
+        VectorField& gradUz
+    ) const = 0;
+
     /// Interpolate gradient at a single face
     [[nodiscard]] Vector faceGradient
     (

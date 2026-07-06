@@ -100,8 +100,8 @@ protected:
     /// Solve the three momentum components
     void solveMomentum(const TransientFields* prevStep);
 
-    /// Compute the momentum diagonal coefficient DU_ = V / a_P
-    void diagonalDU();
+    /// Compute the momentum diagonal coefficient DU_ = 3 V / sum(a_P)
+    void diagonalDU(Index momentumComponent);
 
     /// Interpolate the face momentum diagonal DUf_ from DU_
     void buildFaceDiagonal();
@@ -248,9 +248,6 @@ private:
 
     /// Face momentum diagonal coefficients
     FaceFluxField DUf_;
-
-    /// Flag to allow one-time computation of DU_ per assembly
-    bool DUComputed_ = false;
 
 // Momentum assembly fields
 

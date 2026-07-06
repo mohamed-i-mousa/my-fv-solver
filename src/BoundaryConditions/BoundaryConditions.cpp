@@ -89,6 +89,18 @@ void BoundaryConditions::setNoSlip
 }
 
 
+void BoundaryConditions::setSymmetry
+(
+    const Name& patchName,
+    Field field
+)
+{
+    BoundaryData bcData;
+    bcData.setSymmetry();
+    setBC(patchName, field, std::move(bcData));
+}
+
+
 void BoundaryConditions::setWallFunctionType
 (
     const Name& patchName,
@@ -182,9 +194,10 @@ Scalar BoundaryConditions::boundaryFaceValue
         case kWallFunction:
         case omegaWallFunction:
         case nutWallFunction:
+        case symmetry:
         case zeroGradient:
         {
-            // Zero gradient: φf = φP
+            // Zero normal gradient: φf = φP
             return phi[boundaryFace.ownerCell()];
         }
 
@@ -375,6 +388,11 @@ void BoundaryConditions::printSummary() const
                     case nutWallFunction:
                         std::cout
                             << " (wall function)";
+                        break;
+
+                    case symmetry:
+                        std::cout
+                            << " (symmetry plane)";
                         break;
 
                     case undefined:

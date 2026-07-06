@@ -38,6 +38,7 @@ enum class BCType
     kWallFunction,          ///< kWallFunction-like boundary condition
     omegaWallFunction,      ///< omegaWallFunction-like boundary condition
     nutWallFunction,        ///< nutWallFunction-like boundary condition
+    symmetry,               ///< Symmetry-plane boundary condition
     undefined               ///< Undefined boundary condition type
 };
 
@@ -60,6 +61,9 @@ public:
 
     /// Set no-slip boundary condition (for velocity)
     void setNoSlip() noexcept;
+
+    /// Set symmetry-plane boundary condition
+    void setSymmetry() noexcept;
 
     /// Set wall function boundary condition type
     void setWallFunctionType(BCType wallType) noexcept;

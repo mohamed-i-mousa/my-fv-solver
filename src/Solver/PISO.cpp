@@ -116,11 +116,13 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
 {
     assembleMomentum();
 
+    const VelocityComponents velocity{Ux(), Uy(), Uz()};
+
     TransportEquation equationUx
     {
         .field          = Field::Ux,
         .phi            = Ux(),
-        .transient      = 
+        .transient      =
                     ddtTerm
                     (
                         prevStep,
@@ -135,11 +137,12 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
                     },
         .GammaFace      = nuEffFace(),
         .source         = UxSource(),
+        .velocity       = velocity,
         .gradPhi        = gradUx(),
         .gradScheme     = gradientScheme()
     };
     matrixConstruct().buildMatrix(equationUx);
-    diagonalDU();
+    diagonalDU(0);
     matrixConstruct().explicitJacobiUpdate(Ux(), UxStar_);
 
     TransportEquation equationUy
@@ -161,10 +164,12 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
                     },
         .GammaFace      = nuEffFace(),
         .source         = UySource(),
+        .velocity       = velocity,
         .gradPhi        = gradUy(),
         .gradScheme     = gradientScheme()
     };
     matrixConstruct().buildMatrix(equationUy);
+    diagonalDU(1);
     matrixConstruct().explicitJacobiUpdate(Uy(), UyStar_);
 
     TransportEquation equationUz
@@ -186,10 +191,12 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
                     },
         .GammaFace      = nuEffFace(),
         .source         = UzSource(),
+        .velocity       = velocity,
         .gradPhi        = gradUz(),
         .gradScheme     = gradientScheme()
     };
     matrixConstruct().buildMatrix(equationUz);
+    diagonalDU(2);
     matrixConstruct().explicitJacobiUpdate(Uz(), UzStar_);
 
     // Swap the swept values

@@ -112,6 +112,57 @@ Vector LeastSquares::cellGradient
     );
 }
 
+
+void LeastSquares::updateSymmetryVelocityGradient
+(
+    const ScalarField& Ux,
+    const ScalarField& Uy,
+    const ScalarField& Uz,
+    VectorField& gradUx,
+    VectorField& gradUy,
+    VectorField& gradUz
+) const
+{
+    for (const BoundaryPatch& patch : mesh().patches())
+    {
+        if (patch.type() != PatchType::symmetry)
+        {
+            continue;
+        }
+
+        for
+        (
+            Index faceIdx = patch.firstFaceIdx();
+            faceIdx <= patch.lastFaceIdx();
+            ++faceIdx
+        )
+        {
+            const Face& face = mesh().faces()[faceIdx];
+            const Index P = face.ownerCell();
+
+            const Vector r = face.centroid() - mesh().cells()[P].centroid();
+            const Scalar w = S(1.0) / (magnitudeSquared(r) + smallValue);
+            const Vector n = face.normal();
+            const Scalar Un = n.x() * Ux[P] + n.y() * Uy[P] + n.z() * Uz[P];
+
+            // Each component's least-squares source is (-w Un n_i) * r, so the
+            // shared inv(ATA) * r factor is formed once and scaled per axis.
+            const auto& inv = invATA_[P];
+            const Vector invR
+            (
+                inv[0]*r.x() + inv[1]*r.y() + inv[2]*r.z(),
+                inv[1]*r.x() + inv[3]*r.y() + inv[4]*r.z(),
+                inv[2]*r.x() + inv[4]*r.y() + inv[5]*r.z()
+            );
+
+            const Scalar s = -w * Un;
+            gradUx[P] += (s * n.x()) * invR;
+            gradUy[P] += (s * n.y()) * invR;
+            gradUz[P] += (s * n.z()) * invR;
+        }
+    }
+}
+
 // ****************************** Private Methods *****************************
 
 void LeastSquares::precomputeInverseATA()

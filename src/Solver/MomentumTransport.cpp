@@ -285,8 +285,7 @@ bool MomentumTransport::isTransient() const noexcept
     return timeScheme_.isTransient();
 }
 
-// **************************** Shared Driver Helpers *************************
-
+// ****************************** Shared Helpers ******************************
 
 void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
 {
@@ -345,6 +344,16 @@ void MomentumTransport::updateVelocityGradients()
         gradUz_[cellIdx] =
             gradientScheme_.cellGradient(Field::Uz, Uz_, cellIdx);
     }
+
+    gradientScheme_.updateSymmetryVelocityGradient
+    (
+        Ux_,
+        Uy_,
+        Uz_,
+        gradUx_,
+        gradUy_,
+        gradUz_
+    );
 
     gradientScheme_.limitGradient(Field::Ux, Ux_, gradUx_);
     gradientScheme_.limitGradient(Field::Uy, Uy_, gradUy_);

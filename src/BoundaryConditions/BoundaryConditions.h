@@ -90,6 +90,13 @@ public:
         Field field
     );
 
+    /// Set symmetry-plane boundary condition
+    void setSymmetry
+    (
+        const Name& patchName,
+        Field field
+    );
+
     /// Set wall function boundary condition type
     void setWallFunctionType
     (

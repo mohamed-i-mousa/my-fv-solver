@@ -252,6 +252,14 @@ numericalSchemes
 }
 
 // ============================================================================
+// Time Settings
+// ============================================================================
+time
+{
+    timeScheme          steadyState;    // Steady SIMPLE solve
+}
+
+// ============================================================================
 // SIMPLE Algorithm Settings
 // ============================================================================
 SIMPLE
@@ -353,7 +361,7 @@ forces
 // ============================================================================
 output
 {
-    filename        ../validation/results/sphereSST.vtu;
+    filename        ../validation/results/sphereSST.vtkhdf;
     debug           false;      // Enable verbose console output
 }
 

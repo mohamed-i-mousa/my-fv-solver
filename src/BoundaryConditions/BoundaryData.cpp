@@ -48,6 +48,12 @@ void BoundaryData::setNoSlip() noexcept
 }
 
 
+void BoundaryData::setSymmetry() noexcept
+{
+    type_ = BCType::symmetry;
+}
+
+
 void BoundaryData::setWallFunctionType(BCType wallType) noexcept
 {
     type_ = wallType;
@@ -99,6 +105,7 @@ Name bcTypeToString(BCType bctype) noexcept
         case kWallFunction:     return "kWallFunction";
         case omegaWallFunction: return "omegaWallFunction";
         case nutWallFunction:   return "nutWallFunction";
+        case symmetry:          return "symmetry";
     }
 
     FatalError("Corrupted BCType value");

@@ -9,10 +9,10 @@
  * @file TransportEquation.h
  * @brief Data bundle describing a scalar transport equation
  *
- * @details This header defines ConvectionTerm and TransportEquation.
- * TransportEquation bundles all data describing a scalar transport equation
- * (field, convection, diffusion, source, gradients) needed by
- * Matrix::buildMatrix().
+ * @details This header defines TransientTerm, ConvectionTerm,
+ * VelocityComponents and TransportEquation. TransportEquation bundles all data
+ * describing a scalar transport equation (field, transient, convection,
+ * diffusion, source, velocity, gradients) needed by Matrix::buildMatrix().
  *****************************************************************************/
 
 #pragma once
@@ -33,23 +33,10 @@
 
 class TimeScheme;
 
-// *************************** struct ConvectionTerm **************************
-
-struct ConvectionTerm
-{
-
-    /// Face volumetric flow rates
-    const FaceFluxField& flowRate;
-
-    /// Convection discretization scheme
-    const ConvectionSchemes& scheme;
-};
-
-// **************************** struct TransientTerm **************************
+// *************************** struct TransientTerm ***************************
 
 struct TransientTerm
 {
-
     /// Time-derivative discretization scheme
     const TimeScheme& scheme;
 
@@ -61,6 +48,31 @@ struct TransientTerm
 
     /// Stored old time derivative for Crank-Nicolson (nullptr if unused)
     const ScalarField* ddtPrevStep;
+};
+
+// *************************** struct ConvectionTerm **************************
+
+struct ConvectionTerm
+{
+    /// Face volumetric flow rates
+    const FaceFluxField& flowRate;
+
+    /// Convection discretization scheme
+    const ConvectionSchemes& scheme;
+};
+
+// ************************* struct VelocityComponents ************************
+
+struct VelocityComponents
+{
+    /// Velocity x-component field
+    const ScalarField& Ux;
+
+    /// Velocity y-component field
+    const ScalarField& Uy;
+
+    /// Velocity z-component field
+    const ScalarField& Uz;
 };
 
 // ************************* struct TransportEquation *************************
@@ -89,13 +101,17 @@ struct TransportEquation
 // ********************************* Diffusion ********************************
 
     /// Pre-interpolated face diffusion coefficient for div(Gamma * grad(phi))
-
     const FaceFluxField& GammaFace;
 
 // ********************************** Source **********************************
 
     /// Explicit source term field
     const ScalarField& source;
+
+// **************************** Velocity Components ***************************
+
+    /// Velocity components for vector boundary conditions (symmetry).
+    std::optional<VelocityComponents> velocity = std::nullopt;
 
 // ************************** Gradient Reconstruction *************************
 

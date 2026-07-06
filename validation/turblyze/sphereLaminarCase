@@ -169,6 +169,14 @@ numericalSchemes
 }
 
 // ============================================================================
+// Time Settings
+// ============================================================================
+time
+{
+    timeScheme          steadyState;    // Steady SIMPLE solve
+}
+
+// ============================================================================
 // SIMPLE Algorithm Settings
 // ============================================================================
 SIMPLE
@@ -270,7 +278,7 @@ forces
 // ============================================================================
 output
 {
-    filename        ../validation/results/sphereLaminar.vtu;
+    filename        ../validation/results/sphereLaminar.vtkhdf;
     debug           false;      // Enable verbose console output
 }
 

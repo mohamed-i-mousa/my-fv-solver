@@ -76,7 +76,12 @@ void GradientScheme::limitGradient
 ) const
 {
     const Count numCells = mesh_.numCells();
-    
+
+    // The mirrored velocity cannot be formed from a single component field
+    // The symmetry faces are excluded for velocity components 
+    const bool isVelocity =
+        field == Field::Ux || field == Field::Uy || field == Field::Uz;
+
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
@@ -99,13 +104,13 @@ void GradientScheme::limitGradient
             const Face& f = mesh_.faces()[faceIdx];
             if (!f.isBoundary()) continue;
 
+            if (isVelocity && f.patch()->get().type() == PatchType::symmetry)
+            {
+                continue;
+            }
+
             const Scalar phiBound =
-                bcManager_.boundaryFaceValue
-                (
-                    field,
-                    phi,
-                    f
-                );
+                bcManager_.boundaryFaceValue(field, phi, f);
             phiMin = std::min(phiMin, phiBound);
             phiMax = std::max(phiMax, phiBound);
         }
@@ -116,6 +121,16 @@ void GradientScheme::limitGradient
         for (Index faceIdx : cell.faceIndices())
         {
             const Face& f = mesh_.faces()[faceIdx];
+
+            if
+            (
+                isVelocity && f.isBoundary()
+             && f.patch()->get().type() == PatchType::symmetry
+            )
+            {
+                continue;
+            }
+
             const Vector r = f.centroid() - cell.centroid();
             const Scalar phiFace = phi[cellIdx] + dot(gradPhi[cellIdx], r);
             const Scalar delta = phiFace - phi[cellIdx];
@@ -261,6 +276,7 @@ Vector GradientScheme::boundaryFaceGradient
         case kWallFunction:
         case nutWallFunction:
         case omegaWallFunction:
+        case symmetry:
         case zeroGradient:
         {
             // Zero normal gradient: retain only tangential

@@ -103,6 +103,42 @@ void validateWallFunctionSetup
     }
 }
 
+
+bool isSymmetryPatch(const Mesh& mesh, const Name& patchName)
+{
+    for (const auto& patch : mesh.patches())
+    {
+        if (patch.patchName() == patchName)
+        {
+            return patch.type() == PatchType::symmetry;
+        }
+    }
+
+    return false;
+}
+
+
+void applySymmetry(const Mesh& mesh, BoundaryConditions& bcManager)
+{
+    using enum Field;
+    static constexpr Field solvedFields[] =
+        { Ux, Uy, Uz, p, pCorr, k, omega, nut };
+
+    // A symmetry plane is mesh-derived: the case file carries no entry for it
+    for (const auto& patch : mesh.patches())
+    {
+        if (patch.type() != PatchType::symmetry)
+        {
+            continue;
+        }
+
+        for (const Field field : solvedFields)
+        {
+            bcManager.setSymmetry(patch.patchName(), field);
+        }
+    }
+}
+
 } // namespace (unnamed)
 
 
@@ -147,6 +183,11 @@ void load
 
         for (const auto& patchName : velocityBCs.sectionNames())
         {
+            if (isSymmetryPatch(mesh, patchName))
+            {
+                continue;
+            }
+
             const auto& patchBC = velocityBCs.section(patchName);
             const Name bcType = patchBC.lookup<Name>("type");
 
@@ -188,6 +229,11 @@ void load
 
         for (const auto& patchName : pressureBCs.sectionNames())
         {
+            if (isSymmetryPatch(mesh, patchName))
+            {
+                continue;
+            }
+
             const auto& patchBC = pressureBCs.section(patchName);
             const Name bcType = patchBC.lookup<Name>("type");
 
@@ -211,8 +257,14 @@ void load
             }
         }
 
+        // Derive p' BCs from p: fixed p becomes p' = 0, else inherit the type
         for (const auto& patchName : pressureBCs.sectionNames())
         {
+            if (isSymmetryPatch(mesh, patchName))
+            {
+                continue;
+            }
+
             const auto& patchBC = pressureBCs.section(patchName);
             const Name bcType = patchBC.lookup<Name>("type");
 
@@ -243,6 +295,11 @@ void load
 
         for (const auto& patchName : kBCs.sectionNames())
         {
+            if (isSymmetryPatch(mesh, patchName))
+            {
+                continue;
+            }
+
             const auto& patchBC = kBCs.section(patchName);
             const Name bcType = patchBC.lookup<Name>("type");
 
@@ -303,6 +360,11 @@ void load
 
         for (const auto& patchName : omegaBCs.sectionNames())
         {
+            if (isSymmetryPatch(mesh, patchName))
+            {
+                continue;
+            }
+
             const auto& patchBC = omegaBCs.section(patchName);
             const Name bcType = patchBC.lookup<Name>("type");
 
@@ -374,6 +436,11 @@ void load
 
         for (const auto& patchName : nutBCs.sectionNames())
         {
+            if (isSymmetryPatch(mesh, patchName))
+            {
+                continue;
+            }
+
             const auto& patchBC = nutBCs.section(patchName);
             const Name bcType = patchBC.lookup<Name>("type");
 
@@ -409,6 +476,8 @@ void load
     bcManager.validatePatchNames();
 
     validateWallFunctionSetup(mesh, bcManager, config);
+
+    applySymmetry(mesh, bcManager);
 
     if (config.debug)
     {

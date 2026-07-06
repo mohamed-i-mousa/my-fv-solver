@@ -431,6 +431,45 @@ void Matrix::assembleBoundaryFace
             // No convection + zero gradient = no contribution
             break;
         }
+        case symmetry:
+        {
+            // Symmetry plane carries zero normal mass flux
+            if (!equation.velocity.has_value())
+            {
+                break;
+            }
+
+            const VelocityComponents& U = *equation.velocity;
+            const Vector n = face.normal();
+            const Scalar UxP = U.Ux[ownerIdx];
+            const Scalar UyP = U.Uy[ownerIdx];
+            const Scalar UzP = U.Uz[ownerIdx];
+
+            Scalar ni = S(0.0);
+            Scalar UnCross = S(0.0);    // sum_{j!=i} n_j * U_{P,j}
+
+            switch (equation.field)
+            {
+                case Field::Ux:
+                    ni = n.x();
+                    UnCross = n.y() * UyP + n.z() * UzP;
+                    break;
+                case Field::Uy:
+                    ni = n.y();
+                    UnCross = n.x() * UxP + n.z() * UzP;
+                    break;
+                case Field::Uz:
+                    ni = n.z();
+                    UnCross = n.x() * UxP + n.y() * UyP;
+                    break;
+                default:
+                    break;
+            }
+
+            triplets.emplace_back(ownerRow, ownerRow, aDiff * ni * ni);
+            localB(EigenIdx(ownerIdx)) -= aDiff * ni * UnCross;
+            break;
+        }
         default:
         {
             // Unhandled BC type: default to zero gradient

@@ -113,8 +113,12 @@ Segregated::Segregated
             );
         }
 
+        const bool isSymmetry =
+            face.isBoundary()
+         && face.patch()->get().type() == PatchType::symmetry;
+
         const Vector Sf = face.normal() * face.projectedArea();
-        RhieChowFlowRate_[faceIdx] = dot(Uf, Sf);
+        RhieChowFlowRate_[faceIdx] = isSymmetry ? S(0.0) : dot(Uf, Sf);
     }
 }
 
@@ -178,7 +182,6 @@ void Segregated::assembleMomentum()
 
     // Reset diagonals accumulator
     DU_.setAll(S(0.0));
-    DUComputed_ = false;
 
     // Pressure gradient source term (depends on the current gradP_)
     #pragma omp parallel for schedule(static)
@@ -189,9 +192,6 @@ void Segregated::assembleMomentum()
         UySource_[cellIdx] = -gradP_[cellIdx].y() * volume;
         UzSource_[cellIdx] = -gradP_[cellIdx].z() * volume;
     }
-
-    // Reset interpolated diagonals accumulator
-    DUf_.setAll(S(0.0));
 
     updateVelocityGradients();
 
@@ -205,7 +205,7 @@ void Segregated::assembleMomentum()
 
 void Segregated::solveMomentum(const TransientFields* prevStep)
 {
-    // Lag the face velocities and mass flux for the next assembly
+    // Cache face velocities and mass flux for the next assembly
     UxAvgPrevIterf_ = UxAvgf_;
     UyAvgPrevIterf_ = UyAvgf_;
     UzAvgPrevIterf_ = UzAvgf_;
@@ -214,9 +214,6 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
     // Seed the pressure gradient for the momentum source and Rhie-Chow
     gradientScheme().fieldGradient(Field::p, pressure(), gradP_);
 
-    // Effective viscosity is frozen until the turbulence solve at the end of
-    // the outer iteration, so refresh it once here; the PRIME correctors reuse
-    // the cached nuEff_/nuEffFace_.
     updateEffectiveViscosity();
     assembleMomentum();
 
@@ -225,6 +222,8 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
         RhieChowFlowRatePrevIter_,
         momentumConvectionScheme_
     };
+
+    const VelocityComponents velocity{Ux(), Uy(), Uz()};
 
     TransportEquation equations[]
     {
@@ -236,6 +235,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
             .convection     = convection,
             .GammaFace      = nuEffFace_,
             .source         = UxSource_,
+            .velocity       = velocity,
             .gradPhi        = gradUx(),
             .gradScheme     = gradientScheme()
         },
@@ -247,6 +247,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
             .convection     = convection,
             .GammaFace      = nuEffFace_,
             .source         = UySource_,
+            .velocity       = velocity,
             .gradPhi        = gradUy(),
             .gradScheme     = gradientScheme()
         },
@@ -258,6 +259,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
             .convection     = convection,
             .GammaFace      = nuEffFace_,
             .source         = UzSource_,
+            .velocity       = velocity,
             .gradPhi        = gradUz(),
             .gradScheme     = gradientScheme()
         }
@@ -271,19 +273,19 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
     };
 
     // Build and implicitly solve each under-relaxed component
-    for (Index i = 0; i < 3; ++i)
+    for (Index momentumComponent = 0; momentumComponent < 3; ++momentumComponent)
     {
-        matrixConstruct_.buildMatrix(equations[i]);
+        matrixConstruct_.buildMatrix(equations[momentumComponent]);
 
-        matrixConstruct_.relax(alphaU_, *prevIters[i]);
+        matrixConstruct_.relax(alphaU_, *prevIters[momentumComponent]);
 
-        diagonalDU();
+        diagonalDU(momentumComponent);
 
         // Map phi directly as Eigen vector: the zero-copy solve writes the
         // result straight into the bound velocity component field
         EigenVectorMap solutionMap
         (
-            equations[i].phi.data(),
+            equations[momentumComponent].phi.data(),
             EigenIdx(mesh().numCells())
         );
 
@@ -301,7 +303,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 
             Logger::residualRow
             (
-                fieldToString(equations[i].field),
+                fieldToString(equations[momentumComponent].field),
                 momentumPerformance.solverName,
                 momentumPerformance.iterations,
                 momentumPerformance.finalResidual
@@ -313,26 +315,28 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 }
 
 
-void Segregated::diagonalDU()
+void Segregated::diagonalDU(Index component)
 {
-    // DU_ is identical for all 3 momentum components, so compute only once
-    if (DUComputed_)
-    {
-        return;
-    }
-
     const auto& matrixA = matrixConstruct_.matrixA();
     const Count numCells = mesh().numCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        DU_[cellIdx] =
-            mesh().cells()[cellIdx].volume()
-          / (matrixA.coeff(EigenIdx(cellIdx), EigenIdx(cellIdx)) + vSmallValue);
+        DU_[cellIdx] +=
+            matrixA.coeff(EigenIdx(cellIdx), EigenIdx(cellIdx));
     }
 
-    DUComputed_ = true;
+    if (component == 2)
+    {
+        #pragma omp parallel for schedule(static)
+        for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+        {
+            DU_[cellIdx] =
+                S(3.0) * mesh().cells()[cellIdx].volume()
+              / (DU_[cellIdx] + vSmallValue);
+        }
+    }
 }
 
 
@@ -388,6 +392,10 @@ void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
             UzAvgf_[faceIdx] =
                 bcManager().boundaryFaceValue(Field::Uz, Uz(), face);
 
+            // A symmetry plane carries zero normal mass flux
+            const bool isSymmetry =
+                face.patch()->get().type() == PatchType::symmetry;
+
             const Vector Uf
             (
                 UxAvgf_[faceIdx],
@@ -396,7 +404,9 @@ void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
             );
 
             RhieChowFlowRate_[faceIdx] =
-                dot(Uf, face.normal() * face.projectedArea());
+                isSymmetry
+              ? S(0.0)
+              : dot(Uf, face.normal() * face.projectedArea());
 
             continue;
         }
@@ -597,6 +607,7 @@ void Segregated::correctFlowRate()
             (
                 bc.type() == BCType::fixedValue
              || bc.type() == BCType::zeroGradient
+             || bc.type() == BCType::symmetry
             )
             {
                 continue;
