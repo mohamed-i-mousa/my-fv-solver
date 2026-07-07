@@ -25,6 +25,7 @@
 #include <vector>
 
 // Project headers
+#include "HostDevice.h"
 #include "Integer.h"
 #include "StringTypes.h"
 
@@ -53,7 +54,7 @@ concept ScalarLiteral =
 
 /// Type-safe scalar literal conversion function
 template<ScalarLiteral T>
-[[nodiscard]] constexpr Scalar S(T value) noexcept
+[[nodiscard]] HD constexpr Scalar S(T value) noexcept
 {
     return static_cast<Scalar>(value);
 }

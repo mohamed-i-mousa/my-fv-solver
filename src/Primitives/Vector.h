@@ -14,6 +14,10 @@
  * provides essential mathematical operations required in the finite volume
  * discretization and mesh operations.
  *
+ * All member and free functions are HD-annotated so the same inline math is
+ * callable from CUDA kernels; error handling degrades to assert on the
+ * device pass (see HostDevice.h). Stream output stays host-only.
+ *
  * @class Vector
  * - Components access and manipulation (x, y, z coordinates)
  * - Arithmetic operations (addition, subtraction, scalar multiplication)
@@ -27,10 +31,12 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
+#include <cassert>
 #include <cmath>
 #include <iosfwd>
 
 // Project headers
+#include "HostDevice.h"
 #include "Scalar.h"
 #include "ErrorHandler.h"
 
@@ -46,7 +52,7 @@ public:
     Vector() noexcept = default;
 
     /// Construct vector with specified components
-    Vector(Scalar xValue, Scalar yValue, Scalar zValue) noexcept
+    HD Vector(Scalar xValue, Scalar yValue, Scalar zValue) noexcept
     :
         x_(xValue),
         y_(yValue),
@@ -56,29 +62,29 @@ public:
 // ****************************** Setter Methods ******************************
 
     /// Set X component
-    void setX(Scalar xValue) noexcept { x_ = xValue; }
+    HD void setX(Scalar xValue) noexcept { x_ = xValue; }
 
     /// Set Y component
-    void setY(Scalar yValue) noexcept { y_ = yValue; }
+    HD void setY(Scalar yValue) noexcept { y_ = yValue; }
 
     /// Set Z component
-    void setZ(Scalar zValue) noexcept { z_ = zValue; }
+    HD void setZ(Scalar zValue) noexcept { z_ = zValue; }
 
 // ***************************** Accessor Methods *****************************
 
     /// Get X component
-    [[nodiscard]] Scalar x() const noexcept { return x_; }
+    [[nodiscard]] HD Scalar x() const noexcept { return x_; }
 
     /// Get Y component
-    [[nodiscard]] Scalar y() const noexcept { return y_; }
+    [[nodiscard]] HD Scalar y() const noexcept { return y_; }
 
     /// Get Z component
-    [[nodiscard]] Scalar z() const noexcept { return z_; }
+    [[nodiscard]] HD Scalar z() const noexcept { return z_; }
 
 // ***************************** Operator Methods *****************************
 
     /// Vector addition operator
-    Vector operator+(const Vector& other) const noexcept
+    HD Vector operator+(const Vector& other) const noexcept
     {
         Vector result(*this);
         result += other;
@@ -86,7 +92,7 @@ public:
     }
 
     /// Vector subtraction operator
-    Vector operator-(const Vector& other) const noexcept
+    HD Vector operator-(const Vector& other) const noexcept
     {
         Vector result(*this);
         result -= other;
@@ -94,7 +100,7 @@ public:
     }
 
     /// Scalar multiplication operator
-    Vector operator*(Scalar scalar) const noexcept
+    HD Vector operator*(Scalar scalar) const noexcept
     {
         Vector result(*this);
         result *= scalar;
@@ -102,7 +108,7 @@ public:
     }
 
     /// Scalar division operator
-    Vector operator/(Scalar scalar) const noexcept
+    HD Vector operator/(Scalar scalar) const noexcept
     {
         Vector result(*this);
         result /= scalar;
@@ -110,7 +116,7 @@ public:
     }
 
     /// Compound addition assignment operator
-    Vector& operator+=(const Vector& other) noexcept
+    HD Vector& operator+=(const Vector& other) noexcept
     {
         x_ += other.x_;
         y_ += other.y_;
@@ -120,7 +126,7 @@ public:
     }
 
     /// Compound subtraction assignment operator
-    Vector& operator-=(const Vector& other) noexcept
+    HD Vector& operator-=(const Vector& other) noexcept
     {
         x_ -= other.x_;
         y_ -= other.y_;
@@ -130,7 +136,7 @@ public:
     }
 
     /// Compound multiplication assignment operator
-    Vector& operator*=(Scalar scalar) noexcept
+    HD Vector& operator*=(Scalar scalar) noexcept
     {
         x_ *= scalar;
         y_ *= scalar;
@@ -140,12 +146,17 @@ public:
     }
 
     /// Compound division assignment operator
-    Vector& operator/=(Scalar scalar) noexcept
+    HD Vector& operator/=(Scalar scalar) noexcept
     {
+#ifdef __CUDA_ARCH__
+        // Device code cannot throw: the guard degrades to an assert
+        assert(std::abs(scalar) > vSmallValue);
+#else
         if (std::abs(scalar) <= vSmallValue)
         {
             FatalError("Division by zero in Vector::operator/=");
         }
+#endif
 
         const Scalar inverse = S(1.0) / scalar;
         x_ *= inverse;
@@ -156,7 +167,7 @@ public:
     }
 
     /// Equality comparison operator
-    bool operator==(const Vector& other) const noexcept
+    HD bool operator==(const Vector& other) const noexcept
     {
         return (std::abs(x_ - other.x_) <= vSmallValue)
             && (std::abs(y_ - other.y_) <= vSmallValue)
@@ -176,13 +187,17 @@ private:
 // *************************** Non-Member Functions ***************************
 
 /// Compute dot product of two vectors
-[[nodiscard]] inline Scalar dot(const Vector& p1, const Vector& p2) noexcept
+[[nodiscard]] HD inline Scalar dot(const Vector& p1, const Vector& p2) noexcept
 {
     return p1.x() * p2.x() + p1.y() * p2.y() + p1.z() * p2.z();
 }
 
 /// Compute cross product of two vectors
-[[nodiscard]] inline Vector cross(const Vector& p1, const Vector& p2) noexcept
+[[nodiscard]] HD inline Vector cross
+(
+    const Vector& p1,
+    const Vector& p2
+) noexcept
 {
     return
         Vector
@@ -194,33 +209,38 @@ private:
 }
 
 /// Squared magnitude of a vector
-[[nodiscard]] inline Scalar magnitudeSquared(const Vector& v) noexcept
+[[nodiscard]] HD inline Scalar magnitudeSquared(const Vector& v) noexcept
 {
     return v.x() * v.x() + v.y() * v.y() + v.z() * v.z();
 }
 
 /// Magnitude of a vector
-[[nodiscard]] inline Scalar magnitude(const Vector& v) noexcept
+[[nodiscard]] HD inline Scalar magnitude(const Vector& v) noexcept
 {
     return std::sqrt(magnitudeSquared(v));
 }
 
 /// Return a normalized copy of a vector
-[[nodiscard]] inline Vector normalized(const Vector& v) noexcept
+[[nodiscard]] HD inline Vector normalized(const Vector& v) noexcept
 {
     const Scalar mag = magnitude(v);
 
+#ifdef __CUDA_ARCH__
+    // Device code cannot throw: the guard degrades to an assert
+    assert(mag >= vSmallValue);
+#else
     if (mag < vSmallValue)
     {
         FatalError("Division by zero in normalized(Vector)");
     }
+#endif
 
     const Scalar inverse = S(1.0) / mag;
     return Vector(v.x() * inverse, v.y() * inverse, v.z() * inverse);
 }
 
 /// Scalar multiplication operator
-inline Vector operator*(Scalar scalar, const Vector& p) noexcept
+HD inline Vector operator*(Scalar scalar, const Vector& p) noexcept
 {
     return p * scalar;
 }

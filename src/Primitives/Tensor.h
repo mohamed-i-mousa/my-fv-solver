@@ -13,6 +13,10 @@
  * gradients, strain-rate and rotation tensors, Reynolds-stress tensors,
  * and any other second-order tensor fields in the solver.
  *
+ * All member and free functions are HD-annotated so the same inline math is
+ * callable from CUDA kernels; error handling degrades to assert on the
+ * device pass (see HostDevice.h). Stream output stays host-only.
+ *
  * @class Tensor
  * - Component access and manipulation (row-major xx..zz)
  * - Arithmetic operations (addition, subtraction, scalar multiplication)
@@ -26,10 +30,12 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
+#include <cassert>
 #include <cmath>
 #include <iosfwd>
 
 // Project headers
+#include "HostDevice.h"
 #include "Scalar.h"
 #include "Vector.h"
 #include "ErrorHandler.h"
@@ -45,7 +51,7 @@ public:
     Tensor() noexcept = default;
 
     /// Constructs tensor with specified components (row-major)
-    Tensor
+    HD Tensor
     (
         Scalar xx, Scalar xy, Scalar xz,
         Scalar yx, Scalar yy, Scalar yz,
@@ -60,63 +66,63 @@ public:
 // ****************************** Setter Methods ******************************
 
     /// Set component (0,0)
-    void setXX(Scalar value) noexcept { xx_ = value; }
+    HD void setXX(Scalar value) noexcept { xx_ = value; }
 
     /// Set component (0,1)
-    void setXY(Scalar value) noexcept { xy_ = value; }
+    HD void setXY(Scalar value) noexcept { xy_ = value; }
 
     /// Set component (0,2)
-    void setXZ(Scalar value) noexcept { xz_ = value; }
+    HD void setXZ(Scalar value) noexcept { xz_ = value; }
 
     /// Set component (1,0)
-    void setYX(Scalar value) noexcept { yx_ = value; }
+    HD void setYX(Scalar value) noexcept { yx_ = value; }
 
     /// Set component (1,1)
-    void setYY(Scalar value) noexcept { yy_ = value; }
+    HD void setYY(Scalar value) noexcept { yy_ = value; }
 
     /// Set component (1,2)
-    void setYZ(Scalar value) noexcept { yz_ = value; }
+    HD void setYZ(Scalar value) noexcept { yz_ = value; }
 
     /// Set component (2,0)
-    void setZX(Scalar value) noexcept { zx_ = value; }
+    HD void setZX(Scalar value) noexcept { zx_ = value; }
 
     /// Set component (2,1)
-    void setZY(Scalar value) noexcept { zy_ = value; }
+    HD void setZY(Scalar value) noexcept { zy_ = value; }
 
     /// Set component (2,2)
-    void setZZ(Scalar value) noexcept { zz_ = value; }
+    HD void setZZ(Scalar value) noexcept { zz_ = value; }
 
 // ***************************** Accessor Methods *****************************
 
     /// Get component (0,0)
-    [[nodiscard]] Scalar xx() const noexcept { return xx_; }
+    [[nodiscard]] HD Scalar xx() const noexcept { return xx_; }
 
     /// Get component (0,1)
-    [[nodiscard]] Scalar xy() const noexcept { return xy_; }
+    [[nodiscard]] HD Scalar xy() const noexcept { return xy_; }
 
     /// Get component (0,2)
-    [[nodiscard]] Scalar xz() const noexcept { return xz_; }
+    [[nodiscard]] HD Scalar xz() const noexcept { return xz_; }
 
     /// Get component (1,0)
-    [[nodiscard]] Scalar yx() const noexcept { return yx_; }
+    [[nodiscard]] HD Scalar yx() const noexcept { return yx_; }
 
     /// Get component (1,1)
-    [[nodiscard]] Scalar yy() const noexcept { return yy_; }
+    [[nodiscard]] HD Scalar yy() const noexcept { return yy_; }
 
     /// Get component (1,2)
-    [[nodiscard]] Scalar yz() const noexcept { return yz_; }
+    [[nodiscard]] HD Scalar yz() const noexcept { return yz_; }
 
     /// Get component (2,0)
-    [[nodiscard]] Scalar zx() const noexcept { return zx_; }
+    [[nodiscard]] HD Scalar zx() const noexcept { return zx_; }
 
     /// Get component (2,1)
-    [[nodiscard]] Scalar zy() const noexcept { return zy_; }
+    [[nodiscard]] HD Scalar zy() const noexcept { return zy_; }
 
     /// Get component (2,2)
-    [[nodiscard]] Scalar zz() const noexcept { return zz_; }
+    [[nodiscard]] HD Scalar zz() const noexcept { return zz_; }
 
     /// Get row i of the tensor
-    [[nodiscard]] Vector row(Index i) const noexcept
+    [[nodiscard]] HD Vector row(Index i) const noexcept
     {
         switch (i)
         {
@@ -125,12 +131,17 @@ public:
             case 2: return Vector{zx_, zy_, zz_};
         }
 
+#ifdef __CUDA_ARCH__
+        // Device code cannot throw: the guard degrades to an assert
+        assert(false);
+#else
         FatalError("Tensor::row index out of range");
+#endif
         return Vector{};
     }
 
     /// Get column j of the tensor
-    [[nodiscard]] Vector col(Index j) const noexcept
+    [[nodiscard]] HD Vector col(Index j) const noexcept
     {
         switch (j)
         {
@@ -139,14 +150,19 @@ public:
             case 2: return Vector{xz_, yz_, zz_};
         }
 
+#ifdef __CUDA_ARCH__
+        // Device code cannot throw: the guard degrades to an assert
+        assert(false);
+#else
         FatalError("Tensor::col index out of range");
+#endif
         return Vector{};
     }
 
 // ***************************** Operator Methods *****************************
 
     /// Tensor addition operator
-    Tensor operator+(const Tensor& other) const noexcept
+    HD Tensor operator+(const Tensor& other) const noexcept
     {
         Tensor result(*this);
         result += other;
@@ -154,7 +170,7 @@ public:
     }
 
     /// Tensor subtraction operator
-    Tensor operator-(const Tensor& other) const noexcept
+    HD Tensor operator-(const Tensor& other) const noexcept
     {
         Tensor result(*this);
         result -= other;
@@ -162,7 +178,7 @@ public:
     }
 
     /// Scalar multiplication operator
-    Tensor operator*(Scalar scalar) const noexcept
+    HD Tensor operator*(Scalar scalar) const noexcept
     {
         Tensor result(*this);
         result *= scalar;
@@ -170,7 +186,7 @@ public:
     }
 
     /// Scalar division operator
-    Tensor operator/(Scalar scalar) const noexcept
+    HD Tensor operator/(Scalar scalar) const noexcept
     {
         Tensor result(*this);
         result /= scalar;
@@ -178,7 +194,7 @@ public:
     }
 
     /// Compound addition assignment operator
-    Tensor& operator+=(const Tensor& other) noexcept
+    HD Tensor& operator+=(const Tensor& other) noexcept
     {
         xx_ += other.xx_; xy_ += other.xy_; xz_ += other.xz_;
         yx_ += other.yx_; yy_ += other.yy_; yz_ += other.yz_;
@@ -188,7 +204,7 @@ public:
     }
 
     /// Compound subtraction assignment operator
-    Tensor& operator-=(const Tensor& other) noexcept
+    HD Tensor& operator-=(const Tensor& other) noexcept
     {
         xx_ -= other.xx_; xy_ -= other.xy_; xz_ -= other.xz_;
         yx_ -= other.yx_; yy_ -= other.yy_; yz_ -= other.yz_;
@@ -198,7 +214,7 @@ public:
     }
 
     /// Compound multiplication assignment operator
-    Tensor& operator*=(Scalar scalar) noexcept
+    HD Tensor& operator*=(Scalar scalar) noexcept
     {
         xx_ *= scalar; xy_ *= scalar; xz_ *= scalar;
         yx_ *= scalar; yy_ *= scalar; yz_ *= scalar;
@@ -208,12 +224,17 @@ public:
     }
 
     /// Compound division assignment operator
-    Tensor& operator/=(Scalar scalar) noexcept
+    HD Tensor& operator/=(Scalar scalar) noexcept
     {
+#ifdef __CUDA_ARCH__
+        // Device code cannot throw: the guard degrades to an assert
+        assert(std::abs(scalar) > vSmallValue);
+#else
         if (std::abs(scalar) <= vSmallValue)
         {
             FatalError("Division by zero in Tensor::operator/=");
         }
+#endif
 
         const Scalar inverse = S(1.0) / scalar;
         xx_ *= inverse; xy_ *= inverse; xz_ *= inverse;
@@ -226,7 +247,7 @@ public:
 // ****************************** Tensor Algebra ******************************
 
     /// Transpose of this tensor
-    [[nodiscard]] Tensor transpose() const noexcept
+    [[nodiscard]] HD Tensor transpose() const noexcept
     {
         return
             Tensor
@@ -238,7 +259,7 @@ public:
     }
 
     /// Symmetric part of this tensor: 0.5 * (T + T^T)
-    [[nodiscard]] Tensor symm() const noexcept
+    [[nodiscard]] HD Tensor symm() const noexcept
     {
         const Scalar sxy = S(0.5) * (xy_ + yx_);
         const Scalar sxz = S(0.5) * (xz_ + zx_);
@@ -254,7 +275,7 @@ public:
     }
 
     /// Antisymmetric (skew) part of this tensor: 0.5 * (T - T^T)
-    [[nodiscard]] Tensor skew() const noexcept
+    [[nodiscard]] HD Tensor skew() const noexcept
     {
         const Scalar axy = S(0.5) * (xy_ - yx_);
         const Scalar axz = S(0.5) * (xz_ - zx_);
@@ -270,15 +291,15 @@ public:
     }
 
     /// Trace of this tensor
-    [[nodiscard]] Scalar trace() const noexcept
+    [[nodiscard]] HD Scalar trace() const noexcept
     {
         return xx_ + yy_ + zz_;
     }
 
     /// Frobenius squared magnitude: T:T = T_ij T_ij
-    [[nodiscard]] Scalar magnitudeSquared() const noexcept
+    [[nodiscard]] HD Scalar magnitudeSquared() const noexcept
     {
-        return 
+        return
             xx_ * xx_ + xy_ * xy_ + xz_ * xz_
           + yx_ * yx_ + yy_ * yy_ + yz_ * yz_
           + zx_ * zx_ + zy_ * zy_ + zz_ * zz_;
@@ -297,7 +318,7 @@ private:
 // *************************** Non-Member Functions ***************************
 
 /// Construct a tensor from three row vectors
-[[nodiscard]] inline Tensor tensorFromRows
+[[nodiscard]] HD inline Tensor tensorFromRows
 (
     const Vector& row0,
     const Vector& row1,
@@ -313,26 +334,26 @@ private:
 }
 
 /// Double-dot product of two tensors: A:B = A_ij B_ij
-[[nodiscard]] inline Scalar doubleDot
+[[nodiscard]] HD inline Scalar doubleDot
 (
     const Tensor& A,
     const Tensor& B
 ) noexcept
 {
-    return 
+    return
         A.xx() * B.xx() + A.xy() * B.xy() + A.xz() * B.xz()
       + A.yx() * B.yx() + A.yy() * B.yy() + A.yz() * B.yz()
       + A.zx() * B.zx() + A.zy() * B.zy() + A.zz() * B.zz();
 }
 
 /// Outer product of two vectors: T_ij = a_i b_j
-[[nodiscard]] inline Tensor outer
+[[nodiscard]] HD inline Tensor outer
 (
     const Vector& a,
     const Vector& b
 ) noexcept
 {
-    return 
+    return
         Tensor
         (
             a.x() * b.x(), a.x() * b.y(), a.x() * b.z(),
@@ -342,7 +363,7 @@ private:
 }
 
 /// Scalar multiplication operator (scalar * tensor)
-inline Tensor operator*(Scalar scalar, const Tensor& T) noexcept
+HD inline Tensor operator*(Scalar scalar, const Tensor& T) noexcept
 {
     return T * scalar;
 }
