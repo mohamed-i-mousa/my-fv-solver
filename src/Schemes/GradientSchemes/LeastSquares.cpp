@@ -17,9 +17,9 @@
 
 // External library headers
 #include <omp.h>
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Cholesky>
-#include <eigen3/Eigen/LU>
+#include <Eigen/Core>
+#include <Eigen/Cholesky>
+#include <Eigen/LU>
 
 // Project headers
 #include "ErrorHandler.h"

@@ -21,8 +21,12 @@ option(TURBLYZE_USE_DOUBLE_PRECISION
 option(TURBLYZE_NATIVE_ARCH
        "Optimize for the build host CPU (-march=native)" ON)
 
-# Find Eigen3 package (required for linear algebra)
+# Find Eigen3 package (for least-squares precompute only)
 find_package(Eigen3 REQUIRED NO_MODULE)
+
+# Find PETSc via pkg-config
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 
 # find OpenMP package (required for parallelization)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -61,6 +65,7 @@ add_executable(${PROJECT_NAME}
     src/Schemes/TimeSchemes/TimeScheme.cpp
     src/LinearSystem/Matrix.cpp
     src/LinearSystem/LinearSolvers.cpp
+    src/LinearSystem/PETScRuntime.cpp
     src/Solver/MomentumTransport.cpp
     src/Solver/Segregated.cpp
     src/Solver/SIMPLE.cpp
@@ -141,9 +146,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     endif()
 endif()
 
-# Link executable against the HDF5, Eigen3, and OpenMP libraries
+# Link executable against the HDF5, PETSc, Eigen3, and OpenMP libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     HDF5::HDF5
+    PkgConfig::PETSC
     Eigen3::Eigen
     OpenMP::OpenMP_CXX
 )

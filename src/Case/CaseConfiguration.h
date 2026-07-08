@@ -83,6 +83,9 @@ struct LinearSolverConfig
 
     /// Specific dissipation rate equation solver settings
     LinearSolverSettings omega;
+
+    /// PETSc options-database string, e.g. "-pc_type icc -ksp_view"
+    Name petscOptions;
 };
 
 // **************************** struct TimeControl ***************************

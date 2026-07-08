@@ -138,6 +138,7 @@ void readLinearSolvers
     };
     config.linearSolvers.k = turbulenceSolverDefaults();
     config.linearSolvers.omega = turbulenceSolverDefaults();
+    config.linearSolvers.petscOptions = "";
 
     if (!reader.hasSection("linearSolvers"))
     {
@@ -145,6 +146,9 @@ void readLinearSolvers
     }
 
     const auto& solvers = reader.section("linearSolvers");
+
+    config.linearSolvers.petscOptions =
+        solvers.lookupOrDefault<Name>("petscOptions", "");
 
     config.linearSolvers.momentum =
         readSolverEntry(solvers, "U", config.linearSolvers.momentum);

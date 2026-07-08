@@ -281,19 +281,14 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 
         diagonalDU(momentumComponent);
 
-        // Map phi directly as Eigen vector: the zero-copy solve writes the
-        // result straight into the bound velocity component field
-        EigenVectorMap solutionMap
-        (
-            equations[momentumComponent].phi.data(),
-            EigenIdx(mesh().numCells())
-        );
+        matrixConstruct_.assemble();
+
 
         momentumSolver_.solve
         (
-            solutionMap,
+            {equations[momentumComponent].phi.data(), mesh().numCells()},
             matrixConstruct_.matrixA(),
-            matrixConstruct_.vectorB()
+            matrixConstruct_.rhsVec()
         );
 
         if (debug())
@@ -317,14 +312,13 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 
 void Segregated::diagonalDU(Index component)
 {
-    const auto& matrixA = matrixConstruct_.matrixA();
+    const std::span<const Scalar> diagonal = matrixConstruct_.diagonal();
     const Count numCells = mesh().numCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        DU_[cellIdx] +=
-            matrixA.coeff(EigenIdx(cellIdx), EigenIdx(cellIdx));
+        DU_[cellIdx] += diagonal[cellIdx];
     }
 
     if (component == 2)
@@ -505,9 +499,6 @@ void Segregated::solvePressureCorrection()
         .gradScheme = gradientScheme()
     };
 
-    // Map pCorr field storage as Eigen vector (zero-copy)
-    EigenVectorMap pCorrSolution(pCorr_.data(), EigenIdx(numCells));
-
     for
     (
         Count corrector = 0;
@@ -517,11 +508,13 @@ void Segregated::solvePressureCorrection()
     {
         matrixConstruct_.buildMatrix(equationPCorr);
 
+        matrixConstruct_.assemble();
+
         pressureSolver_.solve
         (
-            pCorrSolution,
+            {pCorr_.data(), numCells},
             matrixConstruct_.matrixA(),
-            matrixConstruct_.vectorB()
+            matrixConstruct_.rhsVec()
         );
 
         if (debug())

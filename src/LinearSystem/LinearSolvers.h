@@ -9,31 +9,33 @@
  * @file LinearSolvers.h
  * @brief Iterative solver hierarchy for sparse linear systems
  *
- * @details Polymorphic LinearSolver interface with an EigenLinearSolver
- * adapter that wraps an Eigen iterative solver. The Eigen solver type is
- * fixed by the EigenLinearSolver template argument; concrete classes
- * (BiCGSTAB, PCG) inherit a specific instantiation.
+ * @details Polymorphic LinearSolver interface backed by PETSc's KSP Krylov
+ * solvers. Each PetscLinearSolver owns one KSP configured at construction
+ * (solver type, Jacobi preconditioner, unpreconditioned residual norm);
+ * concrete classes (BiCGSTAB, PCG) select the KSP type. The solution is
+ * bound zero-copy over the caller's field storage, so the solve writes the
+ * result straight into the field.
  *
- * The shared solve path lives in EigenLinearSolver<T>::solve() and is
- * defined inline, so this header pulls Eigen's iterative-solver template
- * into every translation unit that includes it.
+ * Defaults set here can be overridden at runtime through the case file's
+ * linearSolvers.petscOptions string (see PETScRuntime::insertOptions).
+ * Each KSP reads the options database through its own equation prefix
+ * (momentum_, pressure_, k_, omega_), so an option targets one solver —
+ * e.g. "-pressure_pc_type icc" swaps only the pressure preconditioner
+ * without a rebuild; an unprefixed "-pc_type" matches no solver.
  *
  * @class LinearSolver
  * - Abstract base with virtual solve()
  * - Holds shared convergence configuration and cached solve diagnostics
  *
- * @class EigenLinearSolver
- * - Templated adapter that owns the concrete Eigen iterative solver
- * - Implements the common analyse/factorize/solveWithGuess workflow once
- * - Stores sparsity-pattern analysis state per solver instance
+ * @class PetscLinearSolver
+ * - Owns the KSP and the reusable solution Vec wrapper
+ * - Implements the common solve workflow once
  *
  * @class BiCGSTAB
- * - Final solver class inheriting EigenLinearSolver<EigenBiCGSTAB> (Jacobi
- *   preconditioner); use for non-symmetric momentum/turbulence systems
+ * - KSPBCGS; use for non-symmetric momentum/turbulence systems
  *
  * @class PCG
- * - Final solver class inheriting EigenLinearSolver<EigenPCG> (Jacobi
- *   preconditioner); use for symmetric positive definite systems (p')
+ * - KSPCG; use for symmetric positive definite systems (p')
  *****************************************************************************/
 
 #pragma once
@@ -43,32 +45,16 @@
 // Standard library headers
 #include <limits>
 #include <memory>
+#include <span>
 #include <utility>
 
 // External library headers
-#include <eigen3/Eigen/SparseCore>
-#include <eigen3/Eigen/IterativeLinearSolvers>
+#include <petscksp.h>
 
 // Project headers
-#include "ErrorHandler.h"
+#include "Integer.h"
 #include "Scalar.h"
 #include "StringTypes.h"
-
-// ********************************** Aliases *********************************
-
-// Eigen type reductions for readability
-using SparseMatrix = Eigen::SparseMatrix<Scalar, Eigen::RowMajor>;
-using Vec = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-using VecRef = Eigen::Ref<Vec>;
-using EigenVectorMap = Eigen::Map<Vec>;
-using JacobiPreconditioner = Eigen::DiagonalPreconditioner<Scalar>;
-static constexpr int LowerUpper = Eigen::Lower | Eigen::Upper;
-
-using EigenBiCGSTAB =
-    Eigen::BiCGSTAB<SparseMatrix, JacobiPreconditioner>;
-using EigenPCG =
-    Eigen::ConjugateGradient
-    <SparseMatrix, LowerUpper, JacobiPreconditioner>;
 
 // ************************** struct SolvePerformance *************************
 
@@ -80,10 +66,10 @@ struct SolvePerformance
     /// Iterations performed by the solve call
     int iterations = 0;
 
-    /// Final relative residual reported by Eigen
+    /// Final relative residual |r|/|b| reported by the solve
     Scalar finalResidual = S(0.0);
 
-    /// Whether Eigen reported successful convergence
+    /// Whether the solver reported successful convergence
     bool converged = false;
 };
 
@@ -122,12 +108,14 @@ public:
 
 // **************************** Runtime Selection ****************************
 
-    /// Construct the linear solver selected by name
+    /// Construct the linear solver selected by name; optionsPrefix scopes
+    /// the case file's petscOptions entries to this solver's equation
     [[nodiscard]] static std::unique_ptr<LinearSolver> create
     (
         const Name& name,
         Scalar tolerance,
-        Count maxIterations
+        Count maxIterations,
+        const Name& optionsPrefix
     );
 
     /// Names of every selectable linear solver
@@ -155,12 +143,12 @@ public:
 
 // ******************************* Solver Method ******************************
 
-    /// Solve sparse system using the derived algorithm
+    /// Solve the sparse system, writing the result in place through x
     virtual void solve
     (
-        VecRef x,
-        const SparseMatrix& A,
-        const Vec& B
+        std::span<Scalar> x,
+        Mat A,
+        Vec b
     ) = 0;
 
     /// Solver name, used in diagnostic output
@@ -203,107 +191,97 @@ private:
 };
 
 
-// ************************** class EigenLinearSolver *************************
+// ************************** class PetscLinearSolver *************************
 
-template<typename EigenSolverT>
-class EigenLinearSolver : public LinearSolver
+class PetscLinearSolver : public LinearSolver
 {
 public:
 
-    using LinearSolver::LinearSolver;
+    /// Construct the owned KSP with the given Krylov type
+    PetscLinearSolver
+    (
+        Name name,
+        KSPType kspType,
+        Scalar tolerance,
+        Count maxIterations,
+        const Name& optionsPrefix
+    );
 
-    /// Solve sparse system using the owned Eigen iterative solver
+    /// Destructor releases the KSP and the solution wrapper
+    ~PetscLinearSolver() noexcept override;
+
+    /// Solve the sparse system using the owned KSP
     void solve
     (
-        VecRef x,
-        const SparseMatrix& A,
-        const Vec& B
-    ) final
-    {
-        if (x.size() != B.size())
-        {
-            FatalError("LinearSolver: x and B size mismatch");
-        }
+        std::span<Scalar> x,
+        Mat A,
+        Vec b
+    ) final;
 
-        solver_.setMaxIterations(static_cast<int>(maxIterations()));
-        solver_.setTolerance(tolerance());
-
-        if (!patternAnalyzed_)
-        {
-            solver_.analyzePattern(A);
-            patternAnalyzed_ = true;
-        }
-
-        solver_.factorize(A);
-
-        if (solver_.info() != Eigen::Success)
-        {
-            Warning(name() + ": factorization failed");
-
-            const SolvePerformance performance
-            {
-                .solverName    = name(),
-                .iterations    = 0,
-                .finalResidual = std::numeric_limits<Scalar>::quiet_NaN(),
-                .converged     = false
-            };
-
-            setLastPerformance(performance);
-            return;
-        }
-
-        const Vec xPrev = x;
-
-        x = solver_.solveWithGuess(B, x);
-
-        if (!x.allFinite())
-        {
-            Warning
-            (
-                name()
-              + ": non-finite solution, rolling back to previous iterate"
-            );
-            x = xPrev;
-        }
-
-        const bool converged = solver_.info() == Eigen::Success;
-
-        const SolvePerformance performance
-        {
-            .solverName    = name(),
-            .iterations    = static_cast<int>(solver_.iterations()),
-            .finalResidual = solver_.error(),
-            .converged     = converged
-        };
-
-        setLastPerformance(performance);
-    }
+// ****************************** Private Members *****************************
 
 private:
 
-    /// Owned Eigen iterative solver
-    EigenSolverT solver_;
+    /// Owned PETSc Krylov solver
+    KSP ksp_ = nullptr;
 
-    /// Whether this instance has analysed the sparsity pattern
-    bool patternAnalyzed_ = false;
+    /// Reusable solution vector, bound over the caller's storage per solve
+    Vec solution_ = nullptr;
+
+    /// Previous iterate for the non-finite rollback guard
+    ScalarList previousSolution_;
 };
 
 // ****************************** class BiCGSTAB ******************************
 
-class BiCGSTAB final : public EigenLinearSolver<EigenBiCGSTAB>
+class BiCGSTAB final : public PetscLinearSolver
 {
 public:
 
-    using EigenLinearSolver<EigenBiCGSTAB>::EigenLinearSolver;
+    /// Construct a Bi-Conjugate Gradient Stabilized solver
+    BiCGSTAB
+    (
+        Name name,
+        Scalar tolerance,
+        Count maxIterations,
+        const Name& optionsPrefix
+    )
+    :
+        PetscLinearSolver
+        (
+            std::move(name),
+            KSPBCGS,
+            tolerance,
+            maxIterations,
+            optionsPrefix
+        )
+    {}
 
 };
 
 // ********************************* class PCG ********************************
 
-class PCG final : public EigenLinearSolver<EigenPCG>
+class PCG final : public PetscLinearSolver
 {
 public:
 
-    using EigenLinearSolver<EigenPCG>::EigenLinearSolver;
+    /// Construct a preconditioned Conjugate Gradient solver
+    PCG
+    (
+        Name name,
+        Scalar tolerance,
+        Count maxIterations,
+        const Name& optionsPrefix
+    )
+    :
+        PetscLinearSolver
+        (
+            std::move(name),
+            KSPCG,
+            tolerance,
+            maxIterations,
+            optionsPrefix
+        )
+    {}
 
 };

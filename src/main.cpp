@@ -22,6 +22,7 @@
 #include "StringTypes.h"
 #include "CFDApplication.h"
 #include "Logger.h"
+#include "PETScRuntime.h"
 
 // *********************************** main ***********************************
 
@@ -65,6 +66,9 @@ int main(int argc, char* argv[])
         std::cout
             << "Using default case: " << caseFile << '\n';
     }
+
+    // PETSc/MPI runtime initialization
+    const PETScRuntime petscRuntime;
 
     CFDApplication app(caseFile);
     app.run();

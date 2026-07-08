@@ -20,7 +20,6 @@
 #include <iostream>
 
 // External library headers
-#include <eigen3/Eigen/Core>
 #include <omp.h>
 
 // Project headers
@@ -45,7 +44,6 @@ namespace
 void initParallelism(int numThreads)
 {
     omp_set_num_threads(numThreads);
-    Eigen::setNbThreads(numThreads);
 
     std::cout
         << "OpenMP threads: " << numThreads << '\n';

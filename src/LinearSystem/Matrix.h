@@ -14,11 +14,23 @@
  * pressure correction, and turbulence, described by a TransportEquation
  * bundle (see TransportEquation.h).
  *
+ * Coefficients are staged in a COO (coordinate) value array whose sparsity
+ * pattern is fixed once at construction from the mesh topology and handed
+ * to PETSc via MatSetPreallocationCOO. The slot layout is
+ *
+ *     [ 2 per internal face: off-diagonals | one per cell: diagonal ]
+ *
+ * Assembly needs three race-free passes:
+ * Pass 1: face k touches only slots 2k/2k+1, no two faces collide.
+ * Pass 2: face m touches only boundaryDiag_[m]/boundaryRhs_[m].
+ * Pass 3: cell cellIdx reads shared scratch but writes only its own
+ *         diagonal slot + RHS entry — one writer per cell.
+ *
  * @class Matrix
  *
  * The Matrix class provides:
  * - Unified assembly for all transport equation types
- * - Eigen sparse matrix for efficient storage and solution
+ * - PETSc matrix/vector storage for the solve
  * - Deferred correction for higher-order convection schemes
  * - Non-orthogonal mesh corrections
  * - Implicit under-relaxation (Patankar) for solution stability
@@ -30,12 +42,12 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
-#include <vector>
-#include <optional>
 #include <span>
+#include <vector>
 
 // External library headers
-#include <eigen3/Eigen/SparseCore>
+#include <petscmat.h>
+#include <petscvec.h>
 
 // Project headers
 #include "Mesh.h"
@@ -49,23 +61,18 @@ class Matrix
 {
 public:
 
-    // Eigen type reductions for readability
-    using SparseMatrix = Eigen::SparseMatrix<Scalar, Eigen::RowMajor>;
-    using Vec = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-
-    // Assembly type reductions for readability
-    using TripletList = std::vector<Eigen::Triplet<Scalar>>;
-    using PerThreadTriplets = std::vector<TripletList>;
+    // Type reductions for readability
     using ScalarListRef = std::span<const Scalar>;
+    using ScalarSpan = std::span<Scalar>;
 
 // ************************* Special Member Functions *************************
 
-    /// Constructor for matrix assembly
+    /// Constructor: builds the PETSc system
     Matrix
     (
         const Mesh& mesh,
         const BoundaryConditions& boundaryConds
-    ) noexcept;
+    );
 
     /// Copy constructor and assignment - Not copyable (const T& members)
     Matrix(const Matrix&) = delete;
@@ -75,48 +82,15 @@ public:
     Matrix(Matrix&&) = delete;
     Matrix& operator=(Matrix&&) = delete;
 
-    /// Destructor
-    ~Matrix() noexcept = default;
+    /// Destructor releases the PETSc matrix and RHS vector
+    ~Matrix() noexcept;
 
 // ****************************** Public Methods ******************************
 
-    /// Build transport equation matrix
+    /// Build transport equation coefficients
     void buildMatrix(const TransportEquation& equation);
 
-    /// One explicit Jacobi sweep of the assembled system
-    void explicitJacobiUpdate
-    (
-        const ScalarField& phiOld,
-        ScalarField& phiNew
-    ) const;
-
-// ***************************** Accessor Methods *****************************
-
-    /// Get assembled sparse matrix A (const)
-    [[nodiscard]] const SparseMatrix& matrixA() const noexcept
-    {
-        return matrixA_;
-    }
-
-    /// Get assembled sparse matrix A (non-const)
-    [[nodiscard]] SparseMatrix& matrixA() noexcept
-    {
-        return matrixA_;
-    }
-
-    /// Get right-hand side vector b (const)
-    [[nodiscard]] const Vec& vectorB() const noexcept
-    {
-        return vectorB_;
-    }
-
-    /// Get right-hand side vector b
-    [[nodiscard]] Vec& vectorB() noexcept
-    {
-        return vectorB_;
-    }
-
-    /// Apply Patankar implicit under-relaxation
+    /// Apply Patankar implicit under-relaxation to the staged values
     void relax(Scalar alpha, const ScalarField& phiPrevIter);
 
     /// Fix matrix rows to impose known cell values
@@ -130,6 +104,54 @@ public:
         ScalarListRef fractions = {}
     );
 
+    /// Push the staged values into the PETSc matrix
+    void assemble();
+
+    /// One explicit Jacobi sweep of the staged system
+    void explicitJacobiUpdate
+    (
+        const ScalarField& phiOld,
+        ScalarField& phiNew
+    ) const;
+
+// ***************************** Accessor Methods *****************************
+
+    /// Get the assembled PETSc matrix
+    [[nodiscard]] Mat matrixA() const noexcept
+    {
+        return matrixA_;
+    }
+
+    /// Get the PETSc right-hand side vector
+    [[nodiscard]] Vec rhsVec() const noexcept
+    {
+        return rhsVec_;
+    }
+
+    /// Get right-hand side vector b (const)
+    [[nodiscard]] const ScalarList& vectorB() const noexcept
+    {
+        return vectorB_;
+    }
+
+    /// Get right-hand side vector b
+    [[nodiscard]] ScalarList& vectorB() noexcept
+    {
+        return vectorB_;
+    }
+
+    /// Get the matrix diagonal (const)
+    [[nodiscard]] ScalarListRef diagonal() const noexcept
+    {
+        return {cooValues_.data() + diagOffset_, mesh_.numCells()};
+    }
+
+    /// Get the staged matrix diagonal
+    [[nodiscard]] ScalarSpan diagonal() noexcept
+    {
+        return {cooValues_.data() + diagOffset_, mesh_.numCells()};
+    }
+
 // ****************************** Private Members *****************************
 
 private:
@@ -140,18 +162,41 @@ private:
     /// Boundary data references
     const BoundaryConditions& bcManager_;
 
-    /// Sparse linear system components
-    SparseMatrix matrixA_;
-    Vec vectorB_;
+    /// PETSc sparse matrix
+    Mat matrixA_ = nullptr;
 
-    /// Triplet storage for efficient sparse matrix assembly
-    TripletList tripletList_;
+    /// PETSc RHS vectorB_ storage
+    Vec rhsVec_ = nullptr;
 
-    /// Per-thread triplet lists for parallel face-assembly
-    PerThreadTriplets perThreadTriplets_;
+    /// Staged COO values: [internal-face off-diagonals | cell diagonals]
+    ScalarList cooValues_;
 
-    /// Per-thread RHS contributions for parallel face-assembly scatter.
-    std::vector<Vec> perThreadB_;
+    /// Right-hand side staging
+    ScalarList vectorB_;
+
+    /// Per-face diagonal contributions [2 per internal face: owner, neighbor]
+    ScalarList faceDiag_;
+
+    /// Per-face RHS contributions [2 per internal face: owner, neighbor]
+    ScalarList faceRhs_;
+
+    /// Per-boundary-face diagonal contribution to the owner cell
+    ScalarList boundaryDiag_;
+
+    /// Per-boundary-face RHS contribution to the owner cell
+    ScalarList boundaryRhs_;
+
+    /// Face indices of every internal face, in slot order
+    IndexList internalFaces_;
+
+    /// Face indices of every boundary face, in slot order
+    IndexList boundaryFaces_;
+
+    /// faceIdx -> first off-diagonal slot (internal) or boundary ordinal
+    IndexList faceSlot_;
+
+    /// First diagonal slot in cooValues_ (= 2 * number of internal faces)
+    Index diagOffset_ = 0;
 
     /// Relaxation factor from last relax() call (0 = not relaxed)
     Scalar lastRelaxationFactor_ = S(0.0);
@@ -164,36 +209,20 @@ private:
 
 private:
 
-    /// Assemble internal face contributions
+    /// Stage internal-face coefficients into slot pair 2k/2k+1
     void assembleInternalFace
     (
+        Index k,
         const Face& face,
-        const TransportEquation& equation,
-        TripletList& triplets,
-        Vec& localB
-    ) const;
+        const TransportEquation& equation
+    );
 
-    /// Assemble boundary face contributions
+    /// Stage boundary-face contributions into boundary scratch slot m
     void assembleBoundaryFace
     (
+        Index m,
         const Face& face,
-        const TransportEquation& equation,
-        TripletList& triplets,
-        Vec& localB
-    ) const;
+        const TransportEquation& equation
+    );
 
 };
-
-// *************************** Non-Member Functions ***************************
-
-/// Convert an unsigned storage index to Eigen's signed index type
-[[nodiscard]] inline Eigen::Index EigenIdx(Index value) noexcept
-{
-    return static_cast<Eigen::Index>(value);
-}
-
-/// Convert an unsigned storage index to int
-[[nodiscard]] inline int IntIdx(Index value) noexcept
-{
-    return static_cast<int>(value);
-}

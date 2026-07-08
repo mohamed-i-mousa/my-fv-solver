@@ -680,23 +680,21 @@ void kOmegaSST::solveOmegaEquation
 
     matrixConstruct()->buildMatrix(equationOmega);
 
-    auto& matrixA = matrixConstruct()->matrixA();
-    auto& vectorB = matrixConstruct()->vectorB();
+    const std::span<Scalar> diagonal = matrixConstruct()->diagonal();
+    ScalarList& vectorB = matrixConstruct()->vectorB();
 
     // Add source terms
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
-        const Eigen::Index row = EigenIdx(cellIdx);
-        Scalar& diagonal = matrixA.coeffRef(row, row);
 
         // Production term: add the limited omega production POmega to RHS
-        vectorB(row) += POmega[cellIdx] * cellVolume;
+        vectorB[cellIdx] += POmega[cellIdx] * cellVolume;
 
         // Destruction term: -β·ω² (implicit: β·ω on diagonal)
         const Scalar beta = blend(f1[cellIdx], coeffs_.beta1, coeffs_.beta2);
-        diagonal += beta * omega_[cellIdx] * cellVolume;
+        diagonal[cellIdx] += beta * omega_[cellIdx] * cellVolume;
 
         // Cross-diffusion: linearization of (1-F1)*CDkOmega
         const Scalar CDkOmegaLineared =
@@ -705,11 +703,11 @@ void kOmegaSST::solveOmegaEquation
 
         if (CDkOmegaLineared < S(0.0))
         {
-            diagonal += -CDkOmegaLineared * cellVolume;
+            diagonal[cellIdx] += -CDkOmegaLineared * cellVolume;
         }
         else
         {
-            vectorB(row) +=
+            vectorB[cellIdx] +=
                 CDkOmegaLineared * omega_[cellIdx] * cellVolume;
         }
 
@@ -719,9 +717,9 @@ void kOmegaSST::solveOmegaEquation
         const Scalar suspOmega =
             (S(2.0) / S(3.0)) * gamma * divU[cellIdx];
 
-        diagonal += std::max(suspOmega, S(0.0)) * cellVolume;
+        diagonal[cellIdx] += std::max(suspOmega, S(0.0)) * cellVolume;
 
-        vectorB(row) +=
+        vectorB[cellIdx] +=
             std::max(-suspOmega, S(0.0)) * omega_[cellIdx] * cellVolume;
     }
 
@@ -736,9 +734,14 @@ void kOmegaSST::solveOmegaEquation
         wallCellFraction()
     );
 
-    EigenVectorMap omegaSolution(omega_.data(), EigenIdx(numCells));
+    matrixConstruct()->assemble();
 
-    dissipationSolver().solve(omegaSolution, matrixA, vectorB);
+    dissipationSolver().solve
+    (
+        {omega_.data(), numCells},
+        matrixConstruct()->matrixA(),
+        matrixConstruct()->rhsVec()
+    );
 
     if (debug())
     {
@@ -800,38 +803,41 @@ void kOmegaSST::solveKEquation
 
     matrixConstruct()->buildMatrix(equationK);
 
-    auto& matrixA = matrixConstruct()->matrixA();
-    auto& vectorB = matrixConstruct()->vectorB();
+    const std::span<Scalar> diagonal = matrixConstruct()->diagonal();
+    ScalarList& vectorB = matrixConstruct()->vectorB();
 
     // Add k source terms
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
-        const Eigen::Index row = EigenIdx(cellIdx);
-        Scalar& diagonal = matrixA.coeffRef(row, row);
 
-        vectorB(row) += Pk[cellIdx] * cellVolume;
+        vectorB[cellIdx] += Pk[cellIdx] * cellVolume;
 
         // Destruction term: -β*·kω
         const Scalar destruction = coeffs_.betaStar * omega_[cellIdx];
-        diagonal += destruction * cellVolume;
+        diagonal[cellIdx] += destruction * cellVolume;
 
         // -(2/3)*divU SuSp term (continuity correction)
         const Scalar suspK = (S(2.0) / S(3.0)) * divU[cellIdx];
 
-        diagonal += std::max(suspK, S(0.0)) * cellVolume;
+        diagonal[cellIdx] += std::max(suspK, S(0.0)) * cellVolume;
 
-        vectorB(row) +=
+        vectorB[cellIdx] +=
             std::max(-suspK, S(0.0)) * k()[cellIdx] * cellVolume;
     }
 
     // Apply implicit under-relaxation (Patankar's method)
     matrixConstruct()->relax(alphaK(), k());
 
-    EigenVectorMap kSolution(k().data(), EigenIdx(numCells));
+    matrixConstruct()->assemble();
 
-    kSolver().solve(kSolution, matrixA, vectorB);
+    kSolver().solve
+    (
+        {k().data(), numCells},
+        matrixConstruct()->matrixA(),
+        matrixConstruct()->rhsVec()
+    );
 
     if (debug())
     {

@@ -17,14 +17,10 @@
 
 // Standard library headers
 #include <algorithm>
-#include <iostream>
-#include <iterator>
-
-// External library headers
-#include <omp.h>
 
 // Project headers
 #include "ErrorHandler.h"
+#include "PETScRuntime.h"
 #include "TimeScheme.h"
 
 // ************************* Special Member Functions *************************
@@ -33,155 +29,196 @@ Matrix::Matrix
 (
     const Mesh& mesh,
     const BoundaryConditions& boundaryConds
-) noexcept
+)
 :
     mesh_{mesh},
     bcManager_{boundaryConds}
 {
-    // Face counts for the triplet-list reservation estimate
-    Count numInternalFaces = 0;
-    Count numBoundaryFaces = 0;
-
-    for (const auto& face : mesh_.faces())
-    {
-        if (face.isBoundary()) ++numBoundaryFaces;
-        else ++numInternalFaces;
-    }
-
     const Count numCells = mesh_.numCells();
+    const Count numFaces = mesh_.numFaces();
 
-    matrixA_.resize
-    (
-        EigenIdx(numCells),
-        EigenIdx(numCells)
-    );
-    vectorB_.resize(EigenIdx(numCells));
+    // Slot-ordered face lists; faceSlot_ maps a face to its first
+    // off-diagonal slot (internal) or its boundary scratch ordinal
+    faceSlot_.assign(numFaces, 0);
 
-    // Reserve reusable per-thread assembly buffers.
-    const Count T = static_cast<Count>(omp_get_max_threads());
-    const Count estimatedTriplets = 4 * numInternalFaces + numBoundaryFaces;
-    const Count reservePerThread = (estimatedTriplets / T) + 1;
-
-    tripletList_.reserve(estimatedTriplets);
-
-    perThreadTriplets_.resize(T);
-    for (auto& triplets : perThreadTriplets_)
+    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
-        triplets.reserve(reservePerThread);
+        if (mesh_.faces()[faceIdx].isBoundary())
+        {
+            faceSlot_[faceIdx] = boundaryFaces_.size();
+            boundaryFaces_.push_back(faceIdx);
+        }
+        else
+        {
+            faceSlot_[faceIdx] = 2 * internalFaces_.size();
+            internalFaces_.push_back(faceIdx);
+        }
     }
 
-    perThreadB_.assign(T, Vec::Zero(EigenIdx(numCells)));
+    const Count numInternalFaces = internalFaces_.size();
+    const Count numBoundaryFaces = boundaryFaces_.size();
+
+    // COO layout: [off-diagonals | (future processor slots) | diagonals]
+    diagOffset_ = 2 * numInternalFaces;
+    const Count numCoo = diagOffset_ + numCells;
+
+    // The fixed sparsity pattern: slot 2k couples (owner, neighbor) of
+    // internal face k, slot 2k+1 the reverse, and one diagonal per cell
+    std::vector<PetscInt> cooRows(numCoo);
+    std::vector<PetscInt> cooCols(numCoo);
+
+    for (Index k = 0; k < numInternalFaces; ++k)
+    {
+        const Face& face = mesh_.faces()[internalFaces_[k]];
+        const auto owner = static_cast<PetscInt>(face.ownerCell());
+        const auto neighbor =
+            static_cast<PetscInt>(face.neighborCell().value());
+
+        cooRows[2 * k] = owner;
+        cooCols[2 * k] = neighbor;
+        cooRows[2 * k + 1] = neighbor;
+        cooCols[2 * k + 1] = owner;
+    }
+
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    {
+        cooRows[diagOffset_ + cellIdx] = static_cast<PetscInt>(cellIdx);
+        cooCols[diagOffset_ + cellIdx] = static_cast<PetscInt>(cellIdx);
+    }
+
+    const auto n = static_cast<PetscInt>(numCells);
+
+    PETSC_CHECK(MatCreate(PETScRuntime::comm(), &matrixA_));
+    PETSC_CHECK(MatSetSizes(matrixA_, n, n, PETSC_DECIDE, PETSC_DECIDE));
+    PETSC_CHECK(MatSetType(matrixA_, MATAIJ));
+    PETSC_CHECK
+    (
+        MatSetPreallocationCOO
+        (
+            matrixA_,
+            static_cast<PetscCount>(numCoo),
+            cooRows.data(),
+            cooCols.data()
+        )
+    );
+
+    // Staging and scratch buffers, sized once
+    cooValues_.assign(numCoo, S(0.0));
+    vectorB_.assign(numCells, S(0.0));
+    faceDiag_.assign(2 * numInternalFaces, S(0.0));
+    faceRhs_.assign(2 * numInternalFaces, S(0.0));
+    boundaryDiag_.assign(numBoundaryFaces, S(0.0));
+    boundaryRhs_.assign(numBoundaryFaces, S(0.0));
+
+    // RHS handle wraps vectorB_ storage: staging writes are the vector,
+    // with no PETSc-owned backing array allocated behind the wrapper
+    // (single-rank form; distributed sizing replaces it in Phase 5)
+    PETSC_CHECK
+    (
+        VecCreateSeqWithArray
+        (
+            PETScRuntime::comm(),
+            1,
+            n,
+            vectorB_.data(),
+            &rhsVec_
+        )
+    );
+}
+
+
+Matrix::~Matrix() noexcept
+{
+    if (VecDestroy(&rhsVec_) != PETSC_SUCCESS)
+    {
+        Warning("VecDestroy failed");
+    }
+    if (MatDestroy(&matrixA_) != PETSC_SUCCESS)
+    {
+        Warning("MatDestroy failed");
+    }
 }
 
 // ****************************** Public Methods ******************************
 
 void Matrix::buildMatrix(const TransportEquation& equation)
 {
-    tripletList_.clear();
-    matrixA_.setZero();
-    vectorB_.setZero();
     lastRelaxationFactor_ = S(0.0);
 
     const Count numCells = mesh_.numCells();
-    const Count numFaces = mesh_.numFaces();
+    const Count numInternalFaces = internalFaces_.size();
+    const Count numBoundaryFaces = boundaryFaces_.size();
 
-    // Cell-source contribution: race-free per-cell write directly to vectorB_
+    // Pass 1: internal faces write their exclusive off-diagonal slots and
+    // stage per-face diagonal/RHS contributions for the cell gather
+    #pragma omp parallel for schedule(static)
+    for (Index k = 0; k < numInternalFaces; ++k)
+    {
+        assembleInternalFace(k, mesh_.faces()[internalFaces_[k]], equation);
+    }
+
+    // Pass 2: boundary faces stage their owner-cell contributions
+    #pragma omp parallel for schedule(static)
+    for (Index m = 0; m < numBoundaryFaces; ++m)
+    {
+        assembleBoundaryFace(m, mesh_.faces()[boundaryFaces_[m]], equation);
+    }
+
+    // Pass 3: per-cell gather sums the face scratch into the single
+    // diagonal slot and RHS entry (race-free: one writer per cell)
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        vectorB_(EigenIdx(cellIdx)) += equation.source[cellIdx];
-    }
+        const Cell& cell = mesh_.cells()[cellIdx];
 
-    // Reset per-thread scratch (capacity retained from constructor)
-    for (auto& triplets : perThreadTriplets_)
-    {
-        triplets.clear();
-    }
-    for (auto& localB : perThreadB_)
-    {
-        localB.setZero();
-    }
+        Scalar diag = S(0.0);
+        Scalar rhs = equation.source[cellIdx];
 
-    #pragma omp parallel
-    {
-        const int tid = omp_get_thread_num();
-        auto& triplets = perThreadTriplets_[static_cast<Index>(tid)];
-        auto& localB = perThreadB_[static_cast<Index>(tid)];
-
-        #pragma omp for schedule(static)
-        for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
+        for (const Index faceIdx : cell.faceIndices())
         {
-            const Face& face = mesh_.faces()[faceIdx];
+            const Index slot = faceSlot_[faceIdx];
 
-            if (face.isBoundary())
+            if (mesh_.faces()[faceIdx].isBoundary())
             {
-                assembleBoundaryFace(face, equation, triplets, localB);
+                diag += boundaryDiag_[slot];
+                rhs += boundaryRhs_[slot];
             }
             else
             {
-                assembleInternalFace(face, equation, triplets, localB);
+                const Index side =
+                    mesh_.faces()[faceIdx].ownerCell() == cellIdx ? 0 : 1;
+
+                diag += faceDiag_[slot + side];
+                rhs += faceRhs_[slot + side];
             }
         }
 
-        // Transient term: add d(phi)/dt to the diagonal and RHS per cell.
+        // Transient term: add d(phi)/dt to the diagonal and RHS
         if (equation.transient)
         {
             const TransientTerm& transient = *equation.transient;
 
-            #pragma omp for schedule(static)
-            for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
-            {
-                const Scalar volume = mesh_.cells()[cellIdx].volume();
-                const Scalar ddtPrevStep =
-                    transient.ddtPrevStep != nullptr
-                  ? (*transient.ddtPrevStep)[cellIdx]
-                  : S(0.0);
+            const Scalar ddtPrevStep =
+                transient.ddtPrevStep != nullptr
+              ? (*transient.ddtPrevStep)[cellIdx]
+              : S(0.0);
 
-                const TimeContribution contribution =
-                    transient.scheme.coefficients
-                    (
-                        volume,
-                        transient.deltaT,
-                        transient.phiPrevStep[cellIdx],
-                        ddtPrevStep
-                    );
-
-                triplets.emplace_back
+            const TimeContribution contribution =
+                transient.scheme.coefficients
                 (
-                    IntIdx(cellIdx),
-                    IntIdx(cellIdx),
-                    contribution.diag
+                    mesh_.cells()[cellIdx].volume(),
+                    transient.deltaT,
+                    transient.phiPrevStep[cellIdx],
+                    ddtPrevStep
                 );
-                localB(EigenIdx(cellIdx)) += contribution.source;
-            }
+
+            diag += contribution.diag;
+            rhs += contribution.source;
         }
-    }
 
-    // Merge per-thread triplet lists into the member tripletList_
-    Count totalTriplets = 0;
-    for (const auto& v : perThreadTriplets_) totalTriplets += v.size();
-    tripletList_.reserve(totalTriplets);
-    for (auto& v : perThreadTriplets_)
-    {
-        tripletList_.insert
-        (
-            tripletList_.end(),
-            std::make_move_iterator(v.begin()),
-            std::make_move_iterator(v.end())
-        );
+        cooValues_[diagOffset_ + cellIdx] = diag;
+        vectorB_[cellIdx] = rhs;
     }
-
-    // Merge per-thread RHS contributions into vectorB_
-    for (const auto& v : perThreadB_)
-    {
-        vectorB_ += v;
-    }
-
-    matrixA_.setFromTriplets
-    (
-        tripletList_.begin(),
-        tripletList_.end()
-    );
 }
 
 
@@ -192,9 +229,9 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
         FatalError("Matrix::relax: alpha must be positive");
     }
 
-    const Eigen::Index numCells = matrixA_.rows();
+    const Count numCells = mesh_.numCells();
 
-    if (EigenIdx(phiPrevIter.size()) != numCells)
+    if (phiPrevIter.size() != numCells)
     {
         FatalError
         (
@@ -210,18 +247,31 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
     const Scalar factor = (S(1.0) - alpha) / alpha;
 
     #pragma omp parallel for schedule(static)
-    for (Eigen::Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        const Scalar origDiag = matrixA_.coeff(cellIdx, cellIdx);
+        const Scalar origDiag = cooValues_[diagOffset_ + cellIdx];
 
         // Scale diagonal: a_P <- a_P / alpha
-        matrixA_.coeffRef(cellIdx, cellIdx) = origDiag / alpha;
+        cooValues_[diagOffset_ + cellIdx] = origDiag / alpha;
 
         // Update RHS: b <- b + ((1-alpha)/alpha) * a_P * phiPrevIter
-        vectorB_(cellIdx) +=
-            factor * origDiag
-          * phiPrevIter[static_cast<Index>(cellIdx)];
+        vectorB_[cellIdx] += factor * origDiag * phiPrevIter[cellIdx];
     }
+}
+
+
+void Matrix::assemble()
+{
+    PETSC_CHECK(MatSetValuesCOO(matrixA_, cooValues_.data(), INSERT_VALUES));
+
+    // Raw staging writes to vectorB_ bypass PETSc's object-state tracking,
+    // so cached norms would go stale: VecNorm (ours and the KSP convergence
+    // test's) would keep returning the first solve's |b|. The get/restore
+    // pair is the public API for "the array changed" — restore bumps the
+    // state; on wrapped storage it moves no data
+    PetscScalar* rhsArray = nullptr;
+    PETSC_CHECK(VecGetArray(rhsVec_, &rhsArray));
+    PETSC_CHECK(VecRestoreArray(rhsVec_, &rhsArray));
 }
 
 
@@ -231,31 +281,37 @@ void Matrix::explicitJacobiUpdate
     ScalarField& phiNew
 ) const
 {
-    const Eigen::Index numCells = matrixA_.rows();
+    const Count numCells = mesh_.numCells();
 
     // Single Jacobi sweep:
     //     phiNew_P = (b_P - sum_{N != P} A_PN phiOld_N) / A_PP.
     #pragma omp parallel for schedule(static)
-    for (Eigen::Index row = 0; row < numCells; ++row)
+    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        Scalar diagonal = S(0.0);
+        const Scalar diagonal = cooValues_[diagOffset_ + cellIdx];
         Scalar offDiagonalSum = S(0.0);
 
-        for (SparseMatrix::InnerIterator it(matrixA_, row); it; ++it)
+        for (const Index faceIdx : mesh_.cells()[cellIdx].faceIndices())
         {
-            if (it.col() == row)
+            const Face& face = mesh_.faces()[faceIdx];
+
+            if (face.isBoundary())
             {
-                diagonal = it.value();
+                continue;
             }
-            else
-            {
-                offDiagonalSum +=
-                    it.value() * phiOld[static_cast<Index>(it.col())];
-            }
+
+            // Row cellIdx couples to the cell across each internal face
+            const Index slot = faceSlot_[faceIdx];
+            const bool isOwner = face.ownerCell() == cellIdx;
+            const Index rowSlot = isOwner ? slot : slot + 1;
+            const Index neighborIdx =
+                isOwner ? face.neighborCell().value() : face.ownerCell();
+
+            offDiagonalSum += cooValues_[rowSlot] * phiOld[neighborIdx];
         }
 
-        phiNew[static_cast<Index>(row)] =
-            (vectorB_(row) - offDiagonalSum) / (diagonal + vSmallValue);
+        phiNew[cellIdx] =
+            (vectorB_[cellIdx] - offDiagonalSum) / (diagonal + vSmallValue);
     }
 }
 
@@ -263,11 +319,10 @@ void Matrix::explicitJacobiUpdate
 
 void Matrix::assembleInternalFace
 (
+    Index k,
     const Face& face,
-    const TransportEquation& equation,
-    TripletList& triplets,
-    Vec& localB
-) const
+    const TransportEquation& equation
+)
 {
     const Index ownerIdx = face.ownerCell();
     const Index neighborIdx = face.neighborCell().value();
@@ -299,13 +354,12 @@ void Matrix::assembleInternalFace
         aNConv = std::min(flowRate, S(0.0));
     }
 
-    // Matrix coefficients for owner and neighbor cells
-    const int ownerRow = IntIdx(ownerIdx);
-    const int neighborRow = IntIdx(neighborIdx);
-    triplets.emplace_back(ownerRow, ownerRow, aDiff + aPConv);
-    triplets.emplace_back(ownerRow, neighborRow, -aDiff + aNConv);
-    triplets.emplace_back(neighborRow, neighborRow, aDiff - aNConv);
-    triplets.emplace_back(neighborRow, ownerRow, -aDiff - aPConv);
+    // Off-diagonal slots (exclusive to this face) and per-side diagonal
+    // contributions gathered later by the owner/neighbor cells
+    cooValues_[2 * k] = -aDiff + aNConv;            // A(owner, neighbor)
+    cooValues_[2 * k + 1] = -aDiff - aPConv;        // A(neighbor, owner)
+    faceDiag_[2 * k] = aDiff + aPConv;              // owner diagonal share
+    faceDiag_[2 * k + 1] = aDiff - aNConv;          // neighbor diagonal share
 
     // Non-orthogonal correction (explicit)
     const Vector Tf = Sf - Ef;
@@ -322,8 +376,8 @@ void Matrix::assembleInternalFace
         );
     const Scalar nonOrthogonalFlux = Gammaf * dot(gradPhif, Tf);
 
-    localB(EigenIdx(ownerIdx)) += nonOrthogonalFlux;
-    localB(EigenIdx(neighborIdx)) -= nonOrthogonalFlux;
+    Scalar rhsOwner = nonOrthogonalFlux;
+    Scalar rhsNeighbor = -nonOrthogonalFlux;
 
     // Deferred correction (explicit, convection only)
     if (equation.convection)
@@ -340,22 +394,23 @@ void Matrix::assembleInternalFace
                 flowRate
             );
 
-        localB(EigenIdx(ownerIdx)) -= deferredCorrection;
-        localB(EigenIdx(neighborIdx)) += deferredCorrection;
+        rhsOwner -= deferredCorrection;
+        rhsNeighbor += deferredCorrection;
     }
+
+    faceRhs_[2 * k] = rhsOwner;
+    faceRhs_[2 * k + 1] = rhsNeighbor;
 }
 
 
 void Matrix::assembleBoundaryFace
 (
+    Index m,
     const Face& face,
-    const TransportEquation& equation,
-    TripletList& triplets,
-    Vec& localB
-) const
+    const TransportEquation& equation
+)
 {
     const Index ownerIdx = face.ownerCell();
-    const int ownerRow = IntIdx(ownerIdx);
     const BoundaryData& bc =
         bcManager_.fieldBC(face.patch()->get().patchName(), equation.field);
     const Vector Sf = face.normal() * face.projectedArea();
@@ -366,6 +421,10 @@ void Matrix::assembleBoundaryFace
     const Scalar aDiff = Gammaf * magnitude(Ef) / (dPfMag + vSmallValue);
     const ConvectionTerm* convection =
         equation.convection ? &*equation.convection : nullptr;
+
+    // Owner-cell contributions, gathered by the cell pass
+    Scalar diag = S(0.0);
+    Scalar rhs = S(0.0);
 
     using enum BCType;
     const BCType type = bc.type();
@@ -384,15 +443,15 @@ void Matrix::assembleBoundaryFace
             }
 
             // Diffusion contribution
-            triplets.emplace_back(ownerRow, ownerRow, aDiff);
-            localB(EigenIdx(ownerIdx)) += aDiff * phiB;
+            diag += aDiff;
+            rhs += aDiff * phiB;
 
             // Convection contribution
             if (convection != nullptr)
             {
                 const Scalar aConv = convection->flowRate[face.idx()];
 
-                localB(EigenIdx(ownerIdx)) -= aConv * phiB;
+                rhs -= aConv * phiB;
             }
 
             break;
@@ -402,16 +461,15 @@ void Matrix::assembleBoundaryFace
             const Scalar gradient = bc.fixedScalarGradient();
             const Scalar dn = dot(face.dPf(), face.normal());
 
-            localB(EigenIdx(ownerIdx)) +=
-                Gammaf * gradient * face.projectedArea();
+            rhs += Gammaf * gradient * face.projectedArea();
 
             // Boundary value for convection: phi_b = phi_P + grad * dn
             if (convection != nullptr)
             {
                 const Scalar aConv = convection->flowRate[face.idx()];
 
-                triplets.emplace_back(ownerRow, ownerRow, aConv);
-                localB(EigenIdx(ownerIdx)) -= aConv * gradient * dn;
+                diag += aConv;
+                rhs -= aConv * gradient * dn;
             }
 
             break;
@@ -424,9 +482,7 @@ void Matrix::assembleBoundaryFace
             // Zero normal gradient: only convection
             if (convection != nullptr)
             {
-                const Scalar aConv = convection->flowRate[face.idx()];
-
-                triplets.emplace_back(ownerRow, ownerRow, aConv);
+                diag += convection->flowRate[face.idx()];
             }
             // No convection + zero gradient = no contribution
             break;
@@ -466,8 +522,8 @@ void Matrix::assembleBoundaryFace
                     break;
             }
 
-            triplets.emplace_back(ownerRow, ownerRow, aDiff * ni * ni);
-            localB(EigenIdx(ownerIdx)) -= aDiff * ni * UnCross;
+            diag += aDiff * ni * ni;
+            rhs -= aDiff * ni * UnCross;
             break;
         }
         default:
@@ -483,13 +539,14 @@ void Matrix::assembleBoundaryFace
 
             if (convection != nullptr)
             {
-                const Scalar aConv = convection->flowRate[face.idx()];
-
-                triplets.emplace_back(ownerRow, ownerRow, aConv);
+                diag += convection->flowRate[face.idx()];
             }
             break;
         }
     }
+
+    boundaryDiag_[m] = diag;
+    boundaryRhs_[m] = rhs;
 }
 
 
@@ -512,36 +569,41 @@ void Matrix::setValues
             continue;
         }
 
-        const Scalar diag =
-            matrixA_.coeff
-            (
-                EigenIdx(cellIdx),
-                EigenIdx(cellIdx)
-            );
+        const Scalar diag = cooValues_[diagOffset_ + cellIdx];
 
         if (f > S(1.0) - rootSmallValue_)
         {
-            const Eigen::Index c = EigenIdx(cellIdx);
-
-            for
-            (
-                Index neighborIdx
-              :  mesh_.cells()[cellIdx].neighborCellIndices()
-            )
+            // Full constraint: zero the row and column couplings, moving
+            // the known-value column coupling to the neighbors' RHS.
+            // Every coupling of this cell lives on one of its internal
+            // faces: slot = A(owner, neighbor), slot + 1 = the reverse.
+            for (const Index faceIdx : mesh_.cells()[cellIdx].faceIndices())
             {
-                const Eigen::Index r = EigenIdx(neighborIdx);
+                const Face& face = mesh_.faces()[faceIdx];
 
-                const Scalar coupling = matrixA_.coeff(r, c);
-                if (coupling != S(0.0))
+                if (face.isBoundary())
                 {
-                    vectorB_(r) -= coupling * values[i];
-                    matrixA_.coeffRef(r, c) = S(0.0);
+                    continue;
                 }
 
-                matrixA_.coeffRef(c, r) = S(0.0);
+                const Index slot = faceSlot_[faceIdx];
+                const bool isOwner = face.ownerCell() == cellIdx;
+                const Index rowSlot = isOwner ? slot : slot + 1;
+                const Index colSlot = isOwner ? slot + 1 : slot;
+                const Index neighborIdx =
+                    isOwner ? face.neighborCell().value() : face.ownerCell();
+
+                const Scalar coupling = cooValues_[colSlot];
+                if (coupling != S(0.0))
+                {
+                    vectorB_[neighborIdx] -= coupling * values[i];
+                    cooValues_[colSlot] = S(0.0);
+                }
+
+                cooValues_[rowSlot] = S(0.0);
             }
 
-            vectorB_(c) = diag * values[i];
+            vectorB_[cellIdx] = diag * values[i];
         }
         else
         {
@@ -552,13 +614,8 @@ void Matrix::setValues
 
             const Scalar coeff = f / (S(1.0) - f) * diagPre;
 
-            matrixA_.coeffRef
-            (
-                EigenIdx(cellIdx),
-                EigenIdx(cellIdx)
-            ) += coeff;
-
-            vectorB_(EigenIdx(cellIdx)) += coeff * values[i];
+            cooValues_[diagOffset_ + cellIdx] += coeff;
+            vectorB_[cellIdx] += coeff * values[i];
         }
     }
 }

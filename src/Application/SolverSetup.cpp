@@ -22,6 +22,7 @@
 #include "GradientScheme.h"
 #include "ConvectionSchemes.h"
 #include "LinearSolvers.h"
+#include "PETScRuntime.h"
 #include "MomentumTransport.h"
 #include "TurbulenceModel.h"
 #include "Laminar.h"
@@ -88,14 +89,16 @@ const ConvectionSchemes& resolveConvectionScheme
 
 std::unique_ptr<LinearSolver> makeLinearSolver
 (
-    const LinearSolverSettings& config
+    const LinearSolverSettings& config,
+    const Name& optionsPrefix
 )
 {
     return LinearSolver::create
     (
         config.solver,
         config.tolerance,
-        config.maxIter
+        config.maxIter,
+        optionsPrefix
     );
 }
 
@@ -149,21 +152,26 @@ void SolverSetup::configure
         config.time.CrankNicolsonCoeff
     );
 
+    PETScRuntime::insertOptions(config.linearSolvers.petscOptions);
+
     modules.momentumSolver =
         makeLinearSolver
         (
-            config.linearSolvers.momentum
+            config.linearSolvers.momentum,
+            "momentum_"
         );
     modules.pressureSolver =
         makeLinearSolver
         (
-            config.linearSolvers.pressure
+            config.linearSolvers.pressure,
+            "pressure_"
         );
 
     if (!TurbulenceModel::isLaminar(config.turbulenceModel))
     {
-        modules.kSolver = makeLinearSolver(config.linearSolvers.k);
-        modules.omegaSolver = makeLinearSolver(config.linearSolvers.omega);
+        modules.kSolver = makeLinearSolver(config.linearSolvers.k, "k_");
+        modules.omegaSolver =
+            makeLinearSolver(config.linearSolvers.omega, "omega_");
 
         modules.turbulenceModel =
             TurbulenceModel::create

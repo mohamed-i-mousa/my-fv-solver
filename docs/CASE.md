@@ -416,6 +416,9 @@ linearSolvers
         tolerance           1e-5;           // Relative residual tolerance
         maxIter             500;            // Maximum iterations
     }
+
+    // Optional: raw PETSc options, scoped per solver by equation prefix
+    petscOptions        -pressure_pc_type icc -momentum_ksp_view;
 }
 ```
 
@@ -425,11 +428,19 @@ Recognized keys per section:
   (SPD matrices: p). Optional; defaults to `BiCGSTAB` for U/k/omega and `PCG`
   for p.
 - `preconditioner`: parsed for forward compatibility but not yet consumed;
-  the Eigen solvers currently use Jacobi (diagonal) unconditionally.
-  Optional; defaults to `Jacobi`.
-- `tolerance`: relative residual tolerance used by Eigen's iterative
-  solvers (`|r| / |b|`).
+  the PETSc solvers default to Jacobi (diagonal). Use `petscOptions` to
+  select another preconditioner per equation. Optional; defaults to
+  `Jacobi`.
+- `tolerance`: relative residual tolerance used by the iterative
+  solvers (`|r| / |b|`, true unpreconditioned residual).
 - `maxIter`: iteration cap before the solver gives up.
+- `petscOptions`: optional string forwarded verbatim into the PETSc
+  options database at startup (read up to the terminating `;`, spaces
+  preserved). Each solver reads the database through its own equation
+  prefix — `momentum_`, `pressure_`, `k_`, `omega_` — so an entry targets
+  one solver: `-pressure_pc_type icc` changes only the pressure
+  preconditioner, `-momentum_ksp_view` prints only the momentum solver's
+  configuration. Unprefixed options (`-pc_type`) match no solver.
 
 Algorithm/equation pairing is not validated. Picking `PCG` for a
 non-symmetric equation will compile and run but will not converge to the
