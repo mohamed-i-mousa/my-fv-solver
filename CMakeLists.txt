@@ -28,6 +28,9 @@ find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 
+# Find MPI (initialized through PETSc; called directly in src/Parallel/)
+find_package(MPI REQUIRED COMPONENTS CXX)
+
 # find OpenMP package (required for parallelization)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     set(LIBOMP_PREFIX "/opt/homebrew/opt/libomp")
@@ -66,6 +69,9 @@ add_executable(${PROJECT_NAME}
     src/LinearSystem/Matrix.cpp
     src/LinearSystem/LinearSolvers.cpp
     src/LinearSystem/PETScRuntime.cpp
+    src/Parallel/Comm.cpp
+    src/Parallel/Reduce.cpp
+    src/Parallel/GlobalIndex.cpp
     src/Solver/MomentumTransport.cpp
     src/Solver/Segregated.cpp
     src/Solver/SIMPLE.cpp
@@ -105,6 +111,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/PostProcessing/VTK/
     src/Solver/
     src/LinearSystem/
+    src/Parallel/
 )
 
 # Set output directory for executable
@@ -146,10 +153,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     endif()
 endif()
 
-# Link executable against the HDF5, PETSc, Eigen3, and OpenMP libraries
+# Link executable against the HDF5, PETSc, MPI, Eigen3, OpenMP libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     HDF5::HDF5
     PkgConfig::PETSC
+    MPI::MPI_CXX
     Eigen3::Eigen
     OpenMP::OpenMP_CXX
 )

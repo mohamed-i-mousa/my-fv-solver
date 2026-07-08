@@ -32,6 +32,8 @@
 #include "Logger.h"
 #include "Mesh.h"
 #include "MomentumTransport.h"
+#include "Comm.h"
+#include "Reduce.h"
 #include "TurbulenceModel.h"
 
 // ***************************** namespace Forces ****************************
@@ -174,8 +176,11 @@ AeroForces computeForces
         }
     }
 
-    const Vector pressureForce(pressureForceX, pressureForceY, pressureForceZ);
-    const Vector frictionForce(frictionForceX, frictionForceY, frictionForceZ);
+    // Each rank integrates its share of the patch; combine onto every rank
+    const Vector pressureForce =
+        globalSum(Vector(pressureForceX, pressureForceY, pressureForceZ));
+    const Vector frictionForce =
+        globalSum(Vector(frictionForceX, frictionForceY, frictionForceZ));
 
     const Vector& dragDir = config.dragDirection;
     const Vector& liftDir = config.liftDirection;
@@ -231,54 +236,58 @@ void reportForces
     const FilePath outputPath =
         forcesFilePath(config.vtkOutputFilename, "_forces.txt");
 
-    std::ofstream file(outputPath);
-    if (!file.is_open())
+    // Every rank reduced the forces above; only the master writes
+    if (Comm::master())
     {
-        FatalError("Failed to open forces output file: " + outputPath);
-    }
+        std::ofstream file(outputPath);
+        if (!file.is_open())
+        {
+            FatalError("Failed to open forces output file: " + outputPath);
+        }
 
-    file << std::scientific << std::setprecision(6);
-    file
-        << "Aerodynamic forces" << '\n'
-        << "Patch          : " << config.forcesPatch << '\n'
-        << "Drag direction : " << dragDir << '\n'
-        << "Lift direction : " << liftDir << '\n'
-        << "Reference U    : " << config.referenceVelocity << '\n'
-        << '\n'
-        << std::left << std::setw(12) << "Force"
-        << std::right
-        << std::setw(16) << "Pressure"
-        << std::setw(16) << "Friction"
-        << std::setw(16) << "Total" << '\n'
-        << std::left << std::setw(12) << "Drag [N]"
-        << std::right
-        << std::setw(16) << pressureDrag
-        << std::setw(16) << frictionDrag
-        << std::setw(16) << totalDrag << '\n'
-        << std::left << std::setw(12) << "Lift [N]"
-        << std::right
-        << std::setw(16) << pressureLift
-        << std::setw(16) << frictionLift
-        << std::setw(16) << totalLift << '\n'
-        << '\n'
-        << "Force coefficients (dimensionless), referenceArea = "
-        << config.referenceArea << '\n'
-        << std::left << std::setw(12) << "Coeff"
-        << std::right
-        << std::setw(16) << "Pressure"
-        << std::setw(16) << "Friction"
-        << std::setw(16) << "Total" << '\n'
-        << std::left << std::setw(12) << "Cd"
-        << std::right
-        << std::setw(16) << pressureCd
-        << std::setw(16) << frictionCd
-        << std::setw(16) << totalCd << '\n'
-        << std::left << std::setw(12) << "Cl"
-        << std::right
-        << std::setw(16) << pressureCl
-        << std::setw(16) << frictionCl
-        << std::setw(16) << totalCl << '\n';
-    file.close();
+        file << std::scientific << std::setprecision(6);
+        file
+            << "Aerodynamic forces" << '\n'
+            << "Patch          : " << config.forcesPatch << '\n'
+            << "Drag direction : " << dragDir << '\n'
+            << "Lift direction : " << liftDir << '\n'
+            << "Reference U    : " << config.referenceVelocity << '\n'
+            << '\n'
+            << std::left << std::setw(12) << "Force"
+            << std::right
+            << std::setw(16) << "Pressure"
+            << std::setw(16) << "Friction"
+            << std::setw(16) << "Total" << '\n'
+            << std::left << std::setw(12) << "Drag [N]"
+            << std::right
+            << std::setw(16) << pressureDrag
+            << std::setw(16) << frictionDrag
+            << std::setw(16) << totalDrag << '\n'
+            << std::left << std::setw(12) << "Lift [N]"
+            << std::right
+            << std::setw(16) << pressureLift
+            << std::setw(16) << frictionLift
+            << std::setw(16) << totalLift << '\n'
+            << '\n'
+            << "Force coefficients (dimensionless), referenceArea = "
+            << config.referenceArea << '\n'
+            << std::left << std::setw(12) << "Coeff"
+            << std::right
+            << std::setw(16) << "Pressure"
+            << std::setw(16) << "Friction"
+            << std::setw(16) << "Total" << '\n'
+            << std::left << std::setw(12) << "Cd"
+            << std::right
+            << std::setw(16) << pressureCd
+            << std::setw(16) << frictionCd
+            << std::setw(16) << totalCd << '\n'
+            << std::left << std::setw(12) << "Cl"
+            << std::right
+            << std::setw(16) << pressureCl
+            << std::setw(16) << frictionCl
+            << std::setw(16) << totalCl << '\n';
+        file.close();
+    }
 
     // Print the breakdown to the console as two compact tables
     std::cout << '\n';
@@ -303,6 +312,11 @@ void writeForceHistoryHeader(const CaseConfiguration& config)
 {
     const FilePath csvPath =
         forcesFilePath(config.vtkOutputFilename, "_forces.csv");
+
+    if (!Comm::master())
+    {
+        return;
+    }
 
     std::ofstream file(csvPath);
     if (!file.is_open())
@@ -335,6 +349,12 @@ void appendForceHistory
 
     const Scalar totalCd = totalDrag / dynamicLoad;
     const Scalar totalCl = totalLift / dynamicLoad;
+
+    // Every rank reduced the forces above; only the master writes
+    if (!Comm::master())
+    {
+        return;
+    }
 
     const FilePath csvPath =
         forcesFilePath(config.vtkOutputFilename, "_forces.csv");

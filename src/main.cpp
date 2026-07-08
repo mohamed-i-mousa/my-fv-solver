@@ -21,6 +21,8 @@
 #include "Scalar.h"
 #include "StringTypes.h"
 #include "CFDApplication.h"
+#include "Comm.h"
+#include "ErrorHandler.h"
 #include "Logger.h"
 #include "PETScRuntime.h"
 
@@ -30,6 +32,29 @@ int main(int argc, char* argv[])
 {
     // Start timing the total execution
     const auto startTime = std::chrono::high_resolution_clock::now();
+
+    // PETSc/MPI runtime initialization
+    const PETScRuntime petscRuntime;
+
+    // One console, whole-run failure: non-master ranks print nothing, and
+    // a fatal error on any rank aborts every rank. Single-rank runs keep
+    // std::abort — same exit code and core dump as a serial program
+    Logger::init(Comm::master());
+
+    if (Comm::parallelRun())
+    {
+        setAbortHandler(&Comm::abortAllRanks);
+    }
+
+    // Scaffolding until the mesh is decomposed across ranks (Phase 4/5)
+    if (Comm::parallelRun())
+    {
+        FatalError
+        (
+            "Multi-rank runs are not supported yet: the mesh is not "
+            "decomposed. Run on a single rank."
+        );
+    }
 
     std::cout << R"(
   ~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~··~·~
@@ -66,9 +91,6 @@ int main(int argc, char* argv[])
         std::cout
             << "Using default case: " << caseFile << '\n';
     }
-
-    // PETSc/MPI runtime initialization
-    const PETScRuntime petscRuntime;
 
     CFDApplication app(caseFile);
     app.run();

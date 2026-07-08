@@ -82,6 +82,12 @@ namespace Logger
 {
     using Residuals = std::pair<Name, Scalar>;
 
+    /// Route console output for parallel runs: non-master ranks swap
+    /// std::cout's buffer for a null sink, so every print site in the
+    /// codebase becomes master-only without being touched (std::cerr is
+    /// left alone — warnings and errors report from any rank)
+    void init(bool master);
+
     /// Print a generic 80-char framed banner with the given title
     void sectionHeader(const Message& title);
 

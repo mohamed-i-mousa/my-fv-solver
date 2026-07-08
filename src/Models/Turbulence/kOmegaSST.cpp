@@ -18,6 +18,7 @@
 // Standard library headers
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 // External library headers
 #include <omp.h>
@@ -25,6 +26,7 @@
 // Project headers
 #include "Logger.h"
 #include "Matrix.h"
+#include "Reduce.h"
 #include "BoundaryConditions.h"
 #include "GradientScheme.h"
 #include "ConvectionSchemes.h"
@@ -174,18 +176,22 @@ void kOmegaSST::solve
     // Log min/max/mean of k, omega, nut
     const Count numCells = mesh().numCells();
 
-    if (debug() && numCells > 0)
+    if (debug())
     {
-        Scalar kMin = k()[0];
-        Scalar kMax = k()[0];
+        // Seeds are the reduction identities, so a rank with an empty
+        // partition still reaches the collectives below with neutral
+        // partials — a per-rank guard skipping them would deadlock the
+        // ranks that entered (debug() is uniform across ranks)
+        Scalar kMin = std::numeric_limits<Scalar>::max();
+        Scalar kMax = std::numeric_limits<Scalar>::lowest();
         Scalar kSum = S(0.0);
 
-        Scalar omegaMin = omega_[0];
-        Scalar omegaMax = omega_[0];
+        Scalar omegaMin = std::numeric_limits<Scalar>::max();
+        Scalar omegaMax = std::numeric_limits<Scalar>::lowest();
         Scalar omegaSum = S(0.0);
 
-        Scalar nutMin = nut()[0];
-        Scalar nutMax = nut()[0];
+        Scalar nutMin = std::numeric_limits<Scalar>::max();
+        Scalar nutMax = std::numeric_limits<Scalar>::lowest();
         Scalar nutSum = S(0.0);
 
         #pragma omp parallel for schedule(static) \
@@ -207,12 +213,21 @@ void kOmegaSST::solve
             nutSum += nut()[cellIdx];
         }
 
-        const Scalar n = S(numCells);
+        // Batched: one collective per operation instead of one per field
+        Scalar mins[3] = {kMin, omegaMin, nutMin};
+        Scalar maxs[3] = {kMax, omegaMax, nutMax};
+        Scalar sums[3] = {kSum, omegaSum, nutSum};
+
+        globalMin(mins);
+        globalMax(maxs);
+        globalSum(sums);
+
+        const Scalar n = S(globalSum(numCells));
 
         Logger::subsection("Turbulence field statistics");
-        Logger::scalarStat("k", kMin, kMax, kSum / n);
-        Logger::scalarStat("omega", omegaMin, omegaMax, omegaSum / n);
-        Logger::scalarStat("nut", nutMin, nutMax, nutSum / n);
+        Logger::scalarStat("k", mins[0], maxs[0], sums[0] / n);
+        Logger::scalarStat("omega", mins[1], maxs[1], sums[1] / n);
+        Logger::scalarStat("nut", mins[2], maxs[2], sums[2] / n);
     }
 }
 

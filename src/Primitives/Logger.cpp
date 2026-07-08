@@ -18,9 +18,45 @@
 // Standard library headers
 #include <iomanip>
 #include <iostream>
+#include <streambuf>
 #include <string>
 
+// ****************************** Internal Helpers ****************************
+
+namespace
+{
+
+/// Stream buffer that discards every character written to it
+class NullBuffer final : public std::streambuf
+{
+protected:
+
+    int_type overflow(int_type ch) override
+    {
+        // Report the character as consumed without storing it
+        return ch;
+    }
+};
+
+} // namespace
+
 // ***************************** namespace Logger *****************************
+
+void Logger::init(bool master)
+{
+    if (!master)
+    {
+        // Intentionally leaked: std::cout's final flush during static
+        // destruction must still find this buffer alive, and destruction
+        // order across translation units is unordered — a static object
+        // here could die first, leaving cout flushing through a dangling
+        // streambuf
+        static NullBuffer* nullBuffer = new NullBuffer();
+
+        std::cout.rdbuf(nullBuffer);
+    }
+}
+
 
 void Logger::sectionHeader(const Message& title)
 {

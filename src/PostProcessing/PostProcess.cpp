@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <iostream>
+#include <limits>
 
 // Project headers
 #include "CaseConfiguration.h"
@@ -27,6 +28,7 @@
 #include "Logger.h"
 #include "Mesh.h"
 #include "MomentumTransport.h"
+#include "Reduce.h"
 #include "TurbulenceModel.h"
 #include "HDF5BoundaryData.h"
 #include "HDF5CellData.h"
@@ -78,18 +80,24 @@ void reportStatistics(const MomentumTransport& solver)
     const ScalarField& Uz = solver.Uz();
     const ScalarField& pressure = solver.pressure();
 
-    const ScalarField velocityMag = VTK::velocityMagnitude(Ux, Uy, Uz);
+    // Emptiness must be decided globally: a per-rank early return here
+    // would skip the collective reductions below on that rank alone and
+    // deadlock the others
+    const Count totalCells = globalSum(Ux.size());
 
-    if (Ux.empty())
+    if (totalCells == 0)
     {
         Warning("Solution fields are empty. Skipping statistics.");
         return;
     }
 
+    const ScalarField velocityMag = VTK::velocityMagnitude(Ux, Uy, Uz);
+
+    // Seeds are the reduction identities, valid for an empty partition
     Scalar maximumVelocity = S(0.0);
     Scalar averageVelocity = S(0.0);
-    Scalar maximumPressure = pressure[0];
-    Scalar minimumPressure = pressure[0];
+    Scalar maximumPressure = std::numeric_limits<Scalar>::lowest();
+    Scalar minimumPressure = std::numeric_limits<Scalar>::max();
 
     #pragma omp parallel for schedule(static) \
         reduction(max:maximumVelocity, maximumPressure) \
@@ -104,7 +112,10 @@ void reportStatistics(const MomentumTransport& solver)
         maximumPressure = std::max(maximumPressure, pressure[cellIdx]);
         minimumPressure = std::min(minimumPressure, pressure[cellIdx]);
     }
-    averageVelocity /= S(Ux.size());
+    maximumVelocity = globalMax(maximumVelocity);
+    averageVelocity = globalSum(averageVelocity) / S(totalCells);
+    maximumPressure = globalMax(maximumPressure);
+    minimumPressure = globalMin(minimumPressure);
 
     Logger::subsection("Flow statistics");
     Logger::keyValue("Max velocity", maximumVelocity, "m/s");

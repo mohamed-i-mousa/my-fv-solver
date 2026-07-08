@@ -29,6 +29,26 @@
 
 using Location = std::source_location;
 
+// ****************************** Abort Handler *******************************
+
+/// Handler FatalError terminates through: std::abort until the parallel
+/// runtime installs an MPI-wide abort at startup, so a fatal error on one
+/// rank cannot leave the other ranks deadlocked in a collective
+using AbortHandler = void (*)();
+
+/// Access the active abort handler (nullptr selects std::abort)
+[[nodiscard]] inline AbortHandler& activeAbortHandler() noexcept
+{
+    static AbortHandler handler = nullptr;
+    return handler;
+}
+
+/// Install the abort handler FatalError terminates through
+inline void setAbortHandler(AbortHandler handler) noexcept
+{
+    activeAbortHandler() = handler;
+}
+
 // ************************* Error Handling Functions *************************
 
 /// Print a fatal error message and abort the program
@@ -43,6 +63,11 @@ using Location = std::source_location;
         << '\n' << "    " << errorLocation.file_name() << ':'
         << errorLocation.line()
         << '\n' << "    " << errorMessage << '\n' << '\n' << std::endl;
+
+    if (activeAbortHandler() != nullptr)
+    {
+        activeAbortHandler()();
+    }
 
     std::abort();
 }

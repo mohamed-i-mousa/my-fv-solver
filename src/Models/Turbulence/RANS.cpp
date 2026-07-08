@@ -30,6 +30,7 @@
 #include "BoundaryConditions.h"
 #include "Field.h"
 #include "Matrix.h"
+#include "Reduce.h"
 #include "LinearInterpolation.h"
 #include "TimeScheme.h"
 
@@ -573,7 +574,11 @@ Scalar RANS::normalisedFieldResidual
         prevSq += previousField[cellIdx] * previousField[cellIdx];
     }
 
+    // One batched collective for both accumulators (hot iteration path)
+    Scalar sums[2] = {diffSq, prevSq};
+    globalSum(sums);
+
     return
-        std::sqrt(diffSq + vSmallValue)
-      / std::sqrt(prevSq + vSmallValue);
+        std::sqrt(sums[0] + vSmallValue)
+      / std::sqrt(sums[1] + vSmallValue);
 }

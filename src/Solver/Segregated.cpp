@@ -25,6 +25,7 @@
 
 // Project headers
 #include "Scalar.h"
+#include "Reduce.h"
 #include "Logger.h"
 #include "LinearInterpolation.h"
 #include "TimeScheme.h"
@@ -136,7 +137,8 @@ Scalar Segregated::pressureResidual() const noexcept
         sumP2 += pressure()[cellIdx] * pressure()[cellIdx];
     }
 
-    const Scalar pRms = std::sqrt(sumP2 / S(numCells));
+    const Scalar pRms =
+        std::sqrt(globalSum(sumP2) / S(globalSum(numCells)));
 
     return lastPressureCorrectionRMS_ / (pRms + vSmallValue);
 }
@@ -650,7 +652,8 @@ void Segregated::correctPressure()
         sumSq += pCorr_[cellIdx] * pCorr_[cellIdx];
     }
 
-    lastPressureCorrectionRMS_ = std::sqrt(sumSq / S(numCells));
+    lastPressureCorrectionRMS_ =
+        std::sqrt(globalSum(sumSq) / S(globalSum(numCells)));
 
     // Apply pressure correction
     #pragma omp parallel for schedule(static)

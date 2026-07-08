@@ -20,6 +20,7 @@
 
 // Project headers
 #include "ErrorHandler.h"
+#include "GlobalIndex.h"
 #include "PETScRuntime.h"
 #include "TimeScheme.h"
 
@@ -63,16 +64,24 @@ Matrix::Matrix
     const Count numCoo = diagOffset_ + numCells;
 
     // The fixed sparsity pattern: slot 2k couples (owner, neighbor) of
-    // internal face k, slot 2k+1 the reverse, and one diagonal per cell
+    // internal face k, slot 2k+1 the reverse, and one diagonal per cell.
+    // Indices are global through the rank-major cell numbering (identity
+    // on one rank), so the pattern is already distribution-ready
+    const GlobalIndex globalCells(numCells);
+
     std::vector<PetscInt> cooRows(numCoo);
     std::vector<PetscInt> cooCols(numCoo);
 
     for (Index k = 0; k < numInternalFaces; ++k)
     {
         const Face& face = mesh_.faces()[internalFaces_[k]];
-        const auto owner = static_cast<PetscInt>(face.ownerCell());
+        const auto owner =
+            static_cast<PetscInt>(globalCells.toGlobal(face.ownerCell()));
         const auto neighbor =
-            static_cast<PetscInt>(face.neighborCell().value());
+            static_cast<PetscInt>
+            (
+                globalCells.toGlobal(face.neighborCell().value())
+            );
 
         cooRows[2 * k] = owner;
         cooCols[2 * k] = neighbor;
@@ -82,8 +91,11 @@ Matrix::Matrix
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        cooRows[diagOffset_ + cellIdx] = static_cast<PetscInt>(cellIdx);
-        cooCols[diagOffset_ + cellIdx] = static_cast<PetscInt>(cellIdx);
+        const auto diagIdx =
+            static_cast<PetscInt>(globalCells.toGlobal(cellIdx));
+
+        cooRows[diagOffset_ + cellIdx] = diagIdx;
+        cooCols[diagOffset_ + cellIdx] = diagIdx;
     }
 
     const auto n = static_cast<PetscInt>(numCells);

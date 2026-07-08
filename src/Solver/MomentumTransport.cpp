@@ -26,6 +26,7 @@
 
 // Project headers
 #include "Scalar.h"
+#include "Reduce.h"
 #include "Logger.h"
 #include "TimeScheme.h"
 #include "TurbulenceModel.h"
@@ -533,7 +534,8 @@ Scalar MomentumTransport::massImbalance() const noexcept
         totalNormImbalance += std::abs(net) / denom;
     }
 
-    return totalNormImbalance / S(std::max<Count>(1, numCells));
+    return globalSum(totalNormImbalance)
+         / S(std::max<Count>(1, globalSum(numCells)));
 }
 
 
@@ -558,8 +560,8 @@ Scalar MomentumTransport::velocityResidual() const noexcept
              + UzPrevIter_[cellIdx] * UzPrevIter_[cellIdx];
     }
 
-    num = std::sqrt(num + vSmallValue);
-    den = std::sqrt(den + vSmallValue);
+    num = std::sqrt(globalSum(num) + vSmallValue);
+    den = std::sqrt(globalSum(den) + vSmallValue);
 
     return num / den;
 }
@@ -594,5 +596,9 @@ MomentumTransport::computeCourant() const noexcept
         sumCourant += courant;
     }
 
-    return {maxCourant, sumCourant / S(std::max<Count>(1, numCells))};
+    return
+    {
+        globalMax(maxCourant),
+        globalSum(sumCourant) / S(std::max<Count>(1, globalSum(numCells)))
+    };
 }
