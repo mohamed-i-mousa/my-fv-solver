@@ -26,6 +26,7 @@
 #include "BoundaryConditionsLoader.h"
 #include "BoundaryConditions.h"
 #include "CaseConfiguration.h"
+#include "Comm.h"
 #include "CaseReader.h"
 #include "Forces.h"
 #include "Logger.h"
@@ -231,8 +232,22 @@ void CFDApplication::run()
     // Initialize parallelism
     initParallelism(static_cast<int>(config.numThreads));
 
-    // Create mesh
+    // Create mesh (decomposed across ranks in a parallel run)
     Mesh mesh = MeshCreator::create(config);
+
+    // ADD A SINGLE LINE COMMENT HERE TO DESCRIBE
+    if (Comm::parallelRun())
+    {
+        std::cout << '\n';
+        Logger::sectionHeader("Distributed Mesh Ready");
+        Logger::keyValue
+        (
+            "Solve path",
+            "not yet parallel; decomposition validated, stopping"
+        );
+        Logger::iterationFooter();
+        return;
+    }
 
     // Load boundary conditions
     BoundaryConditions bcManager;

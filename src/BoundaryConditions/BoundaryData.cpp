@@ -106,6 +106,7 @@ Name bcTypeToString(BCType bctype) noexcept
         case omegaWallFunction: return "omegaWallFunction";
         case nutWallFunction:   return "nutWallFunction";
         case symmetry:          return "symmetry";
+        case processor:         return "processor";
     }
 
     FatalError("Corrupted BCType value");

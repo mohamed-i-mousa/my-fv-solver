@@ -36,6 +36,7 @@
 #include "BoundaryPatch.h"
 #include "ErrorHandler.h"
 #include "Integer.h"
+#include "ProcessorPatch.h"
 
 // ******************************** class Mesh ********************************
 
@@ -57,17 +58,47 @@ public:
         PatchList patches
     )
     :
+        Mesh
+        (
+            std::move(nodes),
+            std::move(faces),
+            std::move(cells),
+            std::move(patches),
+            0,
+            {},
+            {}
+        )
+    {}
+
+    /// Construct a decomposed submesh
+    Mesh
+    (
+        NodeList nodes,
+        FaceList faces,
+        CellList cells,
+        PatchList patches,
+        Count numOwnedCells,
+        IndexList ghostGlobalIndices,
+        ProcessorPatchList processorPatches
+    )
+    :
         nodes_(std::move(nodes)),
         faces_(std::move(faces)),
         cells_(std::move(cells)),
-        patches_(std::move(patches))
+        patches_(std::move(patches)),
+        numOwnedCells_
+        (
+            numOwnedCells == 0 ? cells_.size() : numOwnedCells
+        ),
+        ghostGlobalIndices_(std::move(ghostGlobalIndices)),
+        processorPatches_(std::move(processorPatches))
     {
         if (cellCount_ != 0 || faceCount_ != 0)
         {
             FatalError
             (
-                "Mesh: a populated mesh already exists. "
-                "Only one Mesh instance may carry data per program."
+                "Mesh: a populated mesh already exists. Only one Mesh "
+                "instance may carry data at a time (see resetCounts)."
             );
         }
 
@@ -134,14 +165,47 @@ public:
     /// Number of faces in the mesh
     [[nodiscard]] Count numFaces() const noexcept { return faces_.size(); }
 
-    /// Number of cells in the mesh
+    /// Number of cells in the mesh (ghost cells included)
     [[nodiscard]] Count numCells() const noexcept { return cells_.size(); }
+
+    /// Number of cells this rank owns (== numCells() when undecomposed)
+    [[nodiscard]] Count numOwnedCells() const noexcept
+    {
+        return numOwnedCells_;
+    }
+
+    /// Number of ghost cells in the tail of the cell list
+    [[nodiscard]] Count numGhostCells() const noexcept
+    {
+        return cells_.size() - numOwnedCells_;
+    }
 
     /// Cell count at startup (used by CellData/FaceData)
     [[nodiscard]] static Count cellCount() noexcept { return cellCount_; }
 
     /// Face count at startup (used by CellData/FaceData)
     [[nodiscard]] static Count faceCount() noexcept { return faceCount_; }
+
+    /// Release the startup counts so a submesh can replace the full mesh
+    static void resetCounts() noexcept
+    {
+        cellCount_ = 0;
+        faceCount_ = 0;
+    }
+
+// ************************ Decomposition Accessor Methods ********************
+
+    /// Global cell index of each ghost cell
+    [[nodiscard]] IndexListRef ghostGlobalIndices() const noexcept
+    {
+        return ghostGlobalIndices_;
+    }
+
+    /// Inter-rank cuts of this rank's submesh (empty when undecomposed)
+    [[nodiscard]] const ProcessorPatchList& processorPatches() const noexcept
+    {
+        return processorPatches_;
+    }
 
 // ****************************** Private Members *****************************
 
@@ -158,6 +222,15 @@ private:
 
     /// Boundary patch descriptors
     PatchList patches_;
+
+    /// Number of cells this rank owns
+    Count numOwnedCells_ = 0;
+
+    /// Global cell index of each ghost cell
+    IndexList ghostGlobalIndices_;
+
+    /// Inter-rank cuts of this rank's submesh
+    ProcessorPatchList processorPatches_;
 
     /// Cell count for field container initialization
     static inline Count cellCount_ = 0;

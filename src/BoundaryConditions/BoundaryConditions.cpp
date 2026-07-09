@@ -395,6 +395,11 @@ void BoundaryConditions::printSummary() const
                             << " (symmetry plane)";
                         break;
 
+                    case processor:
+                        std::cout
+                            << " (inter-rank cut)";
+                        break;
+
                     case undefined:
                         break;
                 }

@@ -46,16 +46,6 @@ int main(int argc, char* argv[])
         setAbortHandler(&Comm::abortAllRanks);
     }
 
-    // Scaffolding until the mesh is decomposed across ranks (Phase 4/5)
-    if (Comm::parallelRun())
-    {
-        FatalError
-        (
-            "Multi-rank runs are not supported yet: the mesh is not "
-            "decomposed. Run on a single rank."
-        );
-    }
-
     std::cout << R"(
   ~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~··~·~
 

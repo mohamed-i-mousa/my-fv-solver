@@ -173,13 +173,15 @@ void LeastSquares::precomputeInverseATA()
     using CholeskySolver = Eigen::LLT<Matrix3>;
     using LUSolver = Eigen::FullPivLU<Matrix3>;
 
-    const Count numCells = mesh().numCells();
-    invATA_.resize(numCells);
+    // ADD A SINGLE LINE DESCRIPTION COMMENT 
+    invATA_.resize(mesh().numCells());
+
+    const Count numOwnedCells = mesh().numOwnedCells();
 
     Count degenerateCells = 0;
 
     #pragma omp parallel for schedule(static) reduction(+:degenerateCells)
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         Matrix3 ATA;
         Vector3 rVector;

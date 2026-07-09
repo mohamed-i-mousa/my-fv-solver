@@ -31,6 +31,10 @@ pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 # Find MPI (initialized through PETSc; called directly in src/Parallel/)
 find_package(MPI REQUIRED COMPONENTS CXX)
 
+# Find METIS (mesh partitioning, used by src/Parallel/MeshDecomposer)
+find_path(METIS_INCLUDE_DIR metis.h)
+find_library(METIS_LIBRARY metis)
+
 # find OpenMP package (required for parallelization)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     set(LIBOMP_PREFIX "/opt/homebrew/opt/libomp")
@@ -72,6 +76,9 @@ add_executable(${PROJECT_NAME}
     src/Parallel/Comm.cpp
     src/Parallel/Reduce.cpp
     src/Parallel/GlobalIndex.cpp
+    src/Parallel/MeshDecomposer.cpp
+    src/Parallel/MeshDistributor.cpp
+    src/Parallel/DecompositionChecker.cpp
     src/Solver/MomentumTransport.cpp
     src/Solver/Segregated.cpp
     src/Solver/SIMPLE.cpp
@@ -114,6 +121,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/Parallel/
 )
 
+# SYSTEM: /opt/homebrew/include also holds third-party headers whose
+# warnings are not ours to fix
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+    ${METIS_INCLUDE_DIR}
+)
+
 # Set output directory for executable
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
@@ -153,11 +166,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     endif()
 endif()
 
-# Link executable against the HDF5, PETSc, MPI, Eigen3, OpenMP libraries
+# Link executable against HDF5, PETSc, MPI, METIS, Eigen3, and OpenMP
 target_link_libraries(${PROJECT_NAME} PRIVATE
     HDF5::HDF5
     PkgConfig::PETSC
     MPI::MPI_CXX
+    ${METIS_LIBRARY}
     Eigen3::Eigen
     OpenMP::OpenMP_CXX
 )

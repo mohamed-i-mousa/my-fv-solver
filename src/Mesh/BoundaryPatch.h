@@ -44,6 +44,7 @@ enum class PatchType
     interior,               ///< Interior boundary
     solid,                  ///< Solid boundary
     fluid,                  ///< Fluid boundary
+    processor,              ///< Inter-rank cut in a decomposed mesh
     undefined               ///< Undefined boundary type
 };
 

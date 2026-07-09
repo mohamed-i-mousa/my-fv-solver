@@ -39,6 +39,7 @@ enum class BCType
     omegaWallFunction,      ///< omegaWallFunction-like boundary condition
     nutWallFunction,        ///< nutWallFunction-like boundary condition
     symmetry,               ///< Symmetry-plane boundary condition
+    processor,              ///< Inter-rank cut in a decomposed mesh
     undefined               ///< Undefined boundary condition type
 };
 
