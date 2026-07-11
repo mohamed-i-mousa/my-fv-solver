@@ -15,6 +15,11 @@
  * The file is fully closed between writes, so it stays readable
  * (e.g. in ParaView) while the run continues.
  *
+ * Parallel runs share ONE file: every rank holds a writer for the same
+ * path and each rank's owned cells form one piece (part) of a multi-piece
+ * VTKHDF layout, written collectively via MPI-IO. Every method is
+ * collective — all ranks must call it, with an identical field set.
+ *
  * @class HDF5CellData
  *****************************************************************************/
 
@@ -155,11 +160,17 @@ private:
     /// Number of time steps appended
     Count stepCount_;
 
-    /// Cached cell count (set by writeGeometry)
+    /// Cached owned-cell count of this rank's piece (set by writeGeometry)
     Count numCells_;
 
-    /// Cached node count (set by writeGeometry)
+    /// Cached node count of this rank's piece (set by writeGeometry)
     Count numNodes_;
+
+    /// Global cell count across every rank (set by writeGeometry)
+    Count globalNumCells_;
+
+    /// Global row where this rank's cell slab starts (set by writeGeometry)
+    Index cellRowOffset_;
 
     /// Per-array cumulative cell-data row offset
     std::map<Name, Count> cellDataRowOffsets_;

@@ -15,6 +15,15 @@
  * failing HDF5 status funnels into FatalError, so callers never check return
  * codes.
  *
+ * Parallel runs write one shared file per grid through MPI-IO: files open
+ * with an MPI-IO access list and every dataset write is collective. Each
+ * function must therefore be called by EVERY rank, with rank-identical
+ * name/type/columns arguments and a rank-identical globalRows; a rank
+ * contributes its own (possibly empty) slab through the SlabLayout it
+ * passes. Compression is serial-only: filtered chunks under collective
+ * MPI-IO funnel each chunk through a single owner rank, so parallel files
+ * are written plain (h5repack recovers the space offline).
+ *
  * @note Dataset rank is encoded by the columns parameter: 0 writes a
  * one-dimensional dataset of length rows; >= 1 writes rows x columns.
  * VTKHDF needs the distinction (Steps/Values is [NSteps] while
@@ -39,7 +48,7 @@ namespace VTK::HDF5
 
 // ******************************** Constants *********************************
 
-/// Gzip compression level applied to chunked datasets
+/// Gzip compression level applied to chunked datasets (serial runs only)
 inline constexpr unsigned int deflateLevel = 4;
 
 /// Chunk rows for the small per-step bookkeeping arrays (Steps group)
@@ -51,12 +60,55 @@ inline constexpr hsize_t maxChunkRows = hsize_t{1} << 20;
 /// Row count below which a fixed dataset stays contiguous (no compression)
 inline constexpr hsize_t compressionThreshold = 1024;
 
+// ******************************* Slab Layout ********************************
+
+/**
+ * @class SlabLayout
+ * @brief Placement of this rank's rows inside a shared dataset
+ *
+ * @details Every dataset in a shared VTKHDF file is globally sized; each
+ * rank writes its own contiguous row slab of it. Serial runs degenerate to
+ * localRows == globalRows and rowOffset == 0, reproducing the single-piece
+ * layout. globalRows must be rank-identical (it sizes the collective
+ * dataset creation and extension).
+ */
+struct SlabLayout
+{
+    /// Rows this rank contributes (0 participates with an empty selection)
+    hsize_t localRows;
+
+    /// Total dataset rows across every rank
+    hsize_t globalRows;
+
+    /// Global row where this rank's slab starts
+    hsize_t rowOffset;
+};
+
+/// Slab of a distributed dataset: this rank's localCount rows at the
+/// rank-major global offset (collective — every rank must call, in the
+/// same order relative to other slab constructions)
+[[nodiscard]] SlabLayout distributedRows(Count localCount);
+
+/// Slab of a replicated dataset (Steps bookkeeping): the master writes
+/// every row, the other ranks participate with an empty selection
+[[nodiscard]] SlabLayout replicatedRows(hsize_t rows);
+
+/// Slab of a per-part table (the VTKHDF NumberOf* datasets): one row per
+/// rank, written at row myProcNo
+[[nodiscard]] SlabLayout oneRowPerRank();
+
+/// Slab of a per-piece offsets array (VTKHDF stores nItems + 1 offsets per
+/// piece, so the concatenated array carries one extra row per rank)
+[[nodiscard]] SlabLayout perPieceOffsetsRows(const SlabLayout& itemRows);
+
 // ***************************** File and Groups ******************************
 
 /// Create (truncate) an HDF5 file and return its open handle
+/// (MPI-IO access in parallel runs — collective, call on every rank)
 [[nodiscard]] hid_t createFile(const FilePath& path);
 
 /// Open an existing HDF5 file for read-write and return its handle
+/// (MPI-IO access in parallel runs — collective, call on every rank)
 [[nodiscard]] hid_t openFile(const FilePath& path);
 
 /// Create a child group under an open location and return its handle
@@ -100,7 +152,8 @@ void writeStringAttribute
 
 // ********************************* Datasets *********************************
 
-/// Write a fixed dataset in one shot (compressed above the threshold)
+/// Write a fixed dataset in one shot: created at rows.globalRows, this
+/// rank filling its slab (serial runs compress above the threshold)
 void writeDataset
 (
     hid_t location,
@@ -108,11 +161,12 @@ void writeDataset
     hid_t fileType,
     hid_t memType,
     const void* data,
-    hsize_t rows,
+    const SlabLayout& rows,
     hsize_t columns
 );
 
-/// Append rows to an extensible dataset
+/// Append rows to an extensible dataset: extended by rows.globalRows, this
+/// rank filling its slab (chunkRows must be rank-identical)
 void appendRows
 (
     hid_t location,
@@ -120,7 +174,7 @@ void appendRows
     hid_t fileType,
     hid_t memType,
     const void* data,
-    hsize_t rows,
+    const SlabLayout& rows,
     hsize_t columns,
     hsize_t chunkRows
 );

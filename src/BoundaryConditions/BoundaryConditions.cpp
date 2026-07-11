@@ -15,6 +15,9 @@
 // Implementation header
 #include "BoundaryConditions.h"
 
+// Project headers
+#include "Reduce.h"
+
 // Standard library headers
 #include <iostream>
 #include <utility>
@@ -126,6 +129,19 @@ const BoundaryPatch& BoundaryConditions::patch(const Name& patchName) const
     }
 
     FatalError("Patch " + patchName + " not found");
+}
+
+
+bool BoundaryConditions::hasFieldBC
+(
+    const Name& patchName,
+    Field field
+) const
+{
+    const auto patchIterator = patchBoundaryData_.find(patchName);
+
+    return patchIterator != patchBoundaryData_.end()
+        && patchIterator->second.contains(field);
 }
 
 
@@ -278,28 +294,36 @@ void BoundaryConditions::validatePatchNames() const
         validNames.insert(patch.patchName());
     }
 
+    // A decomposed rank holds only a fragment of the boundary, so a
+    // case-file patch may be legitimately absent here — it is an error
+    // only when NO rank has it. Iteration order over the sorted BC map
+    // is identical on every rank, so the collectives stay in lockstep
     for (const auto& entry : patchBoundaryData_)
     {
-        if (!validNames.contains(entry.first))
-        {
-            Message validList;
-            for (const auto& name : validNames)
-            {
-                if (!validList.empty())
-                {
-                    validList += ", ";
-                }
-                validList += "'" + name + "'";
-            }
+        const Count foundLocally = validNames.contains(entry.first) ? 1 : 0;
 
-            FatalError
-            (
-                "Boundary condition patch '"
-              + entry.first
-              + "' does not match any mesh patch. "
-                "Valid patch names: " + validList
-            );
+        if (globalSum(foundLocally) > 0)
+        {
+            continue;
         }
+
+        Message validList;
+        for (const auto& name : validNames)
+        {
+            if (!validList.empty())
+            {
+                validList += ", ";
+            }
+            validList += "'" + name + "'";
+        }
+
+        FatalError
+        (
+            "Boundary condition patch '"
+          + entry.first
+          + "' does not match any mesh patch on any rank. "
+            "Local patch names: " + validList
+        );
     }
 }
 

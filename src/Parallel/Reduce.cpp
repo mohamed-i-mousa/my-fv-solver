@@ -20,16 +20,12 @@
 
 // Project headers
 #include "Comm.h"
+#include "MpiScalarType.h"
 
 // ****************************** Internal Helpers ****************************
 
 namespace
 {
-
-MPI_Datatype mpiScalarType()
-{
-    return sizeof(Scalar) == 8 ? MPI_DOUBLE : MPI_FLOAT;
-}
 
 static_assert
 (

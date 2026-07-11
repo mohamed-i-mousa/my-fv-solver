@@ -26,6 +26,7 @@
 
 // Project headers
 #include "Scalar.h"
+#include "HaloExchange.h"
 #include "Reduce.h"
 #include "Logger.h"
 #include "TimeScheme.h"
@@ -70,6 +71,9 @@ MomentumTransport::MomentumTransport
     Uy_.setAll(initialVelocity.y());
     Uz_.setAll(initialVelocity.z());
     p_.setAll(initialPressure);
+
+    // Collective: constructed on every rank together
+    totalOwnedCells_ = globalSum(mesh_.numOwnedCells());
 }
 
 // **************************** Runtime Selection *****************************
@@ -291,7 +295,7 @@ bool MomentumTransport::isTransient() const noexcept
 void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
 {
     // Called only on the transient path
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -333,7 +337,7 @@ void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
 
 void MomentumTransport::updateVelocityGradients()
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -360,6 +364,10 @@ void MomentumTransport::updateVelocityGradients()
     gradientScheme_.limitGradient(Field::Uy, Uy_, gradUy_);
     gradientScheme_.limitGradient(Field::Uz, Uz_, gradUz_);
 
+    // Deferred correction reads the component gradients at both cells
+    // of every cut face
+    exchangeHalos(mesh_, {&gradUx_, &gradUy_, &gradUz_});
+
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
@@ -371,6 +379,10 @@ void MomentumTransport::updateVelocityGradients()
                 gradUz_[cellIdx]
             );
     }
+
+    // The transpose-gradient source interpolates the tensor at faces,
+    // reading it at both cells of every cut
+    exchangeHalos(mesh_, gradU_);
 }
 
 
@@ -508,7 +520,7 @@ Scalar MomentumTransport::massImbalance() const noexcept
 
     Scalar totalNormImbalance = S(0.0);
 
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static) reduction(+:totalNormImbalance)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -535,7 +547,7 @@ Scalar MomentumTransport::massImbalance() const noexcept
     }
 
     return globalSum(totalNormImbalance)
-         / S(std::max<Count>(1, globalSum(numCells)));
+         / S(std::max<Count>(1, totalOwnedCells_));
 }
 
 
@@ -545,7 +557,7 @@ Scalar MomentumTransport::velocityResidual() const noexcept
     Scalar num = S(0.0);
     Scalar den = S(0.0);
 
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static) reduction(+:num, den)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -560,8 +572,12 @@ Scalar MomentumTransport::velocityResidual() const noexcept
              + UzPrevIter_[cellIdx] * UzPrevIter_[cellIdx];
     }
 
-    num = std::sqrt(globalSum(num) + vSmallValue);
-    den = std::sqrt(globalSum(den) + vSmallValue);
+    // One batched collective for both accumulators (hot iteration path)
+    Scalar sums[2] = {num, den};
+    globalSum(sums);
+
+    num = std::sqrt(sums[0] + vSmallValue);
+    den = std::sqrt(sums[1] + vSmallValue);
 
     return num / den;
 }
@@ -572,7 +588,7 @@ MomentumTransport::computeCourant() const noexcept
 {
     const FaceFluxField& flux = faceMassFlux();
 
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     Scalar maxCourant = S(0.0);
     Scalar sumCourant = S(0.0);
@@ -599,6 +615,6 @@ MomentumTransport::computeCourant() const noexcept
     return
     {
         globalMax(maxCourant),
-        globalSum(sumCourant) / S(std::max<Count>(1, globalSum(numCells)))
+        globalSum(sumCourant) / S(std::max<Count>(1, totalOwnedCells_))
     };
 }

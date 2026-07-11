@@ -20,6 +20,7 @@
 
 // Project headers
 #include "GradientScheme.h"
+#include "HaloExchange.h"
 
 // ************************* Special Member Functions *************************
 
@@ -94,6 +95,7 @@ bool PISO::outerIteration
     {
         // Update Pressure gradient
         gradientScheme().fieldGradient(Field::p, pressure(), gradP());
+        exchangeHalos(mesh(), gradP());
 
         // Explicit momentum predictor
         solveMomentumExplicit(prevStep);
@@ -203,6 +205,11 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
     std::swap(Ux(), UxStar_);
     std::swap(Uy(), UyStar_);
     std::swap(Uz(), UzStar_);
+
+    // The sweeps wrote owned cells only: refresh U ghosts before the
+    // face diagonal and Rhie-Chow read them (DU is exchanged inside
+    // diagonalDU at finalization)
+    exchangeHalos(mesh(), {&Ux(), &Uy(), &Uz()});
 
     // Rebuild the face momentum diagonal
     buildFaceDiagonal();

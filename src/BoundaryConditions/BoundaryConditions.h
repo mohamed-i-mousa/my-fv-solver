@@ -122,6 +122,13 @@ public:
         return patches_.size();
     }
 
+    /// True when a boundary condition is registered for the field/patch
+    [[nodiscard]] bool hasFieldBC
+    (
+        const Name& patchName,
+        Field field
+    ) const;
+
     /// Get boundary condition for a field on a patch
     [[nodiscard]] const BoundaryData& fieldBC
     (

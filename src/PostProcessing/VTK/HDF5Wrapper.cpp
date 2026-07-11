@@ -8,6 +8,12 @@
  ------------------------------------------------------------------------------
  * @file HDF5Wrapper.cpp
  * @brief Implementation of the HDF5 C API helpers for VTKHDF authoring
+ *
+ * @details Includes <mpi.h> directly — with MpiScalarType.h, one of the two
+ * deliberate exceptions to the mpi-only-inside-src/Parallel convention: the
+ * MPI-IO file-access and collective-transfer property lists need the raw
+ * communicator (MPI_COMM_WORLD, matching src/Parallel usage), and a
+ * parallel hdf5.h pulls MPI in transitively anyway.
  *****************************************************************************/
 
 // ********************************** Headers *********************************
@@ -18,8 +24,13 @@
 // Standard library headers
 #include <algorithm>
 
+// External library headers
+#include <mpi.h>
+
 // Project headers
+#include "Comm.h"
 #include "ErrorHandler.h"
+#include "GlobalIndex.h"
 
 // **************************** namespace VTK::HDF5 ***************************
 
@@ -92,26 +103,197 @@ void requireStatus(herr_t status, const Message& what)
     }
 }
 
+
+// File-access plist: MPI-IO on the world communicator when the run is
+// parallel, so every rank shares one file (caller closes)
+hid_t createFileAccessPlist(const Message& what)
+{
+    const hid_t plist = requireValid(H5Pcreate(H5P_FILE_ACCESS), what);
+
+    if (Comm::parallelRun())
+    {
+        requireStatus
+        (
+            H5Pset_fapl_mpio(plist, MPI_COMM_WORLD, MPI_INFO_NULL),
+            what
+        );
+    }
+
+    return plist;
+}
+
+
+// Transfer plist: collective MPI-IO when the run is parallel (caller
+// closes)
+hid_t createTransferPlist(const Message& what)
+{
+    const hid_t plist = requireValid(H5Pcreate(H5P_DATASET_XFER), what);
+
+    if (Comm::parallelRun())
+    {
+        requireStatus(H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE), what);
+    }
+
+    return plist;
+}
+
+
+// Select this rank's slab (base file row + rows.rowOffset) and write it
+// collectively; a rank with zero local rows participates with an empty
+// selection so the collective write completes
+void writeSlab
+(
+    hid_t dataset,
+    hid_t memType,
+    const SlabLayout& rows,
+    hsize_t columns,
+    hsize_t baseRow,
+    const void* data,
+    const Message& what
+)
+{
+    const int rank = columns == 0 ? 1 : 2;
+    const hsize_t count[2] = {rows.localRows, columns};
+
+    const ScopedHandle fileSpace
+    {
+        requireValid(H5Dget_space(dataset), what),
+        H5Sclose
+    };
+
+    if (rows.localRows == 0)
+    {
+        requireStatus(H5Sselect_none(fileSpace.get()), what);
+    }
+    else
+    {
+        const hsize_t offset[2] = {baseRow + rows.rowOffset, 0};
+
+        requireStatus
+        (
+            H5Sselect_hyperslab
+            (
+                fileSpace.get(),
+                H5S_SELECT_SET,
+                offset,
+                nullptr,
+                count,
+                nullptr
+            ),
+            what
+        );
+    }
+
+    const ScopedHandle memSpace
+    {
+        requireValid(H5Screate_simple(rank, count, nullptr), what),
+        H5Sclose
+    };
+
+    const ScopedHandle transfer
+    {
+        createTransferPlist(what),
+        H5Pclose
+    };
+
+    // An empty vector's data() may be null; HDF5 rejects a null buffer
+    // even under an empty selection
+    static const char emptyBuffer = 0;
+    const void* buffer = rows.localRows == 0 ? &emptyBuffer : data;
+
+    requireStatus
+    (
+        H5Dwrite
+        (
+            dataset,
+            memType,
+            memSpace.get(),
+            fileSpace.get(),
+            transfer.get(),
+            buffer
+        ),
+        what
+    );
+}
+
 } // namespace
+
+// ******************************* Slab Layout ********************************
+
+SlabLayout distributedRows(Count localCount)
+{
+    const GlobalIndex globalRows(localCount);
+
+    return
+    {
+        static_cast<hsize_t>(localCount),
+        static_cast<hsize_t>(globalRows.totalCount()),
+        static_cast<hsize_t>(globalRows.offset())
+    };
+}
+
+
+SlabLayout replicatedRows(hsize_t rows)
+{
+    return {Comm::master() ? rows : 0, rows, 0};
+}
+
+
+SlabLayout oneRowPerRank()
+{
+    return
+    {
+        1,
+        static_cast<hsize_t>(Comm::nProcs()),
+        static_cast<hsize_t>(Comm::myProcNo())
+    };
+}
+
+
+SlabLayout perPieceOffsetsRows(const SlabLayout& itemRows)
+{
+    return
+    {
+        itemRows.localRows + 1,
+        itemRows.globalRows + static_cast<hsize_t>(Comm::nProcs()),
+        itemRows.rowOffset + static_cast<hsize_t>(Comm::myProcNo())
+    };
+}
 
 // ***************************** File and Groups ******************************
 
 hid_t createFile(const FilePath& path)
 {
+    const Message what = "create file '" + path + "'";
+
+    const ScopedHandle access
+    {
+        createFileAccessPlist(what),
+        H5Pclose
+    };
+
     return requireValid
     (
-        H5Fcreate(path.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT),
-        "create file '" + path + "'"
+        H5Fcreate(path.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, access.get()),
+        what
     );
 }
 
 
 hid_t openFile(const FilePath& path)
 {
+    const Message what = "open file '" + path + "'";
+
+    const ScopedHandle access
+    {
+        createFileAccessPlist(what),
+        H5Pclose
+    };
+
     return requireValid
     (
-        H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT),
-        "open file '" + path + "'"
+        H5Fopen(path.c_str(), H5F_ACC_RDWR, access.get()),
+        what
     );
 }
 
@@ -318,14 +500,14 @@ void writeDataset
     hid_t fileType,
     hid_t memType,
     const void* data,
-    hsize_t rows,
+    const SlabLayout& rows,
     hsize_t columns
 )
 {
     const Message what = "write dataset '" + Message{name} + "'";
 
     const int rank = columns == 0 ? 1 : 2;
-    const hsize_t dims[2] = {rows, columns};
+    const hsize_t dims[2] = {rows.globalRows, columns};
 
     const ScopedHandle space
     {
@@ -339,11 +521,13 @@ void writeDataset
         H5Pclose
     };
 
-    if (rows >= compressionThreshold)
+    // Compression is serial-only: filtered chunks under collective MPI-IO
+    // funnel each chunk through a single owner rank
+    if (!Comm::parallelRun() && rows.globalRows >= compressionThreshold)
     {
         const hsize_t chunk[2] =
         {
-            std::min(rows, maxChunkRows),
+            std::min(rows.globalRows, maxChunkRows),
             columns == 0 ? 1 : columns
         };
 
@@ -371,13 +555,11 @@ void writeDataset
         H5Dclose
     };
 
-    if (rows > 0)
+    // rows.globalRows is rank-identical, so every rank takes this branch
+    // together — a globally empty dataset skips the collective write
+    if (rows.globalRows > 0)
     {
-        requireStatus
-        (
-            H5Dwrite(dataset.get(), memType, H5S_ALL, H5S_ALL, H5P_DEFAULT, data),
-            what
-        );
+        writeSlab(dataset.get(), memType, rows, columns, 0, data, what);
     }
 }
 
@@ -389,7 +571,7 @@ void appendRows
     hid_t fileType,
     hid_t memType,
     const void* data,
-    hsize_t rows,
+    const SlabLayout& rows,
     hsize_t columns,
     hsize_t chunkRows
 )
@@ -424,8 +606,14 @@ void appendRows
         };
 
         requireStatus(H5Pset_chunk(plist.get(), rank, chunk), what);
-        requireStatus(H5Pset_shuffle(plist.get()), what);
-        requireStatus(H5Pset_deflate(plist.get(), deflateLevel), what);
+
+        // Compression is serial-only: filtered chunks under collective
+        // MPI-IO funnel each chunk through a single owner rank
+        if (!Comm::parallelRun())
+        {
+            requireStatus(H5Pset_shuffle(plist.get()), what);
+            requireStatus(H5Pset_deflate(plist.get(), deflateLevel), what);
+        }
 
         const ScopedHandle created
         {
@@ -447,7 +635,10 @@ void appendRows
         };
     }
 
-    if (rows == 0)
+    // rows.globalRows is rank-identical, so every rank returns together;
+    // a locally empty rank must NOT return here — the extension and the
+    // write below are collective
+    if (rows.globalRows == 0)
     {
         return;
     }
@@ -473,51 +664,10 @@ void appendRows
         );
     }
 
-    const hsize_t extended[2] = {current[0] + rows, columns};
+    const hsize_t extended[2] = {current[0] + rows.globalRows, columns};
     requireStatus(H5Dset_extent(dataset.get(), extended), what);
 
-    const ScopedHandle fileSpace
-    {
-        requireValid(H5Dget_space(dataset.get()), what),
-        H5Sclose
-    };
-
-    const hsize_t offset[2] = {current[0], 0};
-    const hsize_t count[2] = {rows, columns};
-
-    requireStatus
-    (
-        H5Sselect_hyperslab
-        (
-            fileSpace.get(),
-            H5S_SELECT_SET,
-            offset,
-            nullptr,
-            count,
-            nullptr
-        ),
-        what
-    );
-
-    const ScopedHandle memSpace
-    {
-        requireValid(H5Screate_simple(rank, count, nullptr), what),
-        H5Sclose
-    };
-
-    requireStatus
-    (
-        H5Dwrite
-        (
-            dataset.get(),
-            memType,
-            memSpace.get(),
-            fileSpace.get(),
-            H5P_DEFAULT,
-            data
-        ),
-        what
-    );
+    writeSlab(dataset.get(), memType, rows, columns, current[0], data, what);
 }
 
 } // namespace VTK::HDF5

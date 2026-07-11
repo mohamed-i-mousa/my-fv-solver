@@ -89,22 +89,14 @@ void PetscLinearSolver::solve
         FatalError("LinearSolver: x and b size mismatch");
     }
 
-    // Lazy solution wrapper: sized on first solve, reused afterwards; the
-    // caller's field is placed per solve, so the wrapper allocates no
-    // backing array (single-rank form; distributed sizing lands in Phase 5)
+    // Lazy solution wrapper: sized on first solve (local = owned rows),
+    // reused afterwards. VECSTANDARD resolves seq/mpi with the Mat; the
+    // caller's owned-prefix storage is placed over it per solve
     if (solution_ == nullptr)
     {
-        PETSC_CHECK
-        (
-            VecCreateSeqWithArray
-            (
-                PETScRuntime::comm(),
-                1,
-                systemSize,
-                nullptr,
-                &solution_
-            )
-        );
+        PETSC_CHECK(VecCreate(PETScRuntime::comm(), &solution_));
+        PETSC_CHECK(VecSetSizes(solution_, systemSize, PETSC_DECIDE));
+        PETSC_CHECK(VecSetType(solution_, VECSTANDARD));
     }
 
     // Keep the previous iterate for the non-finite rollback guard

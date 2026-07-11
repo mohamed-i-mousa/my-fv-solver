@@ -35,39 +35,60 @@ Matrix::Matrix
     mesh_{mesh},
     bcManager_{boundaryConds}
 {
-    const Count numCells = mesh_.numCells();
+    const Count numOwnedCells = mesh_.numOwnedCells();
     const Count numFaces = mesh_.numFaces();
 
-    // Slot-ordered face lists; faceSlot_ maps a face to its first
-    // off-diagonal slot (internal) or its boundary scratch ordinal
+    // Slot-ordered face lists; a face with a ghost cell on either side
+    // is a processor face (both sides are ghost-free on a single rank)
     faceSlot_.assign(numFaces, 0);
+    faceScratch_.assign(numFaces, 0);
 
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
-        if (mesh_.faces()[faceIdx].isBoundary())
+        const Face& face = mesh_.faces()[faceIdx];
+
+        if (face.isBoundary())
         {
             faceSlot_[faceIdx] = boundaryFaces_.size();
             boundaryFaces_.push_back(faceIdx);
         }
+        else if
+        (
+            face.ownerCell() >= numOwnedCells
+         || face.neighborCell().value() >= numOwnedCells
+        )
+        {
+            processorFaces_.push_back(faceIdx);
+        }
         else
         {
             faceSlot_[faceIdx] = 2 * internalFaces_.size();
+            faceScratch_[faceIdx] = faceSlot_[faceIdx];
             internalFaces_.push_back(faceIdx);
         }
     }
 
     const Count numInternalFaces = internalFaces_.size();
+    const Count numProcessorFaces = processorFaces_.size();
     const Count numBoundaryFaces = boundaryFaces_.size();
 
-    // COO layout: [off-diagonals | (future processor slots) | diagonals]
-    diagOffset_ = 2 * numInternalFaces;
-    const Count numCoo = diagOffset_ + numCells;
+    // COO layout: [internal off-diag pairs | processor | diagonals], one
+    // scribble slot appended for the processor faces' remote-side writes
+    for (Index m = 0; m < numProcessorFaces; ++m)
+    {
+        faceSlot_[processorFaces_[m]] = 2 * numInternalFaces + m;
+        faceScratch_[processorFaces_[m]] =
+            2 * (numInternalFaces + m);
+    }
 
-    // The fixed sparsity pattern: slot 2k couples (owner, neighbor) of
-    // internal face k, slot 2k+1 the reverse, and one diagonal per cell.
-    // Indices are global through the rank-major cell numbering (identity
-    // on one rank), so the pattern is already distribution-ready
-    const GlobalIndex globalCells(numCells);
+    diagOffset_ = 2 * numInternalFaces + numProcessorFaces;
+    const Count numCoo = diagOffset_ + numOwnedCells;
+    scribbleSlot_ = numCoo;
+
+    // The fixed sparsity pattern, in GLOBAL indices: rank-major owned
+    // cells, ghost columns through the mesh's ghost global ids
+    const GlobalIndex globalCells(numOwnedCells);
+    const IndexListRef ghostGlobals = mesh_.ghostGlobalIndices();
 
     std::vector<PetscInt> cooRows(numCoo);
     std::vector<PetscInt> cooCols(numCoo);
@@ -89,7 +110,26 @@ Matrix::Matrix
         cooCols[2 * k + 1] = owner;
     }
 
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    // A processor face contributes one entry: the owned cell's row, the
+    // ghost cell's global column (the mirror is the neighbor rank's)
+    for (Index m = 0; m < numProcessorFaces; ++m)
+    {
+        const Face& face = mesh_.faces()[processorFaces_[m]];
+        const Index owner = face.ownerCell();
+        const Index neighbor = face.neighborCell().value();
+        const Index ownedSide = owner < numOwnedCells ? owner : neighbor;
+        const Index ghostSide = owner < numOwnedCells ? neighbor : owner;
+
+        cooRows[2 * numInternalFaces + m] =
+            static_cast<PetscInt>(globalCells.toGlobal(ownedSide));
+        cooCols[2 * numInternalFaces + m] =
+            static_cast<PetscInt>
+            (
+                ghostGlobals[ghostSide - numOwnedCells]
+            );
+    }
+
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const auto diagIdx =
             static_cast<PetscInt>(globalCells.toGlobal(cellIdx));
@@ -98,7 +138,7 @@ Matrix::Matrix
         cooCols[diagOffset_ + cellIdx] = diagIdx;
     }
 
-    const auto n = static_cast<PetscInt>(numCells);
+    const auto n = static_cast<PetscInt>(numOwnedCells);
 
     PETSC_CHECK(MatCreate(PETScRuntime::comm(), &matrixA_));
     PETSC_CHECK(MatSetSizes(matrixA_, n, n, PETSC_DECIDE, PETSC_DECIDE));
@@ -114,28 +154,22 @@ Matrix::Matrix
         )
     );
 
-    // Staging and scratch buffers, sized once
-    cooValues_.assign(numCoo, S(0.0));
-    vectorB_.assign(numCells, S(0.0));
-    faceDiag_.assign(2 * numInternalFaces, S(0.0));
-    faceRhs_.assign(2 * numInternalFaces, S(0.0));
+    // Staging and scratch buffers, sized once; one scribble slot per
+    // processor face keeps pass 1b free of shared writes
+    cooValues_.assign(numCoo + numProcessorFaces, S(0.0));
+    vectorB_.assign(numOwnedCells, S(0.0));
+    faceDiag_.assign(2 * (numInternalFaces + numProcessorFaces), S(0.0));
+    faceRhs_.assign(2 * (numInternalFaces + numProcessorFaces), S(0.0));
     boundaryDiag_.assign(numBoundaryFaces, S(0.0));
     boundaryRhs_.assign(numBoundaryFaces, S(0.0));
 
-    // RHS handle wraps vectorB_ storage: staging writes are the vector,
-    // with no PETSc-owned backing array allocated behind the wrapper
-    // (single-rank form; distributed sizing replaces it in Phase 5)
-    PETSC_CHECK
-    (
-        VecCreateSeqWithArray
-        (
-            PETScRuntime::comm(),
-            1,
-            n,
-            vectorB_.data(),
-            &rhsVec_
-        )
-    );
+    // RHS handle wraps vectorB_ storage: staging writes are the vector.
+    // VECSTANDARD resolves seq/mpi with the Mat, at the cost of a backing
+    // array the placed storage shadows
+    PETSC_CHECK(VecCreate(PETScRuntime::comm(), &rhsVec_));
+    PETSC_CHECK(VecSetSizes(rhsVec_, n, PETSC_DECIDE));
+    PETSC_CHECK(VecSetType(rhsVec_, VECSTANDARD));
+    PETSC_CHECK(VecPlaceArray(rhsVec_, vectorB_.data()));
 }
 
 
@@ -157,8 +191,9 @@ void Matrix::buildMatrix(const TransportEquation& equation)
 {
     lastRelaxationFactor_ = S(0.0);
 
-    const Count numCells = mesh_.numCells();
+    const Count numOwnedCells = mesh_.numOwnedCells();
     const Count numInternalFaces = internalFaces_.size();
+    const Count numProcessorFaces = processorFaces_.size();
     const Count numBoundaryFaces = boundaryFaces_.size();
 
     // Pass 1: internal faces write their exclusive off-diagonal slots and
@@ -166,7 +201,34 @@ void Matrix::buildMatrix(const TransportEquation& equation)
     #pragma omp parallel for schedule(static)
     for (Index k = 0; k < numInternalFaces; ++k)
     {
-        assembleInternalFace(k, mesh_.faces()[internalFaces_[k]], equation);
+        assembleInternalFace
+        (
+            2 * k,
+            2 * k,
+            2 * k + 1,
+            mesh_.faces()[internalFaces_[k]],
+            equation
+        );
+    }
+
+    // Pass 1b: processor faces run the same math, but only the owned
+    // cell's row lands in a real slot — the ghost side goes to the
+    // scribble slot (the neighbor rank assembles the mirror entry)
+    #pragma omp parallel for schedule(static)
+    for (Index m = 0; m < numProcessorFaces; ++m)
+    {
+        const Face& face = mesh_.faces()[processorFaces_[m]];
+        const bool ownerIsLocal = face.ownerCell() < numOwnedCells;
+        const Index cooSlot = faceSlot_[processorFaces_[m]];
+
+        assembleInternalFace
+        (
+            faceScratch_[processorFaces_[m]],
+            ownerIsLocal ? cooSlot : scribbleSlot_ + m,
+            ownerIsLocal ? scribbleSlot_ + m : cooSlot,
+            face,
+            equation
+        );
     }
 
     // Pass 2: boundary faces stage their owner-cell contributions
@@ -177,9 +239,10 @@ void Matrix::buildMatrix(const TransportEquation& equation)
     }
 
     // Pass 3: per-cell gather sums the face scratch into the single
-    // diagonal slot and RHS entry (race-free: one writer per cell)
+    // diagonal slot and RHS entry (race-free: one writer per cell;
+    // ghost cells own no row and are never gathered)
     #pragma omp parallel for schedule(static)
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const Cell& cell = mesh_.cells()[cellIdx];
 
@@ -188,17 +251,17 @@ void Matrix::buildMatrix(const TransportEquation& equation)
 
         for (const Index faceIdx : cell.faceIndices())
         {
-            const Index slot = faceSlot_[faceIdx];
-
             if (mesh_.faces()[faceIdx].isBoundary())
             {
-                diag += boundaryDiag_[slot];
-                rhs += boundaryRhs_[slot];
+                diag += boundaryDiag_[faceSlot_[faceIdx]];
+                rhs += boundaryRhs_[faceSlot_[faceIdx]];
             }
             else
             {
+                // Internal and processor faces share the scratch layout
                 const Index side =
                     mesh_.faces()[faceIdx].ownerCell() == cellIdx ? 0 : 1;
+                const Index slot = faceScratch_[faceIdx];
 
                 diag += faceDiag_[slot + side];
                 rhs += faceRhs_[slot + side];
@@ -241,9 +304,9 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
         FatalError("Matrix::relax: alpha must be positive");
     }
 
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
-    if (phiPrevIter.size() != numCells)
+    if (phiPrevIter.size() < numCells)
     {
         FatalError
         (
@@ -293,12 +356,13 @@ void Matrix::explicitJacobiUpdate
     ScalarField& phiNew
 ) const
 {
-    const Count numCells = mesh_.numCells();
+    const Count numOwnedCells = mesh_.numOwnedCells();
 
-    // Single Jacobi sweep:
+    // Single Jacobi sweep over owned rows (ghost neighbor values enter
+    // through phiOld, current per the halo contract):
     //     phiNew_P = (b_P - sum_{N != P} A_PN phiOld_N) / A_PP.
     #pragma omp parallel for schedule(static)
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const Scalar diagonal = cooValues_[diagOffset_ + cellIdx];
         Scalar offDiagonalSum = S(0.0);
@@ -312,12 +376,16 @@ void Matrix::explicitJacobiUpdate
                 continue;
             }
 
-            // Row cellIdx couples to the cell across each internal face
-            const Index slot = faceSlot_[faceIdx];
+            // Row cellIdx couples to the cell across each two-cell face;
+            // a processor face's single slot IS the local row's coupling
             const bool isOwner = face.ownerCell() == cellIdx;
-            const Index rowSlot = isOwner ? slot : slot + 1;
             const Index neighborIdx =
                 isOwner ? face.neighborCell().value() : face.ownerCell();
+            const Index slot = faceSlot_[faceIdx];
+            const Index rowSlot =
+                neighborIdx >= numOwnedCells
+              ? slot
+              : (isOwner ? slot : slot + 1);
 
             offDiagonalSum += cooValues_[rowSlot] * phiOld[neighborIdx];
         }
@@ -331,7 +399,9 @@ void Matrix::explicitJacobiUpdate
 
 void Matrix::assembleInternalFace
 (
-    Index k,
+    Index scratchSlot,
+    Index cooOwnerSlot,
+    Index cooNeighborSlot,
     const Face& face,
     const TransportEquation& equation
 )
@@ -368,10 +438,10 @@ void Matrix::assembleInternalFace
 
     // Off-diagonal slots (exclusive to this face) and per-side diagonal
     // contributions gathered later by the owner/neighbor cells
-    cooValues_[2 * k] = -aDiff + aNConv;            // A(owner, neighbor)
-    cooValues_[2 * k + 1] = -aDiff - aPConv;        // A(neighbor, owner)
-    faceDiag_[2 * k] = aDiff + aPConv;              // owner diagonal share
-    faceDiag_[2 * k + 1] = aDiff - aNConv;          // neighbor diagonal share
+    cooValues_[cooOwnerSlot] = -aDiff + aNConv;     // A(owner, neighbor)
+    cooValues_[cooNeighborSlot] = -aDiff - aPConv;  // A(neighbor, owner)
+    faceDiag_[scratchSlot] = aDiff + aPConv;        // owner diagonal share
+    faceDiag_[scratchSlot + 1] = aDiff - aNConv;    // neighbor diag share
 
     // Non-orthogonal correction (explicit)
     const Vector Tf = Sf - Ef;
@@ -410,8 +480,8 @@ void Matrix::assembleInternalFace
         rhsNeighbor += deferredCorrection;
     }
 
-    faceRhs_[2 * k] = rhsOwner;
-    faceRhs_[2 * k + 1] = rhsNeighbor;
+    faceRhs_[scratchSlot] = rhsOwner;
+    faceRhs_[scratchSlot + 1] = rhsNeighbor;
 }
 
 
@@ -566,9 +636,12 @@ void Matrix::setValues
 (
     IndexListRef cellIndices,
     ScalarListRef values,
-    ScalarListRef fractions
+    ScalarListRef fractions,
+    OptionalRef<ScalarField> ghostFractions,
+    OptionalRef<ScalarField> ghostValues
 )
 {
+    const Count numOwnedCells = mesh_.numOwnedCells();
     const bool hasFractions = !fractions.empty();
 
     for (Index i = 0; i < cellIndices.size(); ++i)
@@ -587,7 +660,7 @@ void Matrix::setValues
         {
             // Full constraint: zero the row and column couplings, moving
             // the known-value column coupling to the neighbors' RHS.
-            // Every coupling of this cell lives on one of its internal
+            // Every coupling of this cell lives on one of its two-cell
             // faces: slot = A(owner, neighbor), slot + 1 = the reverse.
             for (const Index faceIdx : mesh_.cells()[cellIdx].faceIndices())
             {
@@ -600,10 +673,20 @@ void Matrix::setValues
 
                 const Index slot = faceSlot_[faceIdx];
                 const bool isOwner = face.ownerCell() == cellIdx;
-                const Index rowSlot = isOwner ? slot : slot + 1;
-                const Index colSlot = isOwner ? slot + 1 : slot;
                 const Index neighborIdx =
                     isOwner ? face.neighborCell().value() : face.ownerCell();
+
+                if (neighborIdx >= numOwnedCells)
+                {
+                    // Processor face: only the local row's coupling lives
+                    // here; the neighbor rank moves ITS coupling when it
+                    // sees this cell constrained in its ghost fields
+                    cooValues_[slot] = S(0.0);
+                    continue;
+                }
+
+                const Index rowSlot = isOwner ? slot : slot + 1;
+                const Index colSlot = isOwner ? slot + 1 : slot;
 
                 const Scalar coupling = cooValues_[colSlot];
                 if (coupling != S(0.0))
@@ -628,6 +711,40 @@ void Matrix::setValues
 
             cooValues_[diagOffset_ + cellIdx] += coeff;
             vectorB_[cellIdx] += coeff * values[i];
+        }
+    }
+
+    if (!ghostFractions || !ghostValues)
+    {
+        return;
+    }
+
+    // Ghost cells constrained on their owning rank: that rank replaced
+    // the row; this rank moves its own coupling to the RHS and zeroes it
+    // (the mirror of the processor-face skip in the loop above)
+    const ScalarField& fractionsField = ghostFractions->get();
+    const ScalarField& valuesField = ghostValues->get();
+
+    for (const Index faceIdx : processorFaces_)
+    {
+        const Face& face = mesh_.faces()[faceIdx];
+        const Index owner = face.ownerCell();
+        const Index neighbor = face.neighborCell().value();
+        const Index ownedSide = owner < numOwnedCells ? owner : neighbor;
+        const Index ghostSide = owner < numOwnedCells ? neighbor : owner;
+
+        if (fractionsField[ghostSide] <= S(1.0) - rootSmallValue_)
+        {
+            continue;
+        }
+
+        const Index slot = faceSlot_[faceIdx];
+        const Scalar coupling = cooValues_[slot];
+
+        if (coupling != S(0.0))
+        {
+            vectorB_[ownedSide] -= coupling * valuesField[ghostSide];
+            cooValues_[slot] = S(0.0);
         }
     }
 }

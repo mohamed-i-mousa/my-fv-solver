@@ -11,10 +11,16 @@
  *
  * @details Writes a static-geometry temporal VTKHDF PolyData holding all
  * boundary patch faces as polygons over a compressed local point set.
- * 
+ *
  * Patch-metadata arrays are re-emitted every step because a temporal reader
  * expects an offsets entry for every cell-data array at every step. The file
  * is fully closed between writes.
+ *
+ * Parallel runs share ONE file: every rank holds a writer for the same
+ * path and each rank's boundary faces (processor cuts excluded) form one
+ * piece of a multi-piece layout, written collectively via MPI-IO. Every
+ * method is collective — all ranks must call it, with an identical field
+ * set, even when a rank's boundary is empty.
  *
  * @class HDF5BoundaryData
  *****************************************************************************/
@@ -153,7 +159,13 @@ private:
     /// Number of time steps appended
     Count stepCount_;
 
-    /// Global face index of each exported boundary face, in polygon order
+    /// Global boundary-face count across every rank (set by writeGeometry)
+    Count globalNumBoundaryFaces_;
+
+    /// Global row where this rank's face slab starts (set by writeGeometry)
+    Index boundaryFaceRowOffset_;
+
+    /// Mesh face index of each exported boundary face, in polygon order
     IndexList boundaryFaceIndices_;
 
     /// Static per-face patch metadata, cached for per-step re-emission

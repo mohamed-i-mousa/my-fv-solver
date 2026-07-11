@@ -173,7 +173,7 @@ void LeastSquares::precomputeInverseATA()
     using CholeskySolver = Eigen::LLT<Matrix3>;
     using LUSolver = Eigen::FullPivLU<Matrix3>;
 
-    // ADD A SINGLE LINE DESCRIPTION COMMENT 
+    // Sized over every cell; ghosts are not gradient sites and stay zero
     invATA_.resize(mesh().numCells());
 
     const Count numOwnedCells = mesh().numOwnedCells();

@@ -22,6 +22,7 @@
 #include <vector>
 
 // Project headers
+#include "Comm.h"
 #include "ErrorHandler.h"
 #include "HDF5Wrapper.h"
 
@@ -86,7 +87,9 @@ HDF5CellData::HDF5CellData
     finalized_{false},
     stepCount_{0},
     numCells_{0},
-    numNodes_{0}
+    numNodes_{0},
+    globalNumCells_{0},
+    cellRowOffset_{0}
 {
     file_ = HDF5::createFile(fileName_);
     vtkhdfGroup_ = HDF5::createGroup(file_, "VTKHDF");
@@ -129,6 +132,10 @@ void HDF5CellData::writeGeometry()
     const CellListRef allCells = mesh_.cells();
     const FaceListRef allFaces = mesh_.faces();
 
+    // Owned cells only: in a decomposed mesh the ghost tail duplicates
+    // cells the neighbor ranks write, and ghost stubs carry no topology
+    const Count numOwnedCells = mesh_.numOwnedCells();
+
     // Point coordinates, written once as double precision
     std::vector<double> points;
     points.reserve(allNodes.size() * 3);
@@ -145,7 +152,7 @@ void HDF5CellData::writeGeometry()
     std::vector<long long> offsets;
     const std::vector<unsigned char> types
     (
-        allCells.size(),
+        numOwnedCells,
         polyhedronCellType
     );
     std::vector<long long> faceConnectivity;
@@ -153,8 +160,8 @@ void HDF5CellData::writeGeometry()
     std::vector<long long> polyhedronToFaces;
     std::vector<long long> polyhedronOffsets;
 
-    offsets.reserve(allCells.size() + 1);
-    polyhedronOffsets.reserve(allCells.size() + 1);
+    offsets.reserve(numOwnedCells + 1);
+    polyhedronOffsets.reserve(numOwnedCells + 1);
     offsets.push_back(0);
     faceOffsets.push_back(0);
     polyhedronOffsets.push_back(0);
@@ -162,7 +169,7 @@ void HDF5CellData::writeGeometry()
     std::vector<long long> uniquePointIds;
     std::vector<long long> orientedFaceNodes;
 
-    for (Index cellIdx = 0; cellIdx < allCells.size(); ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const Cell& cell = allCells[cellIdx];
         const auto faceIndices = cell.faceIndices();
@@ -252,9 +259,25 @@ void HDF5CellData::writeGeometry()
         );
     }
 
-    // Geometry datasets (single implicit partition: NumberOf* are length 1)
+    // Slab placement of this rank's piece inside the shared datasets
+    // (collective: every rank builds these in the same order). The
+    // connectivity values above stay piece-local, so the buffers are
+    // written unchanged — only their placement is global.
+    const HDF5::SlabLayout pointRows =
+        HDF5::distributedRows(allNodes.size());
+    const HDF5::SlabLayout cellRows = HDF5::distributedRows(numOwnedCells);
+    const HDF5::SlabLayout connectivityRows =
+        HDF5::distributedRows(connectivity.size());
+    const HDF5::SlabLayout faceRows =
+        HDF5::distributedRows(polyhedronToFaces.size());
+    const HDF5::SlabLayout faceConnectivityRows =
+        HDF5::distributedRows(faceConnectivity.size());
+
+    // The NumberOf* part tables: one row per rank (length 1 when serial)
+    const HDF5::SlabLayout partRow = HDF5::oneRowPerRank();
+
     const long long numPoints = static_cast<long long>(allNodes.size());
-    const long long numCells = static_cast<long long>(allCells.size());
+    const long long numCells = static_cast<long long>(numOwnedCells);
     const long long numConnectivityIds =
         static_cast<long long>(connectivity.size());
     const long long numFaces =
@@ -269,7 +292,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numPoints,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -279,7 +302,7 @@ void HDF5CellData::writeGeometry()
         H5T_IEEE_F64LE,
         H5T_NATIVE_DOUBLE,
         points.data(),
-        allNodes.size(),
+        pointRows,
         3
     );
     HDF5::writeDataset
@@ -289,7 +312,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numCells,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -299,7 +322,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numConnectivityIds,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -309,7 +332,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         connectivity.data(),
-        connectivity.size(),
+        connectivityRows,
         0
     );
     HDF5::writeDataset
@@ -319,7 +342,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         offsets.data(),
-        offsets.size(),
+        HDF5::perPieceOffsetsRows(cellRows),
         0
     );
     HDF5::writeDataset
@@ -329,7 +352,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_U8LE,
         H5T_NATIVE_UCHAR,
         types.data(),
-        types.size(),
+        cellRows,
         0
     );
 
@@ -341,7 +364,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numFaces,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -351,7 +374,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numFaceConnectivityIds,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -361,7 +384,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numFaces,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -371,7 +394,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         faceConnectivity.data(),
-        faceConnectivity.size(),
+        faceConnectivityRows,
         0
     );
     HDF5::writeDataset
@@ -381,7 +404,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         faceOffsets.data(),
-        faceOffsets.size(),
+        HDF5::perPieceOffsetsRows(faceRows),
         0
     );
     HDF5::writeDataset
@@ -391,7 +414,7 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         polyhedronToFaces.data(),
-        polyhedronToFaces.size(),
+        faceRows,
         0
     );
     HDF5::writeDataset
@@ -401,12 +424,14 @@ void HDF5CellData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         polyhedronOffsets.data(),
-        polyhedronOffsets.size(),
+        HDF5::perPieceOffsetsRows(cellRows),
         0
     );
 
-    numCells_ = allCells.size();
+    numCells_ = numOwnedCells;
     numNodes_ = allNodes.size();
+    globalNumCells_ = static_cast<Count>(cellRows.globalRows);
+    cellRowOffset_ = static_cast<Index>(cellRows.rowOffset);
     geometryWritten_ = true;
 
     closeHandles();
@@ -415,8 +440,9 @@ void HDF5CellData::writeGeometry()
     {
         std::cout
             << "VTKHDF geometry written: " << fileName_ << '\n'
-            << "  - Number of points: " << numNodes_ << '\n'
-            << "  - Number of cells: " << numCells_ << '\n'
+            << "  - Number of points: " << pointRows.globalRows << '\n'
+            << "  - Number of cells: " << globalNumCells_ << '\n'
+            << "  - Number of pieces: " << Comm::nProcs() << '\n'
             << "  - Cell type: VTK_POLYHEDRON" << '\n';
     }
 }
@@ -457,7 +483,8 @@ void HDF5CellData::appendTimeStep
     {
         if (!scalarField) continue;
 
-        if (scalarField->size() != numCells_)
+        // Fields may carry a ghost tail past the owned prefix
+        if (scalarField->size() < numCells_)
         {
             FatalError
             (
@@ -493,9 +520,9 @@ void HDF5CellData::appendTimeStep
 
         if
         (
-            cx.size() != numCells_
-         || cy.size() != numCells_
-         || cz.size() != numCells_
+            cx.size() < numCells_
+         || cy.size() < numCells_
+         || cz.size() < numCells_
         )
         {
             FatalError
@@ -587,6 +614,16 @@ void HDF5CellData::appendCellDataArray
 {
     const hsize_t columns = components == 1 ? 0 : components;
 
+    // One step appends the rank-major concatenation of every piece; the
+    // chunk rows derive from the GLOBAL count (creation properties must
+    // be rank-identical for the collective create)
+    const HDF5::SlabLayout dataRows
+    {
+        static_cast<hsize_t>(numCells_),
+        static_cast<hsize_t>(globalNumCells_),
+        static_cast<hsize_t>(cellRowOffset_)
+    };
+
     HDF5::appendRows
     (
         cellDataGroup_,
@@ -594,9 +631,9 @@ void HDF5CellData::appendCellDataArray
         H5T_IEEE_F32LE,
         H5T_NATIVE_FLOAT,
         values,
-        numCells_,
+        dataRows,
         columns,
-        std::min<hsize_t>(numCells_, HDF5::maxChunkRows)
+        std::min<hsize_t>(globalNumCells_, HDF5::maxChunkRows)
     );
 
     const long long offsetValue =
@@ -609,12 +646,12 @@ void HDF5CellData::appendCellDataArray
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &offsetValue,
-        1,
+        HDF5::replicatedRows(1),
         0,
         HDF5::stepChunkRows
     );
 
-    cellDataRowOffsets_[name] += numCells_;
+    cellDataRowOffsets_[name] += globalNumCells_;
 }
 
 
@@ -658,7 +695,11 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
 {
     const double timeValue = static_cast<double>(time);
     const long long zero = 0;
-    const long long one = 1;
+    const long long numParts = static_cast<long long>(Comm::nProcs());
+
+    // Bookkeeping rows are identical on every rank: the master writes
+    // them, the other ranks participate in the collective append
+    const HDF5::SlabLayout oneRow = HDF5::replicatedRows(1);
 
     HDF5::appendRows
     (
@@ -667,12 +708,12 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_IEEE_F64LE,
         H5T_NATIVE_DOUBLE,
         &timeValue,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
 
-    // Static geometry: every step re-reads partition 0 at offset zero
+    // Static geometry: every step re-reads all parts from offset zero
     HDF5::appendRows
     (
         stepsGroup_,
@@ -680,7 +721,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -690,8 +731,8 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         "NumberOfParts",
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
-        &one,
-        1,
+        &numParts,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -702,7 +743,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -715,7 +756,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         1,
         HDF5::stepChunkRows
     );
@@ -726,7 +767,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         1,
         HDF5::stepChunkRows
     );
@@ -739,7 +780,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -750,7 +791,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -761,7 +802,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );

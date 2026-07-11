@@ -25,6 +25,8 @@
 
 // Project headers
 #include "Scalar.h"
+#include "HaloExchange.h"
+#include "PETScRuntime.h"
 #include "Reduce.h"
 #include "Logger.h"
 #include "LinearInterpolation.h"
@@ -82,6 +84,22 @@ Segregated::Segregated
     alphaP_{alphaP},
     nNonOrthogonalCorrectors_{nNonOrthogonalCorrectors}
 {
+    // Pure-Neumann pressure (no Dirichlet anchor on ANY rank) leaves the
+    // p' system with a constant null space the Krylov solver must know
+    Count fixedPressurePatches = 0;
+
+    for (const BoundaryPatch& patch : mesh.patches())
+    {
+        if (bc.hasFieldBC(patch.patchName(), Field::p)
+         && bc.fieldBC(patch.patchName(), Field::p).type()
+         == BCType::fixedValue)
+        {
+            ++fixedPressurePatches;
+        }
+    }
+
+    pCorrNeedsNullSpace_ = globalSum(fixedPressurePatches) == 0;
+
     UxAvgf_.setAll(initialVelocity.x());
     UyAvgf_.setAll(initialVelocity.y());
     UzAvgf_.setAll(initialVelocity.z());
@@ -129,7 +147,7 @@ Scalar Segregated::pressureResidual() const noexcept
     // Normalize p' RMS by RMS(p)
     Scalar sumP2 = S(0.0);
 
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     #pragma omp parallel for schedule(static) reduction(+:sumP2)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -138,7 +156,7 @@ Scalar Segregated::pressureResidual() const noexcept
     }
 
     const Scalar pRms =
-        std::sqrt(globalSum(sumP2) / S(globalSum(numCells)));
+        std::sqrt(globalSum(sumP2) / S(totalOwnedCells()));
 
     return lastPressureCorrectionRMS_ / (pRms + vSmallValue);
 }
@@ -180,7 +198,7 @@ void Segregated::updateEffectiveViscosity()
 
 void Segregated::assembleMomentum()
 {
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     // Reset diagonals accumulator
     DU_.setAll(S(0.0));
@@ -215,6 +233,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 
     // Seed the pressure gradient for the momentum source and Rhie-Chow
     gradientScheme().fieldGradient(Field::p, pressure(), gradP_);
+    exchangeHalos(mesh(), gradP_);
 
     updateEffectiveViscosity();
     assembleMomentum();
@@ -288,7 +307,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 
         momentumSolver_.solve
         (
-            {equations[momentumComponent].phi.data(), mesh().numCells()},
+            {equations[momentumComponent].phi.data(), mesh().numOwnedCells()},
             matrixConstruct_.matrixA(),
             matrixConstruct_.rhsVec()
         );
@@ -308,6 +327,10 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
         }
     }
 
+    // KSP writes owned entries only: refresh U ghosts before any face
+    // kernel reads them (one batched message per neighbor)
+    exchangeHalos(mesh(), {&Ux(), &Uy(), &Uz()});
+
     buildFaceDiagonal();
 }
 
@@ -315,7 +338,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 void Segregated::diagonalDU(Index component)
 {
     const std::span<const Scalar> diagonal = matrixConstruct_.diagonal();
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -332,6 +355,9 @@ void Segregated::diagonalDU(Index component)
                 S(3.0) * mesh().cells()[cellIdx].volume()
               / (DU_[cellIdx] + vSmallValue);
         }
+
+        // Rhie-Chow and the p' diffusion interpolate DU at cut faces
+        exchangeHalos(mesh(), {&DU_});
     }
 }
 
@@ -468,7 +494,7 @@ void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
 
 void Segregated::solvePressureCorrection()
 {
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     // Compute mass imbalance source term
     #pragma omp parallel for schedule(static)
@@ -500,6 +526,30 @@ void Segregated::solvePressureCorrection()
         .gradPhi    = gradPCorr_,
         .gradScheme = gradientScheme()
     };
+
+    // Pure-Neumann pressure: tell the KSP the constant vector is in the
+    // null space. Attached around the corrector loop only — the Matrix
+    // is shared with the momentum and turbulence systems
+    if (pCorrNeedsNullSpace_)
+    {
+        MatNullSpace constantNullSpace = nullptr;
+        PETSC_CHECK
+        (
+            MatNullSpaceCreate
+            (
+                PETScRuntime::comm(),
+                PETSC_TRUE,
+                0,
+                nullptr,
+                &constantNullSpace
+            )
+        );
+        PETSC_CHECK
+        (
+            MatSetNullSpace(matrixConstruct_.matrixA(), constantNullSpace)
+        );
+        PETSC_CHECK(MatNullSpaceDestroy(&constantNullSpace));
+    }
 
     for
     (
@@ -533,6 +583,10 @@ void Segregated::solvePressureCorrection()
             );
         }
 
+        // The corrector's face terms read p' and grad p' at both
+        // cells of every cut face
+        exchangeHalos(mesh(), {&pCorr_});
+
         // grad(p') feeds the next corrector's non-orthogonal term
         #pragma omp parallel for schedule(static)
         for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -540,13 +594,20 @@ void Segregated::solvePressureCorrection()
             gradPCorr_[cellIdx] =
                 gradientScheme().cellGradient(Field::pCorr, pCorr_, cellIdx);
         }
+
+        exchangeHalos(mesh(), gradPCorr_);
+    }
+
+    if (pCorrNeedsNullSpace_)
+    {
+        PETSC_CHECK(MatSetNullSpace(matrixConstruct_.matrixA(), nullptr));
     }
 }
 
 
 void Segregated::correctVelocity()
 {
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -555,6 +616,9 @@ void Segregated::correctVelocity()
         Uy()[cellIdx] -= DU_[cellIdx] * gradPCorr_[cellIdx].y();
         Uz()[cellIdx] -= DU_[cellIdx] * gradPCorr_[cellIdx].z();
     }
+
+    // The face averages below read the corrected U at both cells
+    exchangeHalos(mesh(), {&Ux(), &Uy(), &Uz()});
 
     // Update face velocities
     const Count numFaces = mesh().numFaces();
@@ -644,7 +708,7 @@ void Segregated::correctPressure()
 {
     Scalar sumSq = S(0.0);
 
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     #pragma omp parallel for schedule(static) reduction(+:sumSq)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -653,7 +717,7 @@ void Segregated::correctPressure()
     }
 
     lastPressureCorrectionRMS_ =
-        std::sqrt(globalSum(sumSq) / S(globalSum(numCells)));
+        std::sqrt(globalSum(sumSq) / S(totalOwnedCells()));
 
     // Apply pressure correction
     #pragma omp parallel for schedule(static)
@@ -661,12 +725,15 @@ void Segregated::correctPressure()
     {
         pressure()[cellIdx] += alphaP_ * pCorr_[cellIdx];
     }
+
+    // Next iteration's gradP stencil and Rhie-Chow read p across cuts
+    exchangeHalos(mesh(), {&pressure()});
 }
 
 
 void Segregated::addTransposeGradientSource()
 {
-    const Count numCells = mesh().numCells();
+    const Count numCells = mesh().numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)

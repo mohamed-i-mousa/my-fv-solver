@@ -32,8 +32,8 @@ pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 find_package(MPI REQUIRED COMPONENTS CXX)
 
 # Find METIS (mesh partitioning, used by src/Parallel/MeshDecomposer)
-find_path(METIS_INCLUDE_DIR metis.h)
-find_library(METIS_LIBRARY metis)
+find_path(METIS_INCLUDE_DIR metis.h REQUIRED)
+find_library(METIS_LIBRARY metis REQUIRED)
 
 # find OpenMP package (required for parallelization)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -45,8 +45,19 @@ endif()
 
 find_package(OpenMP REQUIRED)
 
-# Find the HDF5 C library
+# Find the HDF5 C library (must be a parallel/MPI build: the VTKHDF
+# writers do collective MPI-IO into one shared file per grid)
+set(HDF5_PREFER_PARALLEL ON)
 find_package(HDF5 REQUIRED COMPONENTS C)
+
+# Module-mode FindHDF5 reports HDF5_IS_PARALLEL; the hdf5 CMake config
+# package reports HDF5_PROVIDES_PARALLEL instead — accept either
+if(NOT HDF5_IS_PARALLEL AND NOT HDF5_PROVIDES_PARALLEL)
+    message(FATAL_ERROR
+        "Turblyze requires a parallel (MPI) HDF5 build; a serial build was "
+        "found. Install hdf5-mpi (e.g. 'brew install hdf5-mpi') or point "
+        "HDF5_ROOT at a parallel HDF5 installation.")
+endif()
 
 # --- List your source files ---
 add_executable(${PROJECT_NAME}
@@ -79,6 +90,7 @@ add_executable(${PROJECT_NAME}
     src/Parallel/MeshDecomposer.cpp
     src/Parallel/MeshDistributor.cpp
     src/Parallel/DecompositionChecker.cpp
+    src/Parallel/HaloExchange.cpp
     src/Solver/MomentumTransport.cpp
     src/Solver/Segregated.cpp
     src/Solver/SIMPLE.cpp

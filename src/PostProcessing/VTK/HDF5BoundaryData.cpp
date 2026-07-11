@@ -25,8 +25,10 @@
 
 // Project headers
 #include "BoundaryPatch.h"
+#include "Comm.h"
 #include "ErrorHandler.h"
 #include "HDF5Wrapper.h"
+#include "Reduce.h"
 
 // ******************************* namespace VTK ******************************
 
@@ -50,20 +52,26 @@ int checkedInt(Count value, const Message& label)
 }
 
 
-// Write one PolyData topology group with fixed (write-once) datasets
+// Write one PolyData topology group with fixed (write-once) datasets;
+// numCells is this rank's piece value, the slabs place this rank's rows
+// inside the shared datasets
 void writeTopologyGroup
 (
     hid_t location,
     const char* name,
     const std::vector<long long>& connectivity,
     const std::vector<long long>& offsets,
-    long long numCells
+    long long numCells,
+    const HDF5::SlabLayout& connectivityRows,
+    const HDF5::SlabLayout& offsetsRows
 )
 {
     hid_t group = HDF5::createGroup(location, name);
 
     const long long numConnectivityIds =
         static_cast<long long>(connectivity.size());
+
+    const HDF5::SlabLayout partRow = HDF5::oneRowPerRank();
 
     HDF5::writeDataset
     (
@@ -72,7 +80,7 @@ void writeTopologyGroup
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numCells,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -82,7 +90,7 @@ void writeTopologyGroup
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numConnectivityIds,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -92,7 +100,7 @@ void writeTopologyGroup
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         connectivity.data(),
-        connectivity.size(),
+        connectivityRows,
         0
     );
     HDF5::writeDataset
@@ -102,7 +110,7 @@ void writeTopologyGroup
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         offsets.data(),
-        offsets.size(),
+        offsetsRows,
         0
     );
 
@@ -130,7 +138,9 @@ HDF5BoundaryData::HDF5BoundaryData
     cellDataOffsetsGroup_{H5I_INVALID_HID},
     geometryWritten_{false},
     finalized_{false},
-    stepCount_{0}
+    stepCount_{0},
+    globalNumBoundaryFaces_{0},
+    boundaryFaceRowOffset_{0}
 {
     file_ = HDF5::createFile(fileName_);
     vtkhdfGroup_ = HDF5::createGroup(file_, "VTKHDF");
@@ -180,6 +190,13 @@ void HDF5BoundaryData::writeGeometry()
     for (Index patchIdx = 0; patchIdx < allPatches.size(); ++patchIdx)
     {
         const BoundaryPatch& patch = allPatches[patchIdx];
+
+        // Inter-rank cuts are not physical boundary
+        if (patch.type() == PatchType::processor)
+        {
+            continue;
+        }
+
         const int patchIdxInt = checkedInt(patchIdx, "patchIdx");
         const int patchZoneIdx = checkedInt(patch.zoneIdx(), "patchZoneIdx");
         const int patchTypeIdx = static_cast<int>(patch.type());
@@ -240,7 +257,13 @@ void HDF5BoundaryData::writeGeometry()
         }
     }
 
-    if (boundaryFaceIndices_.empty())
+    // A rank owning no boundary faces is normal in a decomposed run; only
+    // a globally empty boundary is worth a warning. The reduction is
+    // unconditional so every rank stays in lockstep, and the warning is
+    // master-gated because std::cerr is not silenced on the other ranks.
+    const Count globalBoundaryFaces = globalSum(boundaryFaceIndices_.size());
+
+    if (globalBoundaryFaces == 0 && Comm::master())
     {
         Warning
         (
@@ -277,7 +300,22 @@ void HDF5BoundaryData::writeGeometry()
         offsets.push_back(static_cast<long long>(connectivity.size()));
     }
 
-    // Geometry datasets (single implicit partition)
+    // Slab placement of this rank's piece inside the shared datasets
+    // (collective: every rank builds these in the same order, including
+    // ranks whose boundary is empty)
+    const HDF5::SlabLayout pointRows =
+        HDF5::distributedRows(localToGlobalNodes.size());
+    const HDF5::SlabLayout polygonRows =
+        HDF5::distributedRows(boundaryFaceIndices_.size());
+    const HDF5::SlabLayout connectivityRows =
+        HDF5::distributedRows(connectivity.size());
+
+    const HDF5::SlabLayout partRow = HDF5::oneRowPerRank();
+
+    // A topology that is empty on EVERY rank: no data rows, but still one
+    // per-piece offsets row (the spec's sum-of-nItems-plus-one layout)
+    const HDF5::SlabLayout emptyRows = {0, 0, 0};
+
     const long long numPoints =
         static_cast<long long>(localToGlobalNodes.size());
 
@@ -288,7 +326,7 @@ void HDF5BoundaryData::writeGeometry()
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &numPoints,
-        1,
+        partRow,
         0
     );
     HDF5::writeDataset
@@ -298,7 +336,7 @@ void HDF5BoundaryData::writeGeometry()
         H5T_IEEE_F64LE,
         H5T_NATIVE_DOUBLE,
         points.data(),
-        localToGlobalNodes.size(),
+        pointRows,
         3
     );
 
@@ -312,7 +350,9 @@ void HDF5BoundaryData::writeGeometry()
         "Vertices",
         emptyConnectivity,
         emptyOffsets,
-        0
+        0,
+        emptyRows,
+        HDF5::perPieceOffsetsRows(emptyRows)
     );
     writeTopologyGroup
     (
@@ -320,7 +360,9 @@ void HDF5BoundaryData::writeGeometry()
         "Lines",
         emptyConnectivity,
         emptyOffsets,
-        0
+        0,
+        emptyRows,
+        HDF5::perPieceOffsetsRows(emptyRows)
     );
     writeTopologyGroup
     (
@@ -328,7 +370,9 @@ void HDF5BoundaryData::writeGeometry()
         "Polygons",
         connectivity,
         offsets,
-        static_cast<long long>(boundaryFaceIndices_.size())
+        static_cast<long long>(boundaryFaceIndices_.size()),
+        connectivityRows,
+        HDF5::perPieceOffsetsRows(polygonRows)
     );
     writeTopologyGroup
     (
@@ -336,9 +380,13 @@ void HDF5BoundaryData::writeGeometry()
         "Strips",
         emptyConnectivity,
         emptyOffsets,
-        0
+        0,
+        emptyRows,
+        HDF5::perPieceOffsetsRows(emptyRows)
     );
 
+    globalNumBoundaryFaces_ = static_cast<Count>(polygonRows.globalRows);
+    boundaryFaceRowOffset_ = static_cast<Index>(polygonRows.rowOffset);
     geometryWritten_ = true;
 
     closeHandles();
@@ -347,9 +395,9 @@ void HDF5BoundaryData::writeGeometry()
     {
         std::cout
             << "VTKHDF boundary geometry written: " << fileName_ << '\n'
-            << "  - Boundary faces: " << boundaryFaceIndices_.size() << '\n'
-            << "  - Boundary nodes: " << localToGlobalNodes.size() << '\n'
-            << "  - Boundary patches: " << allPatches.size() << '\n';
+            << "  - Boundary faces: " << globalNumBoundaryFaces_ << '\n'
+            << "  - Boundary nodes: " << pointRows.globalRows << '\n'
+            << "  - Number of pieces: " << Comm::nProcs() << '\n';
     }
 }
 
@@ -521,7 +569,15 @@ void HDF5BoundaryData::appendFaceDataArray
     const void* values
 )
 {
-    const Count numBoundaryFaces = boundaryFaceIndices_.size();
+    // One step appends the rank-major concatenation of every piece; the
+    // chunk rows derive from the GLOBAL count (creation properties must
+    // be rank-identical for the collective create)
+    const HDF5::SlabLayout dataRows
+    {
+        static_cast<hsize_t>(boundaryFaceIndices_.size()),
+        static_cast<hsize_t>(globalNumBoundaryFaces_),
+        static_cast<hsize_t>(boundaryFaceRowOffset_)
+    };
 
     HDF5::appendRows
     (
@@ -530,11 +586,11 @@ void HDF5BoundaryData::appendFaceDataArray
         fileType,
         memType,
         values,
-        numBoundaryFaces,
+        dataRows,
         0,
         std::min<hsize_t>
         (
-            std::max<hsize_t>(numBoundaryFaces, 1),
+            std::max<hsize_t>(globalNumBoundaryFaces_, 1),
             HDF5::maxChunkRows
         )
     );
@@ -549,12 +605,12 @@ void HDF5BoundaryData::appendFaceDataArray
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &offsetValue,
-        1,
+        HDF5::replicatedRows(1),
         0,
         HDF5::stepChunkRows
     );
 
-    cellDataRowOffsets_[name] += numBoundaryFaces;
+    cellDataRowOffsets_[name] += globalNumBoundaryFaces_;
 }
 
 
@@ -583,8 +639,12 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
 {
     const double timeValue = static_cast<double>(time);
     const long long zero = 0;
-    const long long one = 1;
+    const long long numParts = static_cast<long long>(Comm::nProcs());
     const long long zero4[4] = {0, 0, 0, 0};
+
+    // Bookkeeping rows are identical on every rank: the master writes
+    // them, the other ranks participate in the collective append
+    const HDF5::SlabLayout oneRow = HDF5::replicatedRows(1);
 
     HDF5::appendRows
     (
@@ -593,12 +653,12 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
         H5T_IEEE_F64LE,
         H5T_NATIVE_DOUBLE,
         &timeValue,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
 
-    // Static geometry: every step re-reads partition 0 at offset zero
+    // Static geometry: every step re-reads all parts from offset zero
     HDF5::appendRows
     (
         stepsGroup_,
@@ -606,7 +666,7 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -616,8 +676,8 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
         "NumberOfParts",
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
-        &one,
-        1,
+        &numParts,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -628,7 +688,7 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         &zero,
-        1,
+        oneRow,
         0,
         HDF5::stepChunkRows
     );
@@ -641,7 +701,7 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         zero4,
-        1,
+        oneRow,
         4,
         HDF5::stepChunkRows
     );
@@ -652,7 +712,7 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
         H5T_STD_I64LE,
         H5T_NATIVE_LLONG,
         zero4,
-        1,
+        oneRow,
         4,
         HDF5::stepChunkRows
     );

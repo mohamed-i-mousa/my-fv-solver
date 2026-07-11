@@ -16,6 +16,7 @@
 #include "CFDApplication.h"
 
 // Standard library headers
+#include <optional>
 #include <cmath>
 #include <iostream>
 
@@ -64,6 +65,9 @@ void runSteady
 
     // Post-process results
     PostProcess::reportStatistics(*modules.solver);
+
+    // One shared VTKHDF file per grid; parallel runs write each rank's
+    // owned cells as one piece of it, collectively via MPI-IO
     PostProcess::exportResults
     (
         *modules.solver,
@@ -111,7 +115,8 @@ void runTransient
         numSteps = 1;
     }
 
-    // One VTKHDF file per grid: geometry once, cell data appended per step
+    // One shared VTKHDF file per grid (one piece per rank when
+    // decomposed): geometry once, cell data appended per step
     VTK::HDF5CellData volumeWriter
     (
         PostProcess::cellDataPath(config),
@@ -234,20 +239,6 @@ void CFDApplication::run()
 
     // Create mesh (decomposed across ranks in a parallel run)
     Mesh mesh = MeshCreator::create(config);
-
-    // ADD A SINGLE LINE COMMENT HERE TO DESCRIBE
-    if (Comm::parallelRun())
-    {
-        std::cout << '\n';
-        Logger::sectionHeader("Distributed Mesh Ready");
-        Logger::keyValue
-        (
-            "Solve path",
-            "not yet parallel; decomposition validated, stopping"
-        );
-        Logger::iterationFooter();
-        return;
-    }
 
     // Load boundary conditions
     BoundaryConditions bcManager;

@@ -75,7 +75,7 @@ void GradientScheme::limitGradient
     VectorField& gradPhi
 ) const
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     // The mirrored velocity cannot be formed from a single component field
     // The symmetry faces are excluded for velocity components 
@@ -159,7 +159,7 @@ void GradientScheme::fieldGradient
     VectorField& gradPhi
 ) const
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)

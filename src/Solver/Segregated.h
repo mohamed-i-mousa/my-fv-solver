@@ -249,6 +249,9 @@ private:
     /// Face momentum diagonal coefficients
     FaceFluxField DUf_;
 
+    /// True when p' has no Dirichlet anchor on any rank (pure Neumann)
+    bool pCorrNeedsNullSpace_ = false;
+
 // Momentum assembly fields
 
     /// Effective viscosity (laminar + turbulent)

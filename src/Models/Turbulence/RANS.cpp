@@ -29,6 +29,7 @@
 #include "BoundaryData.h"
 #include "BoundaryConditions.h"
 #include "Field.h"
+#include "HaloExchange.h"
 #include "Matrix.h"
 #include "Reduce.h"
 #include "LinearInterpolation.h"
@@ -94,7 +95,7 @@ void RANS::updatePrevStepDerivatives()
     }
 
     const ScalarField& dissipationNew = dissipation();
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -264,6 +265,11 @@ void RANS::updateWallDistance()
 
     for (Index iter = 0; iter < maxIterations; ++iter)
     {
+        // Ghosts carry the neighbor ranks' latest state, so the wave
+        // crosses the inter-rank cuts one exchange per sweep
+        exchangeHalos(mesh_, {&wallDistance_});
+        exchangeHalos(mesh_, nearestWallPoint_);
+
         Scalar maxChange = S(0.0);
 
         for (const auto& face : mesh_.faces())
@@ -306,7 +312,9 @@ void RANS::updateWallDistance()
             }
         }
 
-        if (maxChange < tolerance)
+        // Collective verdict: every rank sweeps the same number of
+        // times or the exchanges above deadlock
+        if (globalMax(maxChange) < tolerance)
         {
             wallDistanceConverged_ = true;
             break;
@@ -337,7 +345,7 @@ void RANS::initializeWallFunctionGeometry
     BCType wallFunctionType
 )
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     wallFunctionFaceIndices_.clear();
     wallCellIndices_.clear();
@@ -497,7 +505,7 @@ FaceData<Scalar> RANS::wallShearStress
 
 ScalarField RANS::computeStrainRateMagnitude(const TensorField& gradU) const
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     ScalarField strainRateMag;
 
@@ -518,7 +526,7 @@ ScalarField RANS::velocityDivergence
     const FaceFluxField& flowRateFace
 ) const
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     ScalarField divU;
 
@@ -560,7 +568,7 @@ Scalar RANS::normalisedFieldResidual
     const ScalarField& previousField
 ) const
 {
-    const Count numCells = mesh_.numCells();
+    const Count numCells = mesh_.numOwnedCells();
 
     // Normalised change: ||x - x_prev|| / ||x_prev||
     Scalar diffSq = S(0.0);

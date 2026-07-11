@@ -207,6 +207,10 @@ private:
     /// Area-weighted wall-function omega per wall cell
     ScalarList wallCellOmega_;
 
+    /// Wall-constraint fraction as a cell field (ghosts exchanged once):
+    /// lets the omega system mirror constraints applied across the cuts
+    ScalarField wallConstraintFraction_;
+
     /// Precomputed Cmu^0.25 (avoids repeated std::pow calls)
     const Scalar Cmu25_ = std::sqrt(std::sqrt(coeffs_.betaStar));
 

@@ -154,6 +154,12 @@ public:
     /// Get pressure field
     [[nodiscard]] const ScalarField& pressure() const noexcept { return p_; }
 
+    /// Mesh view (nodes, faces, cells)
+    [[nodiscard]] const Mesh& mesh() const noexcept
+    {
+        return mesh_;
+    }
+
 // ***************************** Protected Methods ****************************
 
 protected:
@@ -206,10 +212,10 @@ protected:
 
 // **************************** Protected Accessors ***************************
 
-    /// Mesh view (nodes, faces, cells)
-    [[nodiscard]] const Mesh& mesh() const noexcept
+    /// Total owned cells across every rank (cached: run-invariant)
+    [[nodiscard]] Count totalOwnedCells() const noexcept
     {
-        return mesh_;
+        return totalOwnedCells_;
     }
 
     /// Boundary-condition manager
@@ -378,6 +384,9 @@ private:
 
     /// Velocity gradient tensor field
     TensorField gradU_;
+
+    /// Total owned cells across every rank (reduced once at construction)
+    Count totalOwnedCells_ = 0;
 
 // Residual tracking for convergence
 

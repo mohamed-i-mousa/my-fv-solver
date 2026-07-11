@@ -29,6 +29,7 @@
 #include "Field.h"
 #include "LeastSquares.h"
 #include "Logger.h"
+#include "MpiScalarType.h"
 #include "Reduce.h"
 
 // ****************************** Internal Helpers ****************************
@@ -37,11 +38,6 @@ namespace
 {
 
 constexpr int exchangeTag = 42;
-
-MPI_Datatype mpiScalarType()
-{
-    return sizeof(Scalar) == 8 ? MPI_DOUBLE : MPI_FLOAT;
-}
 
 
 /// Swap scalar payloads with the neighbor across one cut; the two sides

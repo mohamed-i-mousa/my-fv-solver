@@ -114,7 +114,28 @@ AeroForces computeForces
     const CaseConfiguration& config
 )
 {
-    const BoundaryPatch& patch = bcManager.patch(config.forcesPatch);
+    // The forces patch may be absent from this rank's submesh: found on
+    // no rank at all is a case error, found elsewhere means this rank
+    // integrates nothing and only joins the collective sum below
+    const BoundaryPatch* patch = nullptr;
+
+    for (const BoundaryPatch& meshPatch : mesh.patches())
+    {
+        if (meshPatch.patchName() == config.forcesPatch)
+        {
+            patch = &meshPatch;
+            break;
+        }
+    }
+
+    if (globalSum(Count{patch != nullptr ? 1u : 0u}) == 0)
+    {
+        FatalError
+        (
+            "Forces patch '" + config.forcesPatch
+          + "' not found on any rank"
+        );
+    }
 
     const ScalarField& Ux = solver.Ux();
     const ScalarField& Uy = solver.Uy();
@@ -132,13 +153,16 @@ AeroForces computeForces
     Scalar frictionForceY = S(0.0);
     Scalar frictionForceZ = S(0.0);
 
+    const Index firstFaceIdx = patch ? patch->firstFaceIdx() : 1;
+    const Index lastFaceIdx = patch ? patch->lastFaceIdx() : 0;
+
     #pragma omp parallel for schedule(static) \
         reduction(+:pressureForceX, pressureForceY, pressureForceZ) \
         reduction(+:frictionForceX, frictionForceY, frictionForceZ)
     for
     (
-        Index faceIdx = patch.firstFaceIdx();
-        faceIdx <= patch.lastFaceIdx();
+        Index faceIdx = firstFaceIdx;
+        faceIdx <= lastFaceIdx;
         ++faceIdx
     )
     {

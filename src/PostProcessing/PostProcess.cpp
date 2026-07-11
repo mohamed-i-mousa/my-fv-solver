@@ -20,6 +20,7 @@
 #include <array>
 #include <iostream>
 #include <limits>
+#include <string>
 
 // Project headers
 #include "CaseConfiguration.h"
@@ -80,10 +81,11 @@ void reportStatistics(const MomentumTransport& solver)
     const ScalarField& Uz = solver.Uz();
     const ScalarField& pressure = solver.pressure();
 
-    // Emptiness must be decided globally: a per-rank early return here
-    // would skip the collective reductions below on that rank alone and
-    // deadlock the others
-    const Count totalCells = globalSum(Ux.size());
+    // Owned cells only: the ghost tail duplicates cells owned by the
+    // neighbor ranks. Emptiness must be decided globally: a per-rank
+    // early return would skip the collectives below and deadlock
+    const Count numOwnedCells = solver.mesh().numOwnedCells();
+    const Count totalCells = globalSum(numOwnedCells);
 
     if (totalCells == 0)
     {
@@ -103,7 +105,7 @@ void reportStatistics(const MomentumTransport& solver)
         reduction(max:maximumVelocity, maximumPressure) \
         reduction(min:minimumPressure) \
         reduction(+:averageVelocity)
-    for (Index cellIdx = 0; cellIdx < Ux.size(); ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const Scalar vmag = velocityMag[cellIdx];
         maximumVelocity = std::max(maximumVelocity, vmag);
