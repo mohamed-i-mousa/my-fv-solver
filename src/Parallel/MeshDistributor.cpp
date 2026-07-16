@@ -249,7 +249,7 @@ SubmeshData MeshDistributor::distribute(std::vector<SubmeshData> blocks)
 {
     if (Comm::master())
     {
-        if (blocks.size() != Comm::nProcs())
+        if (blocks.size() != Comm::numProcessors())
         {
             FatalError
             (
@@ -257,7 +257,7 @@ SubmeshData MeshDistributor::distribute(std::vector<SubmeshData> blocks)
             );
         }
 
-        for (Index rank = 1; rank < Comm::nProcs(); ++rank)
+        for (Index rank = 1; rank < Comm::numProcessors(); ++rank)
         {
             const std::vector<char> bytes = serialize(blocks[rank]);
 

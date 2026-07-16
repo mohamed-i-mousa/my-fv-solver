@@ -24,6 +24,7 @@
 #include "Comm.h"
 #include "ErrorHandler.h"
 #include "Logger.h"
+#include "MPIRuntime.h"
 #include "PETScRuntime.h"
 
 // *********************************** main ***********************************
@@ -33,8 +34,11 @@ int main(int argc, char* argv[])
     // Start timing the total execution
     const auto startTime = std::chrono::high_resolution_clock::now();
 
-    // PETSc/MPI runtime initialization
-    const PETScRuntime petscRuntime;
+    // Parallel substrate: MPI_Init plus this rank's identity cache
+    const MPIRuntime mpi;
+
+    // PETSc runtime, a guest of the already-initialized MPI
+    const PETScRuntime petsc;
 
     // One console, whole-run failure: non-master ranks print nothing, and
     // a fatal error on any rank aborts every rank. Single-rank runs keep

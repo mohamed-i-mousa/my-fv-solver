@@ -34,7 +34,7 @@
 
 namespace DecompositionChecker
 {
-    /// Run every decomposition check (collective)
+    /// Run every decomposition check
     void check
     (
         const Mesh& mesh,

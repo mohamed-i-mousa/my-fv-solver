@@ -263,7 +263,7 @@ Mesh buildSubmesh(SubmeshData block, bool debug)
         );
         patch.setPatchName
         (
-            "processor" + std::to_string(Comm::myProcNo())
+            "processor" + std::to_string(Comm::myProcessorNum())
           + "to" + std::to_string(block.procNeighborRanks[p])
         );
         patch.setType(PatchType::processor);
@@ -328,11 +328,11 @@ Mesh create(const CaseConfiguration& config)
             const MeshDecomposer decomposer
             (
                 completeMesh,
-                Comm::nProcs()
+                Comm::numProcessors()
             );
 
             std::cout
-                << "Decomposing into " << Comm::nProcs()
+                << "Decomposing into " << Comm::numProcessors()
                 << " submeshes (METIS)." << '\n';
 
             blocks = decomposer.decompose();

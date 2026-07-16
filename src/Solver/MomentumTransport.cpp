@@ -572,12 +572,8 @@ Scalar MomentumTransport::velocityResidual() const noexcept
              + UzPrevIter_[cellIdx] * UzPrevIter_[cellIdx];
     }
 
-    // One batched collective for both accumulators (hot iteration path)
-    Scalar sums[2] = {num, den};
-    globalSum(sums);
-
-    num = std::sqrt(sums[0] + vSmallValue);
-    den = std::sqrt(sums[1] + vSmallValue);
+    num = std::sqrt(globalSum(num) + vSmallValue);
+    den = std::sqrt(globalSum(den) + vSmallValue);
 
     return num / den;
 }

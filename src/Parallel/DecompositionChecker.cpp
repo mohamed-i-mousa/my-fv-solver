@@ -12,6 +12,7 @@
 
 // ********************************** Headers *********************************
 
+// Implementation header
 #include "DecompositionChecker.h"
 
 // Standard library headers
@@ -58,12 +59,12 @@ std::vector<Scalar> exchangeWithNeighbor
     (
         sendBuffer.data(),
         static_cast<int>(sendBuffer.size()),
-        mpiScalarType(),
+        MPIScalarType(),
         static_cast<int>(patch.neighborRank()),
         exchangeTag,
         recvBuffer.data(),
         static_cast<int>(recvBuffer.size()),
-        mpiScalarType(),
+        MPIScalarType(),
         static_cast<int>(patch.neighborRank()),
         exchangeTag,
         MPI_COMM_WORLD,

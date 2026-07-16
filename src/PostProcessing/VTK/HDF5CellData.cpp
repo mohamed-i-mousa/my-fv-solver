@@ -442,7 +442,7 @@ void HDF5CellData::writeGeometry()
             << "VTKHDF geometry written: " << fileName_ << '\n'
             << "  - Number of points: " << pointRows.globalRows << '\n'
             << "  - Number of cells: " << globalNumCells_ << '\n'
-            << "  - Number of pieces: " << Comm::nProcs() << '\n'
+            << "  - Number of pieces: " << Comm::numProcessors() << '\n'
             << "  - Cell type: VTK_POLYHEDRON" << '\n';
     }
 }
@@ -695,7 +695,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
 {
     const double timeValue = static_cast<double>(time);
     const long long zero = 0;
-    const long long numParts = static_cast<long long>(Comm::nProcs());
+    const long long numParts = static_cast<long long>(Comm::numProcessors());
 
     // Bookkeeping rows are identical on every rank: the master writes
     // them, the other ranks participate in the collective append

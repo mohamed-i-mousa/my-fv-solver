@@ -582,11 +582,10 @@ Scalar RANS::normalisedFieldResidual
         prevSq += previousField[cellIdx] * previousField[cellIdx];
     }
 
-    // One batched collective for both accumulators (hot iteration path)
-    Scalar sums[2] = {diffSq, prevSq};
-    globalSum(sums);
+    diffSq = globalSum(diffSq);
+    prevSq = globalSum(prevSq);
 
     return
-        std::sqrt(sums[0] + vSmallValue)
-      / std::sqrt(sums[1] + vSmallValue);
+        std::sqrt(diffSq + vSmallValue)
+      / std::sqrt(prevSq + vSmallValue);
 }

@@ -382,7 +382,7 @@ forces
 // ============================================================================
 output
 {
-    filename        ../outputFiles/sphere.vtkhdf;
+    filename        ../outputFiles.nosync/sphere.vtkhdf;
     debug           false;      // Enable verbose console output
 }
 

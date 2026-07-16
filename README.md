@@ -126,7 +126,7 @@ The default `defaultCase` file contains:
 - **Discretization**: Second-Order Upwind convection scheme for momentum and Upwind convection scheme for turbulence equations. Least-squares for gradients computation
 - **SIMPLE Parameters**: αU = 1.0, αp = 1.0, αk = 0.5, αω = 0.5, tolerance = 1e-3 (scaled residuals), max iterations = 500
 - **Turbulence**: `Laminar` (k-omega SST is available via `model kOmegaSST`)
-- **Output**: `../outputFiles/sphere.vtkhdf` (plus `sphere_boundary.vtkhdf`, and `sphere_forces.txt` when forces are enabled).
+- **Output**: `../outputFiles.nosync/sphere.vtkhdf` (plus `sphere_boundary.vtkhdf`, and `sphere_forces.txt` when forces are enabled). The directory must already exist, the writers do not create it.
 
 ### Flow Physics
 - **Fluid Properties**: Air (ρ = 1.225 kg/m³, μ = 1.7894e-5 Pa·s)

@@ -84,6 +84,7 @@ add_executable(${PROJECT_NAME}
     src/LinearSystem/Matrix.cpp
     src/LinearSystem/LinearSolvers.cpp
     src/LinearSystem/PETScRuntime.cpp
+    src/Parallel/MPIRuntime.cpp
     src/Parallel/Comm.cpp
     src/Parallel/Reduce.cpp
     src/Parallel/GlobalIndex.cpp

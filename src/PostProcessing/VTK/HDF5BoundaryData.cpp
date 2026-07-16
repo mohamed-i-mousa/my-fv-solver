@@ -397,7 +397,7 @@ void HDF5BoundaryData::writeGeometry()
             << "VTKHDF boundary geometry written: " << fileName_ << '\n'
             << "  - Boundary faces: " << globalNumBoundaryFaces_ << '\n'
             << "  - Boundary nodes: " << pointRows.globalRows << '\n'
-            << "  - Number of pieces: " << Comm::nProcs() << '\n';
+            << "  - Number of pieces: " << Comm::numProcessors() << '\n';
     }
 }
 
@@ -639,7 +639,7 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
 {
     const double timeValue = static_cast<double>(time);
     const long long zero = 0;
-    const long long numParts = static_cast<long long>(Comm::nProcs());
+    const long long numParts = static_cast<long long>(Comm::numProcessors());
     const long long zero4[4] = {0, 0, 0, 0};
 
     // Bookkeeping rows are identical on every rank: the master writes

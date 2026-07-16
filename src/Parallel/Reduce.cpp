@@ -19,8 +19,8 @@
 #include <mpi.h>
 
 // Project headers
-#include "Comm.h"
 #include "MpiScalarType.h"
+#include "Comm.h"
 
 // ****************************** Internal Helpers ****************************
 
@@ -50,7 +50,7 @@ Scalar globalSum(Scalar value)
         &value,
         &result,
         1,
-        mpiScalarType(),
+        MPIScalarType(),
         MPI_SUM,
         MPI_COMM_WORLD
     );
@@ -87,7 +87,7 @@ Vector globalSum(const Vector& value)
         partial,
         result,
         3,
-        mpiScalarType(),
+        MPIScalarType(),
         MPI_SUM,
         MPI_COMM_WORLD
     );
@@ -109,7 +109,7 @@ Scalar globalMax(Scalar value)
         &value,
         &result,
         1,
-        mpiScalarType(),
+        MPIScalarType(),
         MPI_MAX,
         MPI_COMM_WORLD
     );
@@ -131,68 +131,10 @@ Scalar globalMin(Scalar value)
         &value,
         &result,
         1,
-        mpiScalarType(),
+        MPIScalarType(),
         MPI_MIN,
         MPI_COMM_WORLD
     );
 
     return result;
-}
-
-// ************************* Batched Global Reductions ************************
-
-void globalSum(std::span<Scalar> values)
-{
-    if (!Comm::parallelRun())
-    {
-        return;
-    }
-
-    MPI_Allreduce
-    (
-        MPI_IN_PLACE,
-        values.data(),
-        static_cast<int>(values.size()),
-        mpiScalarType(),
-        MPI_SUM,
-        MPI_COMM_WORLD
-    );
-}
-
-
-void globalMax(std::span<Scalar> values)
-{
-    if (!Comm::parallelRun())
-    {
-        return;
-    }
-
-    MPI_Allreduce
-    (
-        MPI_IN_PLACE,
-        values.data(),
-        static_cast<int>(values.size()),
-        mpiScalarType(),
-        MPI_MAX,
-        MPI_COMM_WORLD
-    );
-}
-
-
-void globalMin(std::span<Scalar> values)
-{
-    if (!Comm::parallelRun())
-    {
-        return;
-    }
-
-    MPI_Allreduce
-    (
-        MPI_IN_PLACE,
-        values.data(),
-        static_cast<int>(values.size()),
-        mpiScalarType(),
-        MPI_MIN,
-        MPI_COMM_WORLD
-    );
 }

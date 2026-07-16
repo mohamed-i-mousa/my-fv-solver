@@ -7,13 +7,14 @@
 
  ------------------------------------------------------------------------------
  * @file PETScRuntime.h
- * @brief RAII ownership of the PETSc (and MPI) runtime
+ * @brief RAII ownership of the PETSc runtime
  *
  * @details One PETScRuntime is created in main() before any solver object
  * and destroyed after all of them: every PETSc handle (Mat, Vec, KSP) must
  * be created after PetscInitialize and destroyed before PetscFinalize.
- * PetscInitialize also initializes MPI, so this object is the home
- * of the parallel runtime as well.
+ * The MPI runtime is owned by MPIRuntime (constructed first in main()),
+ * so PetscInitialize attaches to the already-running MPI as a guest and
+ * PetscFinalize leaves it running for MPIRuntime's destructor.
  *
  * comm() is the single source of the communicator every PETSc object is
  * created on. It returns the world communicator: on a single rank the

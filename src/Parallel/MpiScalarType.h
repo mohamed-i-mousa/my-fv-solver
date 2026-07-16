@@ -7,12 +7,7 @@
 
  ------------------------------------------------------------------------------
  * @file MpiScalarType.h
- * @brief The MPI datatype matching Scalar's build-time precision
- *
- * @details One definition shared by every src/Parallel implementation
- * file: a precision change edited into only one hand-written copy would
- * silently corrupt MPI buffers. Includes <mpi.h> — for use inside
- * src/Parallel .cpp files only.
+ * @brief The MPI datatype matching project's Scalar type
  *****************************************************************************/
 
 #pragma once
@@ -28,7 +23,7 @@
 // ****************************** MPI Scalar Type *****************************
 
 /// MPI datatype of one Scalar
-[[nodiscard]] inline MPI_Datatype mpiScalarType()
+[[nodiscard]] inline MPI_Datatype MPIScalarType()
 {
     return sizeof(Scalar) == 8 ? MPI_DOUBLE : MPI_FLOAT;
 }

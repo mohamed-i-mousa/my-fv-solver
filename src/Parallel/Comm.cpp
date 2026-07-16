@@ -23,56 +23,42 @@
 namespace
 {
 
-int cachedNProcs()
-{
-    static int nProcs = 0;
-
-    if (nProcs == 0)
-    {
-        MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
-    }
-
-    return nProcs;
-}
-
-
-int cachedMyProcNo()
-{
-    static int myProcNo = -1;
-
-    if (myProcNo == -1)
-    {
-        MPI_Comm_rank(MPI_COMM_WORLD, &myProcNo);
-    }
-
-    return myProcNo;
-}
+// Cached MPI_COMM_WORLD identity
+int size = 1;
+int rank = 0;
 
 } // namespace
 
 // ***************************** namespace Comm *******************************
 
+void Comm::init()
+{
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+}
+
+
 bool Comm::parallelRun()
 {
-    return cachedNProcs() > 1;
+    return size > 1;
 }
 
 
-Count Comm::nProcs()
+Count Comm::numProcessors()
 {
-    return static_cast<Count>(cachedNProcs());
+    return static_cast<Count>(size);
 }
 
 
-Index Comm::myProcNo()
+Index Comm::myProcessorNum()
 {
-    return static_cast<Index>(cachedMyProcNo());
+    return static_cast<Index>(rank);
 }
 
 
 bool Comm::master()
 {
-    return cachedMyProcNo() == 0;
+    return rank == 0;
 }
 
 

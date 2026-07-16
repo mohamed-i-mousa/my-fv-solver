@@ -244,8 +244,8 @@ SlabLayout oneRowPerRank()
     return
     {
         1,
-        static_cast<hsize_t>(Comm::nProcs()),
-        static_cast<hsize_t>(Comm::myProcNo())
+        static_cast<hsize_t>(Comm::numProcessors()),
+        static_cast<hsize_t>(Comm::myProcessorNum())
     };
 }
 
@@ -255,8 +255,8 @@ SlabLayout perPieceOffsetsRows(const SlabLayout& itemRows)
     return
     {
         itemRows.localRows + 1,
-        itemRows.globalRows + static_cast<hsize_t>(Comm::nProcs()),
-        itemRows.rowOffset + static_cast<hsize_t>(Comm::myProcNo())
+        itemRows.globalRows + static_cast<hsize_t>(Comm::numProcessors()),
+        itemRows.rowOffset + static_cast<hsize_t>(Comm::myProcessorNum())
     };
 }
 

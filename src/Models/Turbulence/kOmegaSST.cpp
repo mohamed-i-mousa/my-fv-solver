@@ -235,21 +235,24 @@ void kOmegaSST::solve
             nutSum += nut()[cellIdx];
         }
 
-        // Batched: one collective per operation instead of one per field
-        Scalar mins[3] = {kMin, omegaMin, nutMin};
-        Scalar maxs[3] = {kMax, omegaMax, nutMax};
-        Scalar sums[3] = {kSum, omegaSum, nutSum};
+        kMin = globalMin(kMin);
+        kMax = globalMax(kMax);
+        kSum = globalSum(kSum);
 
-        globalMin(mins);
-        globalMax(maxs);
-        globalSum(sums);
+        omegaMin = globalMin(omegaMin);
+        omegaMax = globalMax(omegaMax);
+        omegaSum = globalSum(omegaSum);
+
+        nutMin = globalMin(nutMin);
+        nutMax = globalMax(nutMax);
+        nutSum = globalSum(nutSum);
 
         const Scalar n = S(globalSum(numCells));
 
         Logger::subsection("Turbulence field statistics");
-        Logger::scalarStat("k", mins[0], maxs[0], sums[0] / n);
-        Logger::scalarStat("omega", mins[1], maxs[1], sums[1] / n);
-        Logger::scalarStat("nut", mins[2], maxs[2], sums[2] / n);
+        Logger::scalarStat("k", kMin, kMax, kSum / n);
+        Logger::scalarStat("omega", omegaMin, omegaMax, omegaSum / n);
+        Logger::scalarStat("nut", nutMin, nutMax, nutSum / n);
     }
 }
 
