@@ -180,24 +180,28 @@ std::unique_ptr<LinearSolver> LinearSolver::create
 {
     if (solverName == "BiCGSTAB")
     {
-        return std::make_unique<BiCGSTAB>
-        (
-            solverName,
-            tolerance,
-            maxIterations,
-            optionsPrefix
-        );
+        return
+            std::make_unique<PetscLinearSolver>
+            (
+                solverName,
+                KSPBCGS,
+                tolerance,
+                maxIterations,
+                optionsPrefix
+            );
     }
 
     if (solverName == "PCG")
     {
-        return std::make_unique<PCG>
-        (
-            solverName,
-            tolerance,
-            maxIterations,
-            optionsPrefix
-        );
+        return
+            std::make_unique<PetscLinearSolver>
+            (
+                solverName,
+                KSPCG,
+                tolerance,
+                maxIterations,
+                optionsPrefix
+            );
     }
 
     RuntimeSelection::unknownSelection

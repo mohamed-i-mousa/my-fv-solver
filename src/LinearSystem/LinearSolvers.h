@@ -30,12 +30,6 @@
  * @class PetscLinearSolver
  * - Owns the KSP and the reusable solution Vec wrapper
  * - Implements the common solve workflow once
- *
- * @class BiCGSTAB
- * - KSPBCGS; use for non-symmetric momentum/turbulence systems
- *
- * @class PCG
- * - KSPCG; use for symmetric positive definite systems (p')
  *****************************************************************************/
 
 #pragma once
@@ -193,7 +187,7 @@ private:
 
 // ************************** class PetscLinearSolver *************************
 
-class PetscLinearSolver : public LinearSolver
+class PetscLinearSolver final : public LinearSolver
 {
 public:
 
@@ -230,58 +224,4 @@ private:
 
     /// Previous iterate for the non-finite rollback guard
     ScalarList previousSolution_;
-};
-
-// ****************************** class BiCGSTAB ******************************
-
-class BiCGSTAB final : public PetscLinearSolver
-{
-public:
-
-    /// Construct a Bi-Conjugate Gradient Stabilized solver
-    BiCGSTAB
-    (
-        Name name,
-        Scalar tolerance,
-        Count maxIterations,
-        const Name& optionsPrefix
-    )
-    :
-        PetscLinearSolver
-        (
-            std::move(name),
-            KSPBCGS,
-            tolerance,
-            maxIterations,
-            optionsPrefix
-        )
-    {}
-
-};
-
-// ********************************* class PCG ********************************
-
-class PCG final : public PetscLinearSolver
-{
-public:
-
-    /// Construct a preconditioned Conjugate Gradient solver
-    PCG
-    (
-        Name name,
-        Scalar tolerance,
-        Count maxIterations,
-        const Name& optionsPrefix
-    )
-    :
-        PetscLinearSolver
-        (
-            std::move(name),
-            KSPCG,
-            tolerance,
-            maxIterations,
-            optionsPrefix
-        )
-    {}
-
 };
