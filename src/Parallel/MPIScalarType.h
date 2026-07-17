@@ -6,7 +6,7 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file MpiScalarType.h
+ * @file MPIScalarType.h
  * @brief The MPI datatype matching project's Scalar type
  *****************************************************************************/
 

@@ -30,7 +30,7 @@
 #include "Field.h"
 #include "LeastSquares.h"
 #include "Logger.h"
-#include "MpiScalarType.h"
+#include "MPIScalarType.h"
 #include "Reduce.h"
 
 // ****************************** Internal Helpers ****************************

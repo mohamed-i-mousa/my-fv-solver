@@ -19,7 +19,7 @@
 #include <mpi.h>
 
 // Project headers
-#include "MpiScalarType.h"
+#include "MPIScalarType.h"
 #include "Comm.h"
 
 // ****************************** Internal Helpers ****************************

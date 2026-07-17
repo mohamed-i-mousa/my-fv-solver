@@ -9,7 +9,7 @@
  * @file HDF5Wrapper.cpp
  * @brief Implementation of the HDF5 C API helpers for VTKHDF authoring
  *
- * @details Includes <mpi.h> directly — with MpiScalarType.h, one of the two
+ * @details Includes <mpi.h> directly — with MPIScalarType.h, one of the two
  * deliberate exceptions to the mpi-only-inside-src/Parallel convention: the
  * MPI-IO file-access and collective-transfer property lists need the raw
  * communicator (MPI_COMM_WORLD, matching src/Parallel usage), and a
