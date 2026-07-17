@@ -337,10 +337,10 @@ void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
 
 void MomentumTransport::updateVelocityGradients()
 {
-    const Count numCells = mesh_.numOwnedCells();
+    const Count numOwnedCells = mesh_.numOwnedCells();
 
     #pragma omp parallel for schedule(static)
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
+    for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         gradUx_[cellIdx] =
             gradientScheme_.cellGradient(Field::Ux, Ux_, cellIdx);
@@ -368,6 +368,9 @@ void MomentumTransport::updateVelocityGradients()
     // of every cut face
     exchangeHalos(mesh_, {&gradUx_, &gradUy_, &gradUz_});
 
+    // Assembling exchanged components replaces an exchange
+    const Count numCells = mesh_.numCells();
+
     #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
@@ -379,10 +382,6 @@ void MomentumTransport::updateVelocityGradients()
                 gradUz_[cellIdx]
             );
     }
-
-    // The transpose-gradient source interpolates the tensor at faces,
-    // reading it at both cells of every cut
-    exchangeHalos(mesh_, gradU_);
 }
 
 
