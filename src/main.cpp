@@ -34,21 +34,12 @@ int main(int argc, char* argv[])
     // Start timing the total execution
     const auto startTime = std::chrono::high_resolution_clock::now();
 
-    // Parallel substrate: MPI_Init plus this rank's identity cache
+    // Initialize MPI and PETSc runtimes
     const MPIRuntime mpi;
-
-    // PETSc runtime, a guest of the already-initialized MPI
     const PETScRuntime petsc;
 
-    // One console, whole-run failure: non-master ranks print nothing, and
-    // a fatal error on any rank aborts every rank. Single-rank runs keep
-    // std::abort — same exit code and core dump as a serial program
+    // One console: non-master ranks print nothing
     Logger::init(Comm::master());
-
-    if (Comm::parallelRun())
-    {
-        setAbortHandler(&Comm::abortAllRanks);
-    }
 
     std::cout << R"(
   ~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~··~·~

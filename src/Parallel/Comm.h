@@ -41,7 +41,4 @@ namespace Comm
     /// True on the master rank (rank 0)
     [[nodiscard]] bool master();
 
-    /// Abort every rank of the run
-    void abortAllRanks();
-
 } // namespace Comm

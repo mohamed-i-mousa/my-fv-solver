@@ -60,9 +60,3 @@ bool Comm::master()
 {
     return rank == 0;
 }
-
-
-void Comm::abortAllRanks()
-{
-    MPI_Abort(MPI_COMM_WORLD, 1);
-}
