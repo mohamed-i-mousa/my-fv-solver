@@ -233,7 +233,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
 
     // Seed the pressure gradient for the momentum source and Rhie-Chow
     gradientScheme().fieldGradient(Field::p, pressure(), gradP_);
-    exchangeHalos(mesh(), gradP_);
+    exchangeHalos(mesh(), {&gradP_});
 
     updateEffectiveViscosity();
     assembleMomentum();
@@ -595,7 +595,7 @@ void Segregated::solvePressureCorrection()
                 gradientScheme().cellGradient(Field::pCorr, pCorr_, cellIdx);
         }
 
-        exchangeHalos(mesh(), gradPCorr_);
+        exchangeHalos(mesh(), {&gradPCorr_});
     }
 
     if (pCorrNeedsNullSpace_)

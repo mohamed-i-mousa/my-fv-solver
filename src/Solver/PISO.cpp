@@ -95,7 +95,7 @@ bool PISO::outerIteration
     {
         // Update Pressure gradient
         gradientScheme().fieldGradient(Field::p, pressure(), gradP());
-        exchangeHalos(mesh(), gradP());
+        exchangeHalos(mesh(), {&gradP()});
 
         // Explicit momentum predictor
         solveMomentumExplicit(prevStep);

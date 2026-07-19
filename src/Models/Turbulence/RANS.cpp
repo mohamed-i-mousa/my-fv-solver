@@ -268,7 +268,7 @@ void RANS::updateWallDistance()
         // Ghosts carry the neighbor ranks' latest state, so the wave
         // crosses the inter-rank cuts one exchange per sweep
         exchangeHalos(mesh_, {&wallDistance_});
-        exchangeHalos(mesh_, nearestWallPoint_);
+        exchangeHalos(mesh_, {&nearestWallPoint_});
 
         Scalar maxChange = S(0.0);
 
