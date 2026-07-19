@@ -19,8 +19,10 @@
 #include <cmath>
 
 // Project headers
+#include "Comm.h"
 #include "ErrorHandler.h"
 #include "PETScRuntime.h"
+#include "Reduce.h"
 #include "RuntimeSelection.h"
 
 // ************************* Special Member Functions *************************
@@ -137,13 +139,20 @@ void PetscLinearSolver::solve
         }
     }
 
-    if (!finite)
+    // A non-finite solution on any rank must roll back every rank
+    const bool anyNonFinite = globalOr(!finite);
+
+    if (anyNonFinite)
     {
-        Warning
-        (
-            name()
-          + ": non-finite solution, rolling back to previous iterate"
-        );
+        if (Comm::master())
+        {
+            Warning
+            (
+                name()
+              + ": non-finite solution, rolling back to previous iterate"
+            );
+        }
+
         std::copy(previousSolution_.begin(), previousSolution_.end(),
                   x.begin());
     }
@@ -162,7 +171,7 @@ void PetscLinearSolver::solve
         .solverName    = name(),
         .iterations    = static_cast<int>(iterations),
         .finalResidual = normB > S(0.0) ? residualNorm / normB : residualNorm,
-        .converged     = finite && reason > 0
+        .converged     = !anyNonFinite && reason > 0
     };
 
     setLastPerformance(performance);

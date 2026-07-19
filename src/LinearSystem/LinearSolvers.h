@@ -12,7 +12,9 @@
  * @details Polymorphic LinearSolver interface backed by PETSc's KSP Krylov
  * solvers. Each PetscLinearSolver owns one KSP configured at construction
  * (solver type, Jacobi preconditioner, unpreconditioned residual norm);
- * concrete classes (BiCGSTAB, PCG) select the KSP type. The solution is
+ * create() maps each selectable name to its KSP type — "BiCGSTAB" to
+ * KSPBCGS for the non-symmetric momentum/turbulence systems, "PCG" to
+ * KSPCG for the symmetric positive definite p' system. The solution is
  * bound zero-copy over the caller's field storage, so the solve writes the
  * result straight into the field.
  *
