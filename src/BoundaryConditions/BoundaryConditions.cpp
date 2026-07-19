@@ -294,15 +294,10 @@ void BoundaryConditions::validatePatchNames() const
         validNames.insert(patch.patchName());
     }
 
-    // A decomposed rank holds only a fragment of the boundary, so a
-    // case-file patch may be legitimately absent here — it is an error
-    // only when NO rank has it. Iteration order over the sorted BC map
-    // is identical on every rank, so the collectives stay in lockstep
+    // A missing patch is an error only when NO rank has it
     for (const auto& entry : patchBoundaryData_)
     {
-        const Count foundLocally = validNames.contains(entry.first) ? 1 : 0;
-
-        if (globalSum(foundLocally) > 0)
+        if (globalOr(validNames.contains(entry.first)))
         {
             continue;
         }

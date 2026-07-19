@@ -128,7 +128,7 @@ AeroForces computeForces
         }
     }
 
-    if (globalSum(Count{patch != nullptr ? 1u : 0u}) == 0)
+    if (!globalOr(patch != nullptr))
     {
         FatalError
         (
@@ -153,50 +153,55 @@ AeroForces computeForces
     Scalar frictionForceY = S(0.0);
     Scalar frictionForceZ = S(0.0);
 
-    const Index firstFaceIdx = patch ? patch->firstFaceIdx() : 1;
-    const Index lastFaceIdx = patch ? patch->lastFaceIdx() : 0;
-
-    #pragma omp parallel for schedule(static) \
-        reduction(+:pressureForceX, pressureForceY, pressureForceZ) \
-        reduction(+:frictionForceX, frictionForceY, frictionForceZ)
-    for
-    (
-        Index faceIdx = firstFaceIdx;
-        faceIdx <= lastFaceIdx;
-        ++faceIdx
-    )
+    // A rank without the patch only joins the collective sums below
+    if (patch != nullptr)
     {
-        const Face& face = faces[faceIdx];
-        const Index cellIdx = face.ownerCell();
-        const Vector& normal = face.normal();
+        const Index firstFaceIdx = patch->firstFaceIdx();
+        const Index lastFaceIdx = patch->lastFaceIdx();
 
-        // Pressure force from the kinematic pressure
-        const Scalar pressureFace =
-            bcManager.boundaryFaceValue(Field::p, pressure, face);
-        const Vector pressureContribution =
-            (config.rho * pressureFace * face.projectedArea()) * normal;
-        pressureForceX += pressureContribution.x();
-        pressureForceY += pressureContribution.y();
-        pressureForceZ += pressureContribution.z();
-
-        // Skin-friction force
-        const Vector cellVelocity(Ux[cellIdx], Uy[cellIdx], Uz[cellIdx]);
-        const Scalar normalVelocity = dot(cellVelocity, normal);
-        const Vector tangentVelocity =
-            cellVelocity - normalVelocity * normal;
-        const Scalar tangentMagnitude = magnitude(tangentVelocity);
-
-        if (tangentMagnitude > vSmallValue)
+        #pragma omp parallel for schedule(static) \
+            reduction(+:pressureForceX, pressureForceY, pressureForceZ) \
+            reduction(+:frictionForceX, frictionForceY, frictionForceZ)
+        for
+        (
+            Index faceIdx = firstFaceIdx;
+            faceIdx <= lastFaceIdx;
+            ++faceIdx
+        )
         {
-            const Vector shearDirection = tangentVelocity / tangentMagnitude;
-            const Scalar shearStress =
-                config.rho * wallShearStress[face.idx()];
+            const Face& face = faces[faceIdx];
+            const Index cellIdx = face.ownerCell();
+            const Vector& normal = face.normal();
 
-            const Vector frictionContribution =
-                (shearStress * face.contactArea()) * shearDirection;
-            frictionForceX += frictionContribution.x();
-            frictionForceY += frictionContribution.y();
-            frictionForceZ += frictionContribution.z();
+            // Pressure force from the kinematic pressure
+            const Scalar pressureFace =
+                bcManager.boundaryFaceValue(Field::p, pressure, face);
+            const Vector pressureContribution =
+                (config.rho * pressureFace * face.projectedArea()) * normal;
+            pressureForceX += pressureContribution.x();
+            pressureForceY += pressureContribution.y();
+            pressureForceZ += pressureContribution.z();
+
+            // Skin-friction force
+            const Vector cellVelocity(Ux[cellIdx], Uy[cellIdx], Uz[cellIdx]);
+            const Scalar normalVelocity = dot(cellVelocity, normal);
+            const Vector tangentVelocity =
+                cellVelocity - normalVelocity * normal;
+            const Scalar tangentMagnitude = magnitude(tangentVelocity);
+
+            if (tangentMagnitude > vSmallValue)
+            {
+                const Vector shearDirection =
+                    tangentVelocity / tangentMagnitude;
+                const Scalar shearStress =
+                    config.rho * wallShearStress[face.idx()];
+
+                const Vector frictionContribution =
+                    (shearStress * face.contactArea()) * shearDirection;
+                frictionForceX += frictionContribution.x();
+                frictionForceY += frictionContribution.y();
+                frictionForceZ += frictionContribution.z();
+            }
         }
     }
 

@@ -35,3 +35,6 @@
 
 /// Minimum of a value across every rank
 [[nodiscard]] Scalar globalMin(Scalar value);
+
+/// True on every rank when the value is true on any rank
+[[nodiscard]] bool globalOr(bool value);

@@ -138,3 +138,26 @@ Scalar globalMin(Scalar value)
 
     return result;
 }
+
+
+bool globalOr(bool value)
+{
+    if (!Comm::parallelRun())
+    {
+        return value;
+    }
+
+    const int localValue = value ? 1 : 0;
+    int result = 0;
+    MPI_Allreduce
+    (
+        &localValue,
+        &result,
+        1,
+        MPI_INT,
+        MPI_LOR,
+        MPI_COMM_WORLD
+    );
+
+    return result != 0;
+}

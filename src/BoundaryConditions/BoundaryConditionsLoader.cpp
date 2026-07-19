@@ -107,22 +107,19 @@ void validateWallFunctionSetup
 
 bool isSymmetryPatch(const Mesh& mesh, const Name& patchName)
 {
-    Count symmetryHere = 0;
+    bool symmetryHere = false;
 
     for (const auto& patch : mesh.patches())
     {
         if (patch.patchName() == patchName)
         {
-            symmetryHere = patch.type() == PatchType::symmetry ? 1 : 0;
+            symmetryHere = patch.type() == PatchType::symmetry;
             break;
         }
     }
 
-    // Collective verdict: a decomposed patch may be present on some
-    // ranks only, and every rank must register the SAME BC entries or
-    // later per-entry collectives fall out of lockstep. Call sites all
-    // iterate the case file, identical on every rank
-    return globalSum(symmetryHere) > 0;
+    // A patch may live on some ranks only
+    return globalOr(symmetryHere);
 }
 
 
