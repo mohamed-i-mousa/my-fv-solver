@@ -19,10 +19,10 @@
 #include <cmath>
 #include <ostream>
 #include <iomanip>
+#include <sstream>
 
 // Project headers
 #include "ErrorHandler.h"
-#include "Logger.h"
 
 // ************************ Geometric Property Methods ************************
 
@@ -106,16 +106,15 @@ std::ostream& operator<<(std::ostream& os, const Cell& c)
 
     if (c.geometricPropertiesCalculated())
     {
-        // Restore os format flags/precision on scope exit
-        const StreamStateGuard guard(os);
-
-        // change formatting for geometric properties
-        os  << std::fixed
-            << std::setprecision(6);
-
-        // output volume and centroid
-        os  << ", Volume: " << c.volume()
+        // Buffer locally so the fixed/precision change never reaches os
+        std::ostringstream geometry;
+        geometry
+            << std::fixed
+            << std::setprecision(6)
+            << ", Volume: " << c.volume()
             << ", Centroid: " << c.centroid();
+
+        os  << geometry.str();
     }
     else
     {

@@ -7,7 +7,7 @@
 
  ------------------------------------------------------------------------------
  * @file Logger.cpp
- * @brief Implementations of the stateless solver-output formatting helpers
+ * @brief Implementations of solver-output formatting helpers
  *****************************************************************************/
 
 // ********************************** Headers *********************************
@@ -18,49 +18,13 @@
 // Standard library headers
 #include <iomanip>
 #include <iostream>
-#include <streambuf>
+#include <sstream>
 #include <string>
-
-// ****************************** Internal Helpers ****************************
-
-namespace
-{
-
-/// Stream buffer that discards every character written to it
-class NullBuffer final : public std::streambuf
-{
-protected:
-
-    int_type overflow(int_type ch) override
-    {
-        // Report the character as consumed without storing it
-        return ch;
-    }
-};
-
-} // namespace
 
 // ***************************** namespace Logger *****************************
 
-void Logger::init(bool master)
-{
-    if (!master)
-    {
-        // Intentionally leaked: std::cout's final flush during static
-        // destruction must still find this buffer alive, and destruction
-        // order across translation units is unordered — a static object
-        // here could die first, leaving cout flushing through a dangling
-        // streambuf
-        static NullBuffer* nullBuffer = new NullBuffer();
-
-        std::cout.rdbuf(nullBuffer);
-    }
-}
-
-
 void Logger::sectionHeader(const Message& title)
 {
-    StreamStateGuard guard(std::cout);
     std::cout
         << "========================================"
         << "========================================"
@@ -88,21 +52,23 @@ void Logger::iterationFooter()
 
 void Logger::residualTableHeader()
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream table;
 
-    std::cout
+    table
         << "  "
         << std::left  << std::setw(11) << "Equation"
         << std::left  << std::setw(11) << "Solver"
         << std::right << std::setw(5)  << "Iters"
         << "    " << "Linear Solver Residual" << '\n';
 
-    std::cout
+    table
         << "  "
         << std::left  << std::setw(11) << "--------"
         << std::left  << std::setw(11) << "--------"
         << std::right << std::setw(5)  << "-----"
         << "    " << "-----------" << '\n';
+
+    std::cout << table.str();
 }
 
 
@@ -114,31 +80,32 @@ void Logger::residualRow
     Scalar linearSolverResidual
 )
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "  "
         << std::left  << std::setw(11) << equation
         << std::left  << std::setw(11) << solver
         << std::right << std::setw(5)  << iterations
         << "    "
         << std::scientific << std::setprecision(6)
-        << linearSolverResidual << '\n';
+        << linearSolverResidual;
+
+    std::cout << row.str() << '\n';
 }
 
 
 void Logger::subsection(const Message& title)
 {
-    StreamStateGuard guard(std::cout);
     std::cout << '\n' << "  " << title << '\n';
 }
 
 
 void Logger::breakdownHeader(const Message& cornerLabel)
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream header;
 
-    std::cout
+    header
         << '\n' << "  "
         << std::left  << std::setw(14) << cornerLabel
         << std::right
@@ -146,13 +113,15 @@ void Logger::breakdownHeader(const Message& cornerLabel)
         << std::setw(16) << "Friction"
         << std::setw(16) << "Total" << '\n';
 
-    std::cout
+    header
         << "  "
         << std::left  << std::setw(14) << "----------"
         << std::right
         << std::setw(16) << "--------"
         << std::setw(16) << "--------"
         << std::setw(16) << "-----" << '\n';
+
+    std::cout << header.str();
 }
 
 
@@ -164,16 +133,18 @@ void Logger::breakdownRow
     Scalar total
 )
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "  "
         << std::left  << std::setw(14) << label
         << std::scientific << std::setprecision(6)
         << std::right
         << std::setw(16) << pressure
         << std::setw(16) << friction
-        << std::setw(16) << total << '\n';
+        << std::setw(16) << total;
+
+    std::cout << row.str() << '\n';
 }
 
 
@@ -185,27 +156,31 @@ void Logger::scalarStat
     Scalar meanVal
 )
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream stat;
 
-    std::cout
+    stat
         << "    "
         << std::left << std::setw(7) << name
         << std::scientific << std::setprecision(2)
         << "min="  << minVal
         << "  max="  << maxVal
-        << "  mean=" << meanVal << '\n';
+        << "  mean=" << meanVal;
+
+    std::cout << stat.str() << '\n';
 }
 
 
 void Logger::scaledResidual(const Name& name, Scalar value)
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream residual;
 
-    std::cout
+    residual
         << "    "
         << std::left << std::setw(10) << name
         << std::scientific << std::setprecision(6)
-        << value << '\n';
+        << value;
+
+    std::cout << residual.str() << '\n';
 }
 
 
@@ -217,28 +192,28 @@ void Logger::residualSummary
     std::span<const Residuals> residuals
 )
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream summary;
 
-    std::cout
+    summary
         << " - Mass: " << std::scientific << mass
         << ", Velocity: " << velocity
         << ", Pressure: " << pressure;
 
     for (const Residuals& residual : residuals)
     {
-        std::cout
+        summary
             << ", " << residual.first << ": " << residual.second;
     }
 
-    std::cout << '\n';
+    std::cout << summary.str() << '\n';
 }
 
 
 void Logger::linearSolverConfigHeader()
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream header;
 
-    std::cout
+    header
         << "    "
         << std::left  << std::setw(11) << "Equation"
         << std::left  << std::setw(11) << "Solver"
@@ -246,13 +221,15 @@ void Logger::linearSolverConfigHeader()
         << std::right << std::setw(13) << "Max Iters"
         << '\n';
 
-    std::cout
+    header
         << "    "
         << std::left  << std::setw(11) << "--------"
         << std::left  << std::setw(11) << "--------"
         << std::left  << std::setw(12) << "----------"
         << std::right << std::setw(13) << "---------"
         << '\n';
+
+    std::cout << header.str();
 }
 
 
@@ -264,62 +241,74 @@ void Logger::linearSolverConfigRow
     Count maxIters
 )
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "    " << std::left  << std::setw(11) << equation
         << std::left  << std::setw(11) << solver
         << std::scientific << std::setprecision(6) << tolerance
-        << std::right << std::setw(13) << maxIters << '\n';
+        << std::right << std::setw(13) << maxIters;
+
+    std::cout << row.str() << '\n';
 }
 
 
 void Logger::keyValue(const Message& label, Scalar value)
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "    " << std::left << std::setw(24) << label
-        << "  " << std::scientific << std::setprecision(6) << value << '\n';
+        << "  " << std::scientific << std::setprecision(6) << value;
+
+    std::cout << row.str() << '\n';
 }
 
 
 void Logger::keyValue(const Message& label, Scalar value, const Message& unit)
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "    " << std::left << std::setw(24) << label
         << "  " << std::fixed << std::setprecision(6) << value
-        << ' ' << unit << '\n';
+        << ' ' << unit;
+
+    std::cout << row.str() << '\n';
 }
 
 
 void Logger::keyValue(const Message& label, int value)
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "    " << std::left  << std::setw(24) << label
-        << "  " << std::right << std::setw(12) << value << '\n';
+        << "  " << std::right << std::setw(12) << value;
+
+    std::cout << row.str() << '\n';
 }
 
 
 void Logger::keyValue(const Message& label, Count value)
 {
-    StreamStateGuard guard(std::cout);
+    std::ostringstream row;
 
-    std::cout
+    row
         << "    " << std::left  << std::setw(24) << label
-        << "  " << std::right << std::setw(12) << value << '\n';
+        << "  " << std::right << std::setw(12) << value;
+
+    std::cout << row.str() << '\n';
 }
 
 
 void Logger::keyValue(const Message& label, const Message& value)
 {
-    StreamStateGuard guard(std::cout);
-
-    std::cout
+    std::ostringstream row;
+    
+    row
         << "    " << std::left << std::setw(24) << label
-        << "  " << value << '\n';
+        << "  " << value;
+
+    std::cout << row.str() << '\n';
 }

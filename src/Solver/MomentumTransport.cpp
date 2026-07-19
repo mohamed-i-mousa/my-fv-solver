@@ -19,6 +19,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <algorithm>
 
 // External library headers
@@ -251,15 +252,15 @@ void MomentumTransport::solve
 
         const CourantNumber courant = computeCourant();
 
-        {
-            StreamStateGuard guard(std::cout);
-            std::cout
-                << std::scientific << std::setprecision(3)
-                << " Time = " << time << " s   step "
-                << step << "/" << totalSteps
-                << "   Courant max = " << courant.max
-                << " mean = " << courant.mean << '\n';
-        }
+        std::ostringstream courantLine;
+        courantLine
+            << std::scientific << std::setprecision(3)
+            << " Time = " << time << " s   step "
+            << step << "/" << totalSteps
+            << "   Courant max = " << courant.max
+            << " mean = " << courant.mean;
+
+        std::cout << courantLine.str() << '\n';
 
         Logger::residualSummary
         (

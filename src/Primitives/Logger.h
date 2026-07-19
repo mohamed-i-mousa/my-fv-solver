@@ -7,18 +7,7 @@
 
  ------------------------------------------------------------------------------
  * @file Logger.h
- * @brief Stateless formatting helpers for solver console output
- *
- * @details This header defines StreamStateGuard and the Logger namespace.
- * Logger provides column-aligned helpers for the solver iteration loop and
- * the k-omega SST model when debug-mode output is enabled. All helpers save
- * and restore std::cout's format flags and precision via StreamStateGuard so
- * that scientific/precision changes never leak into unrelated output.
- *
- * @class StreamStateGuard
- * - Saves std::ostream format flags and precision on construction
- * - Restores them on destruction
- * - Non-copyable and non-movable (holds an ostream reference)
+ * @brief Formatting helpers for solver console output
  *****************************************************************************/
 
 #pragma once
@@ -26,8 +15,6 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
-#include <ios>
-#include <ostream>
 #include <span>
 #include <utility>
 
@@ -36,57 +23,11 @@
 #include "StringTypes.h"
 #include "Integer.h"
 
-// ************************** class StreamStateGuard **************************
-
-class StreamStateGuard
-{
-public:
-
-// ************************* Special Member Functions *************************
-
-    /// Constructor
-    explicit StreamStateGuard(std::ostream& os) noexcept
-    :
-        os_{os},
-        flags_{os.flags()},
-        precision_{os.precision()}
-    {}
-
-    /// Copy constructor and assignment - Not copyable (T& member)
-    StreamStateGuard(const StreamStateGuard&) = delete;
-    StreamStateGuard& operator=(const StreamStateGuard&) = delete;
-
-    /// Move constructor and assignment - Not movable (T& member)
-    StreamStateGuard(StreamStateGuard&&) = delete;
-    StreamStateGuard& operator=(StreamStateGuard&&) = delete;
-
-    /// Destructor restores the original format flags and precision
-    ~StreamStateGuard() noexcept
-    {
-        os_.flags(flags_);
-        os_.precision(precision_);
-    }
-
-// ****************************** Private Members *****************************
-
-private:
-
-    std::ostream& os_;
-    const std::ios::fmtflags flags_;
-    const std::streamsize precision_;
-};
-
 // ***************************** namespace Logger *****************************
 
 namespace Logger
 {
     using Residuals = std::pair<Name, Scalar>;
-
-    /// Route console output for parallel runs: non-master ranks swap
-    /// std::cout's buffer for a null sink, so every print site in the
-    /// codebase becomes master-only without being touched (std::cerr is
-    /// left alone — warnings and errors report from any rank)
-    void init(bool master);
 
     /// Print a generic 80-char framed banner with the given title
     void sectionHeader(const Message& title);

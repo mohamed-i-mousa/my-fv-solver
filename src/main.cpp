@@ -38,8 +38,8 @@ int main(int argc, char* argv[])
     const MPIRuntime mpi;
     const PETScRuntime petsc;
 
-    // One console: non-master ranks print nothing
-    Logger::init(Comm::master());
+    // Non-master processes will not output to std::cout
+    if (!Comm::master()) { std::cout.setstate(std::ios::failbit); }
 
     std::cout << R"(
   ~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~··~·~

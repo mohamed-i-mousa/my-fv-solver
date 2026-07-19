@@ -19,11 +19,11 @@
 #include <cmath>
 #include <ostream>
 #include <iomanip>
+#include <sstream>
 
 // Project headers
 #include "Cell.h"
 #include "ErrorHandler.h"
-#include "Logger.h"
 
 // ***************************** Internal Helpers *****************************
 
@@ -223,16 +223,15 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
 
     if (f.geometricPropertiesCalculated())
     {
-        // Restore os format flags/precision on scope exit
-        const StreamStateGuard guard(os);
-
-        // change format for geometric properties
-        os  << std::fixed << std::setprecision(6);
-
-        // Output geometric properties
-        os  << ", Centroid: " << f.centroid()
+        // Buffer locally so the fixed/precision change never reaches os
+        std::ostringstream geometry;
+        geometry
+            << std::fixed << std::setprecision(6)
+            << ", Centroid: " << f.centroid()
             << ", Area: "   << f.projectedArea()
             << ", Normal: " << f.normal();
+
+        os  << geometry.str();
     }
     else
     {
@@ -241,19 +240,18 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
 
     if (f.distancesCalculated())
     {
-        // Restore os format flags/precision on scope exit
-        const StreamStateGuard guard(os);
-
-        // change format for distance properties
-        os  << std::fixed << std::setprecision(6);
-
-        // Output distance properties
-        os  << ", dPfMag: " << f.dPfMag();
+        // Buffer locally so the fixed/precision change never reaches os
+        std::ostringstream distances;
+        distances
+            << std::fixed << std::setprecision(6)
+            << ", dPfMag: " << f.dPfMag();
 
         if (f.dNfMag().has_value())
         {
-            os  << ", dNfMag: " << f.dNfMag().value();
+            distances << ", dNfMag: " << f.dNfMag().value();
         }
+
+        os  << distances.str();
     }
 
     os  << ')';

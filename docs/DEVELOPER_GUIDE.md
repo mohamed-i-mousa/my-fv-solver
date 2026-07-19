@@ -808,9 +808,9 @@ virtual ~GradientScheme() noexcept = default;
 ```
 
 Used by: `GradientScheme` (abstract base; `LeastSquares` derives from it),
-`Matrix`, `kOmegaSST`, `SIMPLE`, `StreamStateGuard`. Note the
-destructor is `virtual` only for the polymorphic `GradientScheme`; the
-non-polymorphic borrowers keep a non-virtual `= default` destructor.
+`Matrix`, `kOmegaSST`, `SIMPLE`. Note the destructor is `virtual` only for
+the polymorphic `GradientScheme`; the non-polymorphic borrowers keep a
+non-virtual `= default` destructor.
 
 ### Pattern 2: Runtime-owned polymorphic services
 
@@ -1067,10 +1067,11 @@ loop. Helpers available:
   block.
 
 All helpers are stateless; callers guard each call with their own
-`debug_` flag. `StreamStateGuard` (in `Logger.h`) is the canonical
-pattern when you do need to manipulate `std::cout` flags directly: it
-saves and restores `flags()` and `precision()` so changes cannot leak
-into unrelated output.
+`debug_` flag. Each helper early-returns on `!Comm::master()`, then builds
+its text in a local `std::ostringstream` and writes it in one go — sticky
+manipulators (`scientific`, `setprecision`, `left`, `right`) expire with the
+local stream, so they cannot leak into unrelated output. Use that same
+local-buffer pattern wherever you manipulate stream flags directly.
 
 **Ad-hoc method tracing** (one-off debugging during development of a new
 algorithm or while diagnosing an incident): plain `std::cout` is fine.
