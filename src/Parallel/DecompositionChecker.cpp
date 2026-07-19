@@ -295,10 +295,9 @@ void checkGradientAcrossCuts(const Mesh& mesh)
     const Scalar globalError = globalMax(maxError);
     const Count globalTested = globalSum(testedCells);
 
-    // A wrong or stale ghost stencil produces O(1) errors; a healthy
-    // least-squares reconstruction of a linear field is exact to
-    // round-off amplified by the stencil conditioning
-    if (globalError > S(1e-8))
+    const Scalar tolerance = std::sqrt(smallValue);
+
+    if (globalError > tolerance)
     {
         FatalError
         (

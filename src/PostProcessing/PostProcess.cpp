@@ -24,6 +24,7 @@
 
 // Project headers
 #include "CaseConfiguration.h"
+#include "Comm.h"
 #include "DerivedFields.h"
 #include "ErrorHandler.h"
 #include "Logger.h"
@@ -81,15 +82,17 @@ void reportStatistics(const MomentumTransport& solver)
     const ScalarField& Uz = solver.Uz();
     const ScalarField& pressure = solver.pressure();
 
-    // Owned cells only: the ghost tail duplicates cells owned by the
-    // neighbor ranks. Emptiness must be decided globally: a per-rank
-    // early return would skip the collectives below and deadlock
+    // Emptiness is decided globally: a per-rank return would deadlock
     const Count numOwnedCells = solver.mesh().numOwnedCells();
     const Count totalCells = globalSum(numOwnedCells);
 
     if (totalCells == 0)
     {
-        Warning("Solution fields are empty. Skipping statistics.");
+        if (Comm::master())
+        {
+            Warning("Solution fields are empty. Skipping statistics.");
+        }
+
         return;
     }
 

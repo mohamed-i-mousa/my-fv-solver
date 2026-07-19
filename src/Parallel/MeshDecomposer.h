@@ -71,10 +71,10 @@ public:
 
 // ****************************** Public Methods ******************************
 
-    /// Label every cell with its rank (METIS on the cell dual graph)
+    /// Label every cell with its rank
     [[nodiscard]] IndexList partition() const;
 
-    /// Extract one flat submesh block per rank
+    /// Extract a submesh block per rank
     [[nodiscard]] std::vector<SubmeshData> decompose() const;
 
 // ****************************** Private Members *****************************

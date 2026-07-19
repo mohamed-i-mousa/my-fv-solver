@@ -87,13 +87,30 @@ IndexList MeshDecomposer::partition() const
 
     std::vector<idx_t> xadj(numCells + 1, 0);
 
+    Count numInternalFaces = 0;
+
     for (const Face& face : faces)
     {
         if (!face.isBoundary())
         {
             ++xadj[face.ownerCell() + 1];
             ++xadj[face.neighborCell().value() + 1];
+            ++numInternalFaces;
         }
+    }
+
+    // Two CSR entries per internal face, overflowing idx_t before cells do
+    if 
+    (
+        2 * numInternalFaces
+     >= static_cast<Count>(std::numeric_limits<idx_t>::max())
+    )
+    {
+        FatalError
+        (
+            "MeshDecomposer: adjacency entry count exceeds the 32-bit "
+            "index range"
+        );
     }
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
