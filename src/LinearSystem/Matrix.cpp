@@ -636,9 +636,9 @@ void Matrix::setValues
 (
     IndexListRef cellIndices,
     ScalarListRef values,
-    ScalarListRef fractions,
-    OptionalRef<ScalarField> ghostFractions,
-    OptionalRef<ScalarField> ghostValues
+    const ScalarField& ghostFractions,
+    const ScalarField& ghostValues,
+    ScalarListRef fractions
 )
 {
     const Count numOwnedCells = mesh_.numOwnedCells();
@@ -714,17 +714,7 @@ void Matrix::setValues
         }
     }
 
-    if (!ghostFractions || !ghostValues)
-    {
-        return;
-    }
-
-    // Ghost cells constrained on their owning rank: that rank replaced
-    // the row; this rank moves its own coupling to the RHS and zeroes it
-    // (the mirror of the processor-face skip in the loop above)
-    const ScalarField& fractionsField = ghostFractions->get();
-    const ScalarField& valuesField = ghostValues->get();
-
+    // Ghosts constrained elsewhere: move this rank's coupling to the RHS
     for (const Index faceIdx : processorFaces_)
     {
         const Face& face = mesh_.faces()[faceIdx];
@@ -733,7 +723,7 @@ void Matrix::setValues
         const Index ownedSide = owner < numOwnedCells ? owner : neighbor;
         const Index ghostSide = owner < numOwnedCells ? neighbor : owner;
 
-        if (fractionsField[ghostSide] <= S(1.0) - rootSmallValue_)
+        if (ghostFractions[ghostSide] <= S(1.0) - rootSmallValue_)
         {
             continue;
         }
@@ -743,7 +733,7 @@ void Matrix::setValues
 
         if (coupling != S(0.0))
         {
-            vectorB_[ownedSide] -= coupling * valuesField[ghostSide];
+            vectorB_[ownedSide] -= coupling * ghostValues[ghostSide];
             cooValues_[slot] = S(0.0);
         }
     }

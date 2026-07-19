@@ -104,20 +104,14 @@ public:
     /// Apply Patankar implicit under-relaxation to the staged values
     void relax(Scalar alpha, const ScalarField& phiPrevIter);
 
-    /// Fix matrix rows to impose known cell values
-    /// Replaces each constrained cell's equation with
-    /// diag * phi[i] = diag * value[i] and moves the known-value coupling
-    /// to unconstrained neighbors' RHS; call after relax(), before solve().
-    /// In a decomposed mesh a constrained cell on the OTHER side of a cut
-    /// is this rank's ghost: pass the constraint fraction and value as
-    /// cell fields (ghosts current) so the local coupling moves too
+    /// Fix matrix rows to impose known cell values (ghosts included)
     void setValues
     (
         IndexListRef cellIndices,
         ScalarListRef values,
-        ScalarListRef fractions = {},
-        OptionalRef<ScalarField> ghostFractions = {},
-        OptionalRef<ScalarField> ghostValues = {}
+        const ScalarField& ghostFractions,
+        const ScalarField& ghostValues,
+        ScalarListRef fractions = {}
     );
 
     /// Push the staged values into the PETSc matrix

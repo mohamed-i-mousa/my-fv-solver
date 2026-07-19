@@ -18,7 +18,6 @@
 // Standard library headers
 #include <cmath>
 #include <algorithm>
-#include <functional>
 #include <limits>
 
 // External library headers
@@ -773,9 +772,9 @@ void kOmegaSST::solveOmegaEquation
     (
         wallCellIndices(),
         wallCellOmega_,
-        wallCellFraction(),
-        std::cref(wallConstraintFraction_),
-        std::cref(omega_)
+        wallConstraintFraction_,
+        omega_,
+        wallCellFraction()
     );
 
     matrixConstruct()->assemble();
