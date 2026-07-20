@@ -30,7 +30,7 @@ PISO::PISO
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
-    const ConvectionSchemes& momentumConvectionScheme,
+    const ConvectionScheme& momentumConvectionScheme,
     LinearSolver& momentumSolver,
     LinearSolver& pressureSolver,
     TurbulenceModel& turbulence,
@@ -206,9 +206,7 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
     std::swap(Uy(), UyStar_);
     std::swap(Uz(), UzStar_);
 
-    // The sweeps wrote owned cells only: refresh U ghosts before the
-    // face diagonal and Rhie-Chow read them (DU is exchanged inside
-    // diagonalDU at finalization)
+    // The sweeps wrote owned cells only: refresh U ghosts before reading
     exchangeHalos(mesh(), {&Ux(), &Uy(), &Uz()});
 
     // Rebuild the face momentum diagonal

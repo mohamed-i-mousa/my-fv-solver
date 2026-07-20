@@ -6,7 +6,7 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file BoundaryConditionsLoader.h
+ * @file BCLoader.h
  * @brief Case-file boundary condition registration
  *****************************************************************************/
 

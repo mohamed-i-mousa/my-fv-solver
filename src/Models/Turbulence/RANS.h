@@ -41,7 +41,7 @@ class Mesh;
 class BoundaryConditions;
 class TimeScheme;
 class GradientScheme;
-class ConvectionSchemes;
+class ConvectionScheme;
 class LinearSolver;
 class Matrix;
 class Face;
@@ -63,9 +63,9 @@ public:
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
-        const ConvectionSchemes& kScheme,
+        const ConvectionScheme& kScheme,
         LinearSolver& kSolver,
-        const ConvectionSchemes& dissipationScheme,
+        const ConvectionScheme& dissipationScheme,
         LinearSolver& dissipationSolver,
         Scalar deltaT,
         Scalar nu,
@@ -193,7 +193,7 @@ protected:
     }
 
     /// k convection scheme
-    [[nodiscard]] const ConvectionSchemes& kConvectionScheme() const noexcept
+    [[nodiscard]] const ConvectionScheme& kConvectionScheme() const noexcept
     {
         return kConvectionScheme_;
     }
@@ -206,7 +206,7 @@ protected:
     [[nodiscard]] LinearSolver& kSolver() noexcept { return kSolver_; }
 
     /// Dissipation convection scheme
-    [[nodiscard]] const ConvectionSchemes&
+    [[nodiscard]] const ConvectionScheme&
     dissipationConvectionScheme() const noexcept
     {
         return dissipationConvectionScheme_;
@@ -415,13 +415,13 @@ private:
     std::unique_ptr<Matrix> matrixConstruct_;
 
     /// Reference to k convection scheme
-    const ConvectionSchemes& kConvectionScheme_;
+    const ConvectionScheme& kConvectionScheme_;
 
     /// Linear solver for k equation
     LinearSolver& kSolver_;
 
     /// Reference to dissipation convection scheme
-    const ConvectionSchemes& dissipationConvectionScheme_;
+    const ConvectionScheme& dissipationConvectionScheme_;
 
     /// Linear solver for dissipation equation
     LinearSolver& dissipationSolver_;

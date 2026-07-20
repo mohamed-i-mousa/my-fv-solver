@@ -6,14 +6,14 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file BoundaryConditionsLoader.cpp
+ * @file BCLoader.cpp
  * @brief Case-file boundary condition registration
  *****************************************************************************/
 
 // ********************************** Headers *********************************
 
 // Implementation header
-#include "BoundaryConditionsLoader.h"
+#include "BCLoader.h"
 
 // Standard library headers
 #include <iostream>

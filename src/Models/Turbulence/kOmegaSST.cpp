@@ -30,7 +30,7 @@
 #include "Reduce.h"
 #include "BoundaryConditions.h"
 #include "GradientScheme.h"
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 #include "LinearSolvers.h"
 
 // ************************* Special Member Functions *************************
@@ -41,9 +41,9 @@ kOmegaSST::kOmegaSST
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradientScheme,
-    const ConvectionSchemes& kScheme,
+    const ConvectionScheme& kScheme,
     LinearSolver& kSolver,
-    const ConvectionSchemes& omegaScheme,
+    const ConvectionScheme& omegaScheme,
     LinearSolver& omegaSolver,
     Scalar deltaT,
     Scalar nu,
@@ -82,9 +82,7 @@ kOmegaSST::kOmegaSST
     );
     wallCellOmega_.assign(wallCellIndices().size(), S(0.0));
 
-    // Wall-constraint fractions as a cell field: the neighbor across a
-    // cut sees this rank's constrained wall cells through its ghosts
-    // (static topology — exchanged once here)
+    // The ghosts show the neighbor's constrained cells
     wallConstraintFraction_.setAll(S(0.0));
 
     for (Index i = 0; i < wallCellIndices().size(); ++i)
@@ -99,8 +97,7 @@ kOmegaSST::kOmegaSST
     k().setAll(initialK);
     omega_.setAll(initialOmega);
 
-    // Initialize nut with the simple k-omega estimate nut = k/omega, used
-    // before strain rate & F23 are available for the SST limiter
+    // nut = k/omega until strain rate and F23 reach the SST limiter
     const Count numCells = mesh.numCells();
 
     #pragma omp parallel for schedule(static)
@@ -199,10 +196,6 @@ void kOmegaSST::solve
 
     if (debug())
     {
-        // Seeds are the reduction identities, so a rank with an empty
-        // partition still reaches the collectives below with neutral
-        // partials — a per-rank guard skipping them would deadlock the
-        // ranks that entered (debug() is uniform across ranks)
         Scalar kMin = std::numeric_limits<Scalar>::max();
         Scalar kMax = std::numeric_limits<Scalar>::lowest();
         Scalar kSum = S(0.0);
@@ -412,8 +405,7 @@ void kOmegaSST::overrideWallCellProduction
         const Index cellIdx = wallCellIndices()[i];
         if (!hasWallOverride[cellIdx]) continue;
 
-        // Blend wall production with interior production using
-        // wallCellFraction (wall area / total boundary area)
+        // Blend by wallCellFraction (wall area / total boundary area)
         const Scalar f = wallCellFraction()[i];
         Pk[cellIdx] =
             std::lerp(Pk[cellIdx], wallProductionAccum[cellIdx], f);
@@ -766,8 +758,7 @@ void kOmegaSST::solveOmegaEquation
     // Apply under-relaxation
     matrixConstruct()->relax(alphaDissipation(), omega_);
 
-    // Fix wall-cell rows to impose omega = omegaWall; the ghost fields
-    // let this rank mirror constraints applied across the cuts
+    // Fix wall-cell rows to impose omega = omegaWall
     matrixConstruct()->setValues
     (
         wallCellIndices(),

@@ -104,8 +104,7 @@ public:
 
 // **************************** Runtime Selection ****************************
 
-    /// Construct the linear solver selected by name; optionsPrefix scopes
-    /// the case file's petscOptions entries to this solver's equation
+    /// Construct the solver by name; optionsPrefix scopes its petscOptions
     [[nodiscard]] static std::unique_ptr<LinearSolver> create
     (
         const Name& name,

@@ -93,9 +93,7 @@ public:
         neighborCellIndices_.assign(neighbors.begin(), neighbors.end());
     }
 
-    /// Set geometry directly: ghost-cell stubs in a decomposed mesh carry
-    /// the owning rank's centroid and volume instead of computing their
-    /// own (their remaining faces live on the owning rank)
+    /// Set geometry directly: ghost stubs take the owning rank's values
     void setGeometry(const Vector& centroid, Scalar volume) noexcept
     {
         centroid_ = centroid;

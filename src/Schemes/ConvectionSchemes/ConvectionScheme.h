@@ -6,7 +6,7 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file ConvectionSchemes.h
+ * @file ConvectionScheme.h
  * @brief Abstract base class for convection discretization schemes
  *
  * @details This header defines the polymorphic convection scheme interface for
@@ -29,29 +29,29 @@
 #include "Face.h"
 #include "CellData.h"
 
-// ************************** class ConvectionSchemes *************************
+// ************************** class ConvectionScheme **************************
 
-class ConvectionSchemes
+class ConvectionScheme
 {
 public:
 
 // ************************* Special Member Functions *************************
 
     /// Copy constructor and assignment - Slicing problem
-    ConvectionSchemes(const ConvectionSchemes&) = delete;
-    ConvectionSchemes& operator=(const ConvectionSchemes&) = delete;
+    ConvectionScheme(const ConvectionScheme&) = delete;
+    ConvectionScheme& operator=(const ConvectionScheme&) = delete;
 
     /// Move constructor and assignment - Slicing problem
-    ConvectionSchemes(ConvectionSchemes&&) = delete;
-    ConvectionSchemes& operator=(ConvectionSchemes&&) = delete;
+    ConvectionScheme(ConvectionScheme&&) = delete;
+    ConvectionScheme& operator=(ConvectionScheme&&) = delete;
 
     /// Default destructor
-    virtual ~ConvectionSchemes() = default;
+    virtual ~ConvectionScheme() = default;
 
 // **************************** Runtime Selection ****************************
 
     /// Construct the convection scheme selected by name
-    [[nodiscard]] static std::unique_ptr<ConvectionSchemes> create
+    [[nodiscard]] static std::unique_ptr<ConvectionScheme> create
     (
         const Name& schemeName
     );
@@ -76,5 +76,5 @@ public:
 protected:
 
     /// Default constructor
-    ConvectionSchemes() = default;
+    ConvectionScheme() = default;
 };

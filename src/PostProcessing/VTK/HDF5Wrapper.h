@@ -84,31 +84,24 @@ struct SlabLayout
     hsize_t rowOffset;
 };
 
-/// Slab of a distributed dataset: this rank's localCount rows at the
-/// rank-major global offset (collective — every rank must call, in the
-/// same order relative to other slab constructions)
+/// This rank's rows at its global offset (collective, order-sensitive)
 [[nodiscard]] SlabLayout distributedRows(Count localCount);
 
-/// Slab of a replicated dataset (Steps bookkeeping): the master writes
-/// every row, the other ranks participate with an empty selection
+/// Slab of a replicated dataset: only the master writes rows
 [[nodiscard]] SlabLayout replicatedRows(hsize_t rows);
 
-/// Slab of a per-part table (the VTKHDF NumberOf* datasets): one row per
-/// rank, written at row myProcNo
+/// Slab of a per-part table: one row per rank, written at myProcNo
 [[nodiscard]] SlabLayout oneRowPerRank();
 
-/// Slab of a per-piece offsets array (VTKHDF stores nItems + 1 offsets per
-/// piece, so the concatenated array carries one extra row per rank)
+/// Slab of a per-piece offsets array: nItems + 1 rows per rank
 [[nodiscard]] SlabLayout perPieceOffsetsRows(const SlabLayout& itemRows);
 
 // ***************************** File and Groups ******************************
 
-/// Create (truncate) an HDF5 file and return its open handle
-/// (MPI-IO access in parallel runs — collective, call on every rank)
+/// Create (truncate) an HDF5 file and return its handle (collective)
 [[nodiscard]] hid_t createFile(const FilePath& path);
 
-/// Open an existing HDF5 file for read-write and return its handle
-/// (MPI-IO access in parallel runs — collective, call on every rank)
+/// Open an HDF5 file for read-write and return its handle (collective)
 [[nodiscard]] hid_t openFile(const FilePath& path);
 
 /// Create a child group under an open location and return its handle
@@ -152,8 +145,7 @@ void writeStringAttribute
 
 // ********************************* Datasets *********************************
 
-/// Write a fixed dataset in one shot: created at rows.globalRows, this
-/// rank filling its slab (serial runs compress above the threshold)
+/// Write a fixed dataset in one shot, this rank filling its slab
 void writeDataset
 (
     hid_t location,
@@ -165,8 +157,7 @@ void writeDataset
     hsize_t columns
 );
 
-/// Append rows to an extensible dataset: extended by rows.globalRows, this
-/// rank filling its slab (chunkRows must be rank-identical)
+/// Append to an extensible dataset; chunkRows must be rank-identical
 void appendRows
 (
     hid_t location,

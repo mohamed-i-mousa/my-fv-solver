@@ -41,9 +41,7 @@ namespace
 constexpr int exchangeTag = 42;
 
 
-/// Swap scalar payloads with the neighbor across one cut; the two sides
-/// may send different amounts (my send count equals the NEIGHBOR's ghost
-/// count, not my own — one owned cell can face several remote cells)
+/// Swap scalar payloads across one cut; the two sides may differ in size
 std::vector<Scalar> exchangeWithNeighbor
 (
     const ProcessorPatch& patch,
@@ -53,8 +51,7 @@ std::vector<Scalar> exchangeWithNeighbor
 {
     std::vector<Scalar> recvBuffer(recvCount);
 
-    // Sendrecv is cycle-safe: send and receive progress concurrently, so
-    // per-rank patch ordering cannot deadlock the neighbor loop
+    // Sendrecv is cycle-safe: patch ordering cannot deadlock the loop
     MPI_Sendrecv
     (
         sendBuffer.data(),
@@ -103,8 +100,7 @@ void checkGhostGeometry(const Mesh& mesh)
 
     for (const ProcessorPatch& patch : mesh.processorPatches())
     {
-        // My owned send cells feed the neighbor's ghosts; the neighbor's
-        // sends arrive in exactly my ghost order (the ordering contract)
+        // The neighbor's sends arrive in exactly my ghost order
         std::vector<Scalar> sendBuffer;
         sendBuffer.reserve(4 * patch.sendCellIndices().size());
 
@@ -200,8 +196,7 @@ void checkCutFaceGeometry(const Mesh& mesh)
 /// Least-squares gradient of a linear field, exact across the cuts
 void checkGradientAcrossCuts(const Mesh& mesh)
 {
-    // phi = a x + b y + c z + d sampled at every centroid, ghosts
-    // included — the ghost values stand in for the halo exchange
+    // phi = a x + b y + c z + d at every centroid, ghosts included
     const Scalar a = S(1.5);
     const Scalar b = S(2.5);
     const Scalar c = S(-3.5);
@@ -218,8 +213,7 @@ void checkGradientAcrossCuts(const Mesh& mesh)
         phi[cellIdx] = a * x.x() + b * x.y() + c * x.z() + d;
     }
 
-    // Geometric-only construction: no boundary values are ever read,
-    // because cells touching a physical boundary are skipped below
+    // Cells touching a physical boundary are skipped
     const BoundaryConditions bc;
     const LeastSquares leastSquares(mesh, bc);
 

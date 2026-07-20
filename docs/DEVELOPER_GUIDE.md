@@ -38,9 +38,9 @@ following the OpenFOAM convention.
   - `CellData.h`, `FaceData.h`, `Field.h/.cpp`
 - **`src/BoundaryConditions/`**: patch metadata and physical BC configuration
   - `BoundaryData.h/.cpp`, `BoundaryConditions.h/.cpp`,
-    `BoundaryConditionsLoader.h/.cpp`
+    `BCLoader.h/.cpp`
 - **`src/Schemes/`**: discretization schemes, grouped by family
-  - `ConvectionSchemes/`: `ConvectionSchemes.h/.cpp` (abstract base + runtime selection) plus one
+  - `ConvectionSchemes/`: `ConvectionScheme.h/.cpp` (abstract base + runtime selection) plus one
     header/implementation pair per concrete scheme: `UpwindScheme.h/.cpp`,
     `CentralDifferenceScheme.h/.cpp`, `SecondOrderUpwindScheme.h/.cpp`
   - `GradientSchemes/`: `GradientScheme.h/.cpp` (abstract base),
@@ -275,7 +275,7 @@ component, giving zero normal gradient.
 1. Extract tangential: `∇φ_tan = ∇φ_cell - (∇φ_cell·n)n`
 2. Apply normal gradient: `∇φ_f = ∇φ_tan + gradient_specified×n`
 
-### Convection schemes (`ConvectionSchemes`)
+### Convection schemes (`ConvectionScheme`)
 
 #### Upwind Differencing Scheme (UDS)
 **Coefficients**: 
@@ -345,7 +345,7 @@ and face diffusion coefficients are prepared by solver/model code, not in
 struct ConvectionTerm
 {
     const FaceFluxField& flowRate;       // Face flow rates
-    const ConvectionSchemes& scheme;     // Convection discretization
+    const ConvectionScheme& scheme;     // Convection discretization
 };
 
 struct TransientTerm
@@ -825,7 +825,7 @@ SolverModules& operator=(const SolverModules&) = delete;
 SolverModules(SolverModules&&) = delete;
 SolverModules& operator=(SolverModules&&) = delete;
 
-std::unique_ptr<ConvectionSchemes> momentumConvectionScheme;
+std::unique_ptr<ConvectionScheme> momentumConvectionScheme;
 std::unique_ptr<MomentumTransport> solver;  // declared last, destroyed first
 ```
 
@@ -869,7 +869,7 @@ kept asymmetric by design: `BCLoader` streams the raw
 the data is patch-indexed and field-specific.
 
 `SolverModules` owns user-selected runtime services:
-`GradientScheme`, the default and per-equation `ConvectionSchemes`, one
+`GradientScheme`, the default and per-equation `ConvectionScheme`, one
 `LinearSolver` instance per solved equation, and a `TurbulenceModel`
 (`kOmegaSST` or `Laminar`). `solver` is declared last so it is destroyed before
 the services and model whose references are stored by `SIMPLE`.
@@ -914,11 +914,11 @@ construction).
 7) Apply under-relaxation via `matrix.relax(alpha, phiPrev)` if needed.
 
 ### Add a new convection scheme
-1) Derive from `ConvectionSchemes` and override the pure-virtual `correction()` (the explicit high-order deferred-correction term); the stable first-order upwind coefficients are applied by `Matrix`.
+1) Derive from `ConvectionScheme` and override the pure-virtual `correction()` (the explicit high-order deferred-correction term); the stable first-order upwind coefficients are applied by `Matrix`.
 2) Optionally add high-order face value and correction methods (see CDS/SOU) and integrate as deferred-correction in `Matrix`.
-3) Add the case-file name to `ConvectionSchemes::availableSchemes()` and a
-   matching `if (schemeName == "...")` branch to `ConvectionSchemes::create()`
-   (both in `src/Schemes/ConvectionSchemes/ConvectionSchemes.cpp`), then
+3) Add the case-file name to `ConvectionScheme::availableSchemes()` and a
+   matching `if (schemeName == "...")` branch to `ConvectionScheme::create()`
+   (both in `src/Schemes/ConvectionSchemes/ConvectionScheme.cpp`), then
    document it under `numericalSchemes.convection` in `docs/CASE.md`.
 
 ### Add a new gradient scheme

@@ -17,11 +17,11 @@
 
 // ********************************** Headers *********************************
 
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 
 // **************************** class UpwindScheme ****************************
 
-class UpwindScheme final : public ConvectionSchemes
+class UpwindScheme final : public ConvectionScheme
 {
 public:
 

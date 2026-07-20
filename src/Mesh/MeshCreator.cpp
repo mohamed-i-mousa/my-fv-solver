@@ -36,8 +36,7 @@
 namespace
 {
 
-/// Compute face geometry, owned-cell geometry, and face distances (ghost
-/// stubs already carry their geometry, so the cell pass skips them)
+/// Compute face and owned-cell geometry; ghost stubs already carry theirs
 void prepareGeometry(Mesh& mesh, bool debug)
 {
     std::vector<FaceIntegrals> faceIntegrals(mesh.numFaces());
@@ -165,9 +164,7 @@ Mesh buildSubmesh(SubmeshData block, bool debug)
         }
     }
 
-    // Owned cells: faces and signs from the block, neighbor lists
-    // rebuilt from the local faces (ghost neighbors included, so
-    // least-squares stencils cross the cuts)
+    // Neighbor lists rebuilt from local faces, ghosts included
     std::vector<IndexList> cellNeighbors(block.numOwnedCells);
 
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
@@ -234,8 +231,7 @@ Mesh buildSubmesh(SubmeshData block, bool debug)
         cells.push_back(std::move(ghost));
     }
 
-    // Physical patch fragments, then one patch per inter-rank cut so the
-    // boundary machinery sees the cuts as ordinary named patches
+    // One patch per cut, so the cuts look like ordinary named patches
     PatchList patches;
 
     for (Index p = 0; p < block.patchNames.size(); ++p)
@@ -317,8 +313,7 @@ Mesh create(const CaseConfiguration& config)
         return readCompleteMesh(config);
     }
 
-    // Parallel: the master reads, prepares, and checks the complete
-    // mesh, partitions it, and ships every rank its submesh block
+    // The master rank reads and partitions, then ships the submeshes
     std::vector<SubmeshData> blocks;
 
     if (Comm::master())

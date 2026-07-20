@@ -52,9 +52,7 @@ int checkedInt(Count value, const Message& label)
 }
 
 
-// Write one PolyData topology group with fixed (write-once) datasets;
-// numCells is this rank's piece value, the slabs place this rank's rows
-// inside the shared datasets
+// Write one PolyData topology group with write-once datasets
 void writeTopologyGroup
 (
     hid_t location,
@@ -257,10 +255,7 @@ void HDF5BoundaryData::writeGeometry()
         }
     }
 
-    // A rank owning no boundary faces is normal in a decomposed run; only
-    // a globally empty boundary is worth a warning. The reduction is
-    // unconditional so every rank stays in lockstep, and the warning is
-    // master-gated because std::cerr is not silenced on the other ranks.
+    // Only a globally empty boundary is worth a warning
     const Count globalBoundaryFaces = globalSum(boundaryFaceIndices_.size());
 
     if (globalBoundaryFaces == 0 && Comm::master())
@@ -300,9 +295,7 @@ void HDF5BoundaryData::writeGeometry()
         offsets.push_back(static_cast<long long>(connectivity.size()));
     }
 
-    // Slab placement of this rank's piece inside the shared datasets
-    // (collective: every rank builds these in the same order, including
-    // ranks whose boundary is empty)
+    // Every rank builds these in the same order, empty or not
     const HDF5::SlabLayout pointRows =
         HDF5::distributedRows(localToGlobalNodes.size());
     const HDF5::SlabLayout polygonRows =
@@ -312,8 +305,7 @@ void HDF5BoundaryData::writeGeometry()
 
     const HDF5::SlabLayout partRow = HDF5::oneRowPerRank();
 
-    // A topology that is empty on EVERY rank: no data rows, but still one
-    // per-piece offsets row (the spec's sum-of-nItems-plus-one layout)
+    // Empty on EVERY rank: no data rows, but still one offsets row
     const HDF5::SlabLayout emptyRows = {0, 0, 0};
 
     const long long numPoints =
@@ -569,9 +561,7 @@ void HDF5BoundaryData::appendFaceDataArray
     const void* values
 )
 {
-    // One step appends the rank-major concatenation of every piece; the
-    // chunk rows derive from the GLOBAL count (creation properties must
-    // be rank-identical for the collective create)
+    // Chunk rows derive from the GLOBAL count for the collective create
     const HDF5::SlabLayout dataRows
     {
         static_cast<hsize_t>(boundaryFaceIndices_.size()),
@@ -642,8 +632,7 @@ void HDF5BoundaryData::appendStepBookkeeping(Scalar time)
     const long long numParts = static_cast<long long>(Comm::numProcessors());
     const long long zero4[4] = {0, 0, 0, 0};
 
-    // Bookkeeping rows are identical on every rank: the master writes
-    // them, the other ranks participate in the collective append
+    // Identical on every rank: the master writes, the others just join
     const HDF5::SlabLayout oneRow = HDF5::replicatedRows(1);
 
     HDF5::appendRows

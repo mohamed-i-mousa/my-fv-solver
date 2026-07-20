@@ -26,7 +26,7 @@
 #include "CellData.h"
 #include "Field.h"
 #include "FaceData.h"
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 #include "GradientScheme.h"
 
 // *************************** Forward Declarations ***************************
@@ -58,7 +58,7 @@ struct ConvectionTerm
     const FaceFluxField& flowRate;
 
     /// Convection discretization scheme
-    const ConvectionSchemes& scheme;
+    const ConvectionScheme& scheme;
 };
 
 // ************************* struct VelocityComponents ************************

@@ -132,8 +132,7 @@ void HDF5CellData::writeGeometry()
     const CellListRef allCells = mesh_.cells();
     const FaceListRef allFaces = mesh_.faces();
 
-    // Owned cells only: in a decomposed mesh the ghost tail duplicates
-    // cells the neighbor ranks write, and ghost stubs carry no topology
+    // Owned cells only: the neighbor ranks write their own
     const Count numOwnedCells = mesh_.numOwnedCells();
 
     // Point coordinates, written once as double precision
@@ -259,10 +258,7 @@ void HDF5CellData::writeGeometry()
         );
     }
 
-    // Slab placement of this rank's piece inside the shared datasets
-    // (collective: every rank builds these in the same order). The
-    // connectivity values above stay piece-local, so the buffers are
-    // written unchanged — only their placement is global.
+    // Only the placement is global, the values stay piece-local
     const HDF5::SlabLayout pointRows =
         HDF5::distributedRows(allNodes.size());
     const HDF5::SlabLayout cellRows = HDF5::distributedRows(numOwnedCells);
@@ -614,9 +610,7 @@ void HDF5CellData::appendCellDataArray
 {
     const hsize_t columns = components == 1 ? 0 : components;
 
-    // One step appends the rank-major concatenation of every piece; the
-    // chunk rows derive from the GLOBAL count (creation properties must
-    // be rank-identical for the collective create)
+    // Chunk rows derive from the GLOBAL count for the collective create
     const HDF5::SlabLayout dataRows
     {
         static_cast<hsize_t>(numCells_),
@@ -697,8 +691,7 @@ void HDF5CellData::appendStepBookkeeping(Scalar time)
     const long long zero = 0;
     const long long numParts = static_cast<long long>(Comm::numProcessors());
 
-    // Bookkeeping rows are identical on every rank: the master writes
-    // them, the other ranks participate in the collective append
+    // Identical on every rank: the master writes, the others just join
     const HDF5::SlabLayout oneRow = HDF5::replicatedRows(1);
 
     HDF5::appendRows

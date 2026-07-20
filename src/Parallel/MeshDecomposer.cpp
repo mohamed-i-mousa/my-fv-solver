@@ -26,8 +26,7 @@
 
 // **************************** Build-Time Invariants **************************
 
-// The dual graph is handed to METIS as idx_t arrays; the 32-bit build is
-// assumed throughout (matches PetscInt and the < 2^31 cells decision)
+// METIS takes idx_t arrays; the 32-bit build is assumed throughout
 static_assert
 (
     IDXTYPEWIDTH == 32,
@@ -144,8 +143,7 @@ IndexList MeshDecomposer::partition() const
     idx_t options[METIS_NOPTIONS];
     METIS_SetDefaultOptions(options);
 
-    // Fixed seed: every run (and every rank, if ever run redundantly)
-    // must produce the identical partition
+    // Every run must produce the identical partition
     options[METIS_OPTION_SEED] = 0;
     options[METIS_OPTION_NUMBERING] = 0;
 
@@ -192,8 +190,7 @@ std::vector<SubmeshData> MeshDecomposer::decompose() const
 
     const IndexList cellToRank = partition();
 
-    // Local index of every cell within its rank (rank-major numbering:
-    // original-mesh order preserved within each rank)
+    // Local index of every cell (original-mesh order preserved)
     IndexList localCellIdx(numCells, 0);
     IndexList rankCellCounts(numParts_, 0);
 
@@ -268,11 +265,7 @@ SubmeshData MeshDecomposer::extractSubmesh
 
     const Count numOwned = rankOffsets[rank + 1] - rankOffsets[rank];
 
-    // ------------------------------------------------------------------
-    // Classify every original face touched by this rank, preserving
-    // original-mesh order within each group (the ordering contract both
-    // sides of every cut derive the send/ghost sequence from)
-    // ------------------------------------------------------------------
+    // Classify this rank's faces, keeping original-mesh order per group
     IndexList internalFaces;
     std::vector<IndexList> cutFacesTo(numParts_);
     std::vector<IndexList> boundaryFacesOf(patches.size());
@@ -318,11 +311,7 @@ SubmeshData MeshDecomposer::extractSubmesh
         }
     }
 
-    // ------------------------------------------------------------------
-    // Ghost layer and send lists: walk each cut's faces in order; first
-    // appearance fixes both the ghost order here and the send order on
-    // the neighbor (which walks the same faces in the same order)
-    // ------------------------------------------------------------------
+    // Walking each cut's faces in order fixes both ranks' ghost/send order
     SubmeshData block;
     block.numOwnedCells = numOwned;
     block.totalCellCount = mesh_.numCells();
@@ -371,8 +360,7 @@ SubmeshData MeshDecomposer::extractSubmesh
                 );
             }
 
-            // sentTo marks the neighbor a cell was last queued for, so a
-            // cell feeding two cuts is sent to both, but once each
+            // sentTo sends a cell to each of its cuts
             if (sentTo[ownCell] != nbr)
             {
                 sentTo[ownCell] = nbr;
@@ -384,10 +372,7 @@ SubmeshData MeshDecomposer::extractSubmesh
         block.procSendOffsets.push_back(block.procSendCells.size());
     }
 
-    // ------------------------------------------------------------------
-    // Local face numbering: [internal | cuts by neighbor | boundary by
-    // patch] — every patch ends up a contiguous local face range
-    // ------------------------------------------------------------------
+    // Face numbering: [internal | cuts | boundary], contiguous per patch
     IndexList localFaceIdx(faces.size(), invalidIdx);
     IndexList includedFaces;
 
@@ -460,11 +445,7 @@ SubmeshData MeshDecomposer::extractSubmesh
         }
     }
 
-    // ------------------------------------------------------------------
-    // Faces: original node order and owner/neighbor roles are preserved
-    // verbatim (a remote cell simply maps to its ghost index), so both
-    // ranks' copies of a cut face carry identical data
-    // ------------------------------------------------------------------
+    // Node order and owner/neighbor roles preserved: both copies match
     block.faceNodeOffsets.push_back(0);
 
     for (const Index faceIdx : includedFaces)
@@ -500,10 +481,7 @@ SubmeshData MeshDecomposer::extractSubmesh
         }
     }
 
-    // ------------------------------------------------------------------
-    // Owned cells in local order: face lists and signs copied verbatim
-    // (roles unchanged, so the +1 owner / -1 neighbor signs still hold)
-    // ------------------------------------------------------------------
+    // Face lists and signs copied verbatim: the roles are unchanged
     block.cellFaceOffsets.push_back(0);
 
     IndexList ownedOriginal(numOwned, 0);

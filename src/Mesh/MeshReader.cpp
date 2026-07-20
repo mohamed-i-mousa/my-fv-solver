@@ -802,9 +802,8 @@ void MeshReader::parseFacesSection
                 hexItems.push_back(itemHex);
             }
 
-            // Owner and neighbor are the last two items;
-            // node indices are everything before them.
-            // A leading node count, if present, must be skipped.
+            // Owner and neighbor are the last two items.
+            // A leading node count, if present, must be skipped
             const Index nodeStart = hasNodeCountPrefix ? 1 : 0;
 
             if (hexItems.size() < 2)
@@ -1087,8 +1086,7 @@ void MeshReader::buildTopology()
             }
         }
 
-        // If this face has a valid neighborCell, 
-        // map face to neighbor cell and assign sign -1
+        // map face to neighbor cell and assign sign -1 if neighborCell is valid
         if
         (
             currentFace.neighborCell().has_value()

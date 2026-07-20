@@ -24,7 +24,7 @@
 #include <omp.h>
 
 // Project headers
-#include "BoundaryConditionsLoader.h"
+#include "BCLoader.h"
 #include "BoundaryConditions.h"
 #include "CaseConfiguration.h"
 #include "Comm.h"
@@ -66,8 +66,7 @@ void runSteady
     // Post-process results
     PostProcess::reportStatistics(*modules.solver);
 
-    // One shared VTKHDF file per grid; parallel runs write each rank's
-    // owned cells as one piece of it, collectively via MPI-IO
+    // One shared VTKHDF file per grid, one piece per rank
     PostProcess::exportResults
     (
         *modules.solver,
@@ -115,8 +114,7 @@ void runTransient
         numSteps = 1;
     }
 
-    // One shared VTKHDF file per grid (one piece per rank when
-    // decomposed): geometry once, cell data appended per step
+    // Geometry written once, cell data appended per step
     VTK::HDF5CellData volumeWriter
     (
         PostProcess::cellDataPath(config),

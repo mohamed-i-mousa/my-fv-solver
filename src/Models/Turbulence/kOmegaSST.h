@@ -59,9 +59,9 @@ public:
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
-        const ConvectionSchemes& kScheme,
+        const ConvectionScheme& kScheme,
         LinearSolver& kSolver,
-        const ConvectionSchemes& omegaScheme,
+        const ConvectionScheme& omegaScheme,
         LinearSolver& omegaSolver,
         Scalar deltaT,
         Scalar nu,
@@ -207,8 +207,7 @@ private:
     /// Area-weighted wall-function omega per wall cell
     ScalarList wallCellOmega_;
 
-    /// Wall-constraint fraction as a cell field (ghosts exchanged once):
-    /// lets the omega system mirror constraints applied across the cuts
+    /// Wall-constraint fraction as a cell field, ghosts exchanged once
     ScalarField wallConstraintFraction_;
 
     /// Precomputed Cmu^0.25 (avoids repeated std::pow calls)

@@ -20,7 +20,7 @@
 
 // Project headers
 #include "CaseReader.h"
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 #include "ErrorHandler.h"
 #include "GradientScheme.h"
 #include "LinearSolvers.h"
@@ -217,7 +217,7 @@ void readConvectionSchemes
     config.schemes.omegaScheme =
         convection.lookupOrDefault<Name>("omega", "");
 
-    const NameList convectionNames = ConvectionSchemes::availableSchemes();
+    const NameList convectionNames = ConvectionScheme::availableSchemes();
 
     validateSelection
     (
@@ -467,8 +467,7 @@ void readPisoControls
         FatalError("PISO.nPrimeCorrectors must be a positive integer.");
     }
 
-    // No under-relaxation by default: the transient V/dt diagonal dominance
-    // is what stabilizes PISO, not relaxation factors
+    // PISO is stabilized by the V/dt diagonal, not relaxation factors
     config.alphaU = S(1.0);
     config.alphaP = S(1.0);
     config.alphaK = S(1.0);

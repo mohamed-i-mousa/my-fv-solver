@@ -86,7 +86,7 @@ std::unique_ptr<MomentumTransport> MomentumTransport::create
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
-    const ConvectionSchemes& momentumConvectionScheme,
+    const ConvectionScheme& momentumConvectionScheme,
     LinearSolver& momentumSolver,
     LinearSolver& pressureSolver,
     TurbulenceModel& turbulence,
@@ -365,8 +365,7 @@ void MomentumTransport::updateVelocityGradients()
     gradientScheme_.limitGradient(Field::Uy, Uy_, gradUy_);
     gradientScheme_.limitGradient(Field::Uz, Uz_, gradUz_);
 
-    // Deferred correction reads the component gradients at both cells
-    // of every cut face
+    // Deferred correction reads both cells of every cut face
     exchangeHalos(mesh_, {&gradUx_, &gradUy_, &gradUz_});
 
     // Assembling exchanged components replaces an exchange

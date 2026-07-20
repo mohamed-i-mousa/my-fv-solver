@@ -114,9 +114,7 @@ AeroForces computeForces
     const CaseConfiguration& config
 )
 {
-    // The forces patch may be absent from this rank's submesh: found on
-    // no rank at all is a case error, found elsewhere means this rank
-    // integrates nothing and only joins the collective sum below
+    // Absent on this rank is fine; absent on every rank is a case error
     const BoundaryPatch* patch = nullptr;
 
     for (const BoundaryPatch& meshPatch : mesh.patches())

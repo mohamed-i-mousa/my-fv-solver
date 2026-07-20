@@ -68,6 +68,45 @@ NameList GradientScheme::availableSchemes()
 
 // ****************************** Public Methods ******************************
 
+Vector GradientScheme::faceGradient
+(
+    Field field,
+    const ScalarField& phi,
+    const Vector& gradPhiP,
+    const Vector& gradPhiN,
+    Index faceIndex
+) const
+{
+    const Face& f = mesh_.faces()[faceIndex];
+    const Index P = f.ownerCell();
+
+    if (f.isBoundary())
+    {
+        return
+            boundaryFaceGradient
+            (
+                field,
+                phi,
+                gradPhiP,
+                f
+            );
+    }
+
+    const Index N = f.neighborCell().value();
+    const Vector dPN =
+        mesh_.cells()[N].centroid() - mesh_.cells()[P].centroid();
+    const Scalar dPNMag = magnitude(dPN);
+    const Vector ePN = dPN / (dPNMag + vSmallValue);
+    const Vector gradAvg = averageFaceGradient(f, gradPhiP, gradPhiN);
+    const Scalar phiDiff = phi[N] - phi[P];
+    const Scalar correction =
+        (phiDiff / (dPNMag + vSmallValue))
+      - dot(gradAvg, ePN);
+
+    return gradAvg + correction * ePN;
+}
+
+
 void GradientScheme::limitGradient
 (
     Field field,
@@ -77,8 +116,7 @@ void GradientScheme::limitGradient
 {
     const Count numCells = mesh_.numOwnedCells();
 
-    // The mirrored velocity cannot be formed from a single component field
-    // The symmetry faces are excluded for velocity components 
+    // Symmetry faces excluded: mirroring needs all three components
     const bool isVelocity =
         field == Field::Ux || field == Field::Uy || field == Field::Uz;
 
@@ -97,8 +135,7 @@ void GradientScheme::limitGradient
             phiMax = std::max(phiMax, phi[neighborIdx]);
         }
 
-        // Include boundary face values so the limiter does not clip
-        // physically correct near-boundary gradients (e.g. k near walls)
+        // Boundary values included so the limiter does not clip k at walls
         for (Index faceIdx : cell.faceIndices())
         {
             const Face& f = mesh_.faces()[faceIdx];
@@ -168,45 +205,6 @@ void GradientScheme::fieldGradient
     }
 
     limitGradient(field, phi, gradPhi);
-}
-
-
-Vector GradientScheme::faceGradient
-(
-    Field field,
-    const ScalarField& phi,
-    const Vector& gradPhiP,
-    const Vector& gradPhiN,
-    Index faceIndex
-) const
-{
-    const Face& f = mesh_.faces()[faceIndex];
-    const Index P = f.ownerCell();
-
-    if (f.isBoundary())
-    {
-        return
-            boundaryFaceGradient
-            (
-                field,
-                phi,
-                gradPhiP,
-                f
-            );
-    }
-
-    const Index N = f.neighborCell().value();
-    const Vector dPN =
-        mesh_.cells()[N].centroid() - mesh_.cells()[P].centroid();
-    const Scalar dPNMag = magnitude(dPN);
-    const Vector ePN = dPN / (dPNMag + vSmallValue);
-    const Vector gradAvg = averageFaceGradient(f, gradPhiP, gradPhiN);
-    const Scalar phiDiff = phi[N] - phi[P];
-    const Scalar correction =
-        (phiDiff / (dPNMag + vSmallValue))
-      - dot(gradAvg, ePN);
-
-    return gradAvg + correction * ePN;
 }
 
 // ****************************** Private Methods *****************************
@@ -287,8 +285,7 @@ Vector GradientScheme::boundaryFaceGradient
         {
             const Scalar specifiedGradient = bc.fixedScalarGradient();
 
-            // Project cell gradient onto tangential directions
-            // and combine with specified normal gradient
+            // Project onto the tangent, then add the normal gradient
             return
                 tangentialGradient + specifiedGradient * boundaryFace.normal();
         }

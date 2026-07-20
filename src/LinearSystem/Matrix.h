@@ -205,9 +205,7 @@ private:
     /// Face indices of every boundary face, in slot order
     IndexList boundaryFaces_;
 
-    /// faceIdx -> COO addressing: internal face = its off-diagonal pair
-    /// base (+1 is the reverse), processor face = its single local-row
-    /// slot, boundary face = its scratch ordinal
+    /// faceIdx -> its COO slot (internal faces: +1 is the reverse)
     IndexList faceSlot_;
 
     /// faceIdx -> owner/neighbor scratch pair base (internal + processor)
@@ -216,9 +214,7 @@ private:
     /// First diagonal slot in cooValues_
     Index diagOffset_ = 0;
 
-    /// First scribble slot past the diagonals: slot scribbleSlot_ + m
-    /// absorbs processor face m's remote-side write, never handed to
-    /// PETSc (and per-face, so pass 1b has no shared writes)
+    /// First scribble slot: absorbs processor faces' remote-side writes
     Index scribbleSlot_ = 0;
 
     /// Relaxation factor from last relax() call (0 = not relaxed)
@@ -232,9 +228,7 @@ private:
 
 private:
 
-    /// Stage the coefficients of a two-cell face: off-diagonals into the
-    /// given COO slots (a processor face routes its remote side to the
-    /// scribble slot), diagonal/RHS shares into the scratch pair
+    /// Stage a two-cell face
     void assembleInternalFace
     (
         Index scratchSlot,

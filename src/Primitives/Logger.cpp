@@ -50,6 +50,111 @@ void Logger::iterationFooter()
 }
 
 
+void Logger::linearSolverConfigHeader()
+{
+    std::ostringstream header;
+
+    header
+        << "    "
+        << std::left  << std::setw(11) << "Equation"
+        << std::left  << std::setw(11) << "Solver"
+        << std::left  << std::setw(12) << "Tolerance"
+        << std::right << std::setw(13) << "Max Iters"
+        << '\n';
+
+    header
+        << "    "
+        << std::left  << std::setw(11) << "--------"
+        << std::left  << std::setw(11) << "--------"
+        << std::left  << std::setw(12) << "----------"
+        << std::right << std::setw(13) << "---------"
+        << '\n';
+
+    std::cout << header.str();
+}
+
+
+void Logger::linearSolverConfigRow
+(
+    const Name& equation,
+    const Name& solver,
+    Scalar tolerance,
+    Count maxIters
+)
+{
+    std::ostringstream row;
+
+    row
+        << "    " << std::left  << std::setw(11) << equation
+        << std::left  << std::setw(11) << solver
+        << std::scientific << std::setprecision(6) << tolerance
+        << std::right << std::setw(13) << maxIters;
+
+    std::cout << row.str() << '\n';
+}
+
+
+void Logger::keyValue(const Message& label, Scalar value)
+{
+    std::ostringstream row;
+
+    row
+        << "    " << std::left << std::setw(24) << label
+        << "  " << std::scientific << std::setprecision(6) << value;
+
+    std::cout << row.str() << '\n';
+}
+
+
+void Logger::keyValue(const Message& label, Scalar value, const Message& unit)
+{
+    std::ostringstream row;
+
+    row
+        << "    " << std::left << std::setw(24) << label
+        << "  " << std::fixed << std::setprecision(6) << value
+        << ' ' << unit;
+
+    std::cout << row.str() << '\n';
+}
+
+
+void Logger::keyValue(const Message& label, int value)
+{
+    std::ostringstream row;
+
+    row
+        << "    " << std::left  << std::setw(24) << label
+        << "  " << std::right << std::setw(12) << value;
+
+    std::cout << row.str() << '\n';
+}
+
+
+void Logger::keyValue(const Message& label, Count value)
+{
+    std::ostringstream row;
+
+    row
+        << "    " << std::left  << std::setw(24) << label
+        << "  " << std::right << std::setw(12) << value;
+
+    std::cout << row.str() << '\n';
+}
+
+
+void Logger::keyValue(const Message& label, const Message& value)
+{
+    std::ostringstream row;
+    
+    row
+        << "    " << std::left << std::setw(24) << label
+        << "  " << value;
+
+    std::cout << row.str() << '\n';
+}
+
+
 void Logger::residualTableHeader()
 {
     std::ostringstream table;
@@ -206,109 +311,4 @@ void Logger::residualSummary
     }
 
     std::cout << summary.str() << '\n';
-}
-
-
-void Logger::linearSolverConfigHeader()
-{
-    std::ostringstream header;
-
-    header
-        << "    "
-        << std::left  << std::setw(11) << "Equation"
-        << std::left  << std::setw(11) << "Solver"
-        << std::left  << std::setw(12) << "Tolerance"
-        << std::right << std::setw(13) << "Max Iters"
-        << '\n';
-
-    header
-        << "    "
-        << std::left  << std::setw(11) << "--------"
-        << std::left  << std::setw(11) << "--------"
-        << std::left  << std::setw(12) << "----------"
-        << std::right << std::setw(13) << "---------"
-        << '\n';
-
-    std::cout << header.str();
-}
-
-
-void Logger::linearSolverConfigRow
-(
-    const Name& equation,
-    const Name& solver,
-    Scalar tolerance,
-    Count maxIters
-)
-{
-    std::ostringstream row;
-
-    row
-        << "    " << std::left  << std::setw(11) << equation
-        << std::left  << std::setw(11) << solver
-        << std::scientific << std::setprecision(6) << tolerance
-        << std::right << std::setw(13) << maxIters;
-
-    std::cout << row.str() << '\n';
-}
-
-
-void Logger::keyValue(const Message& label, Scalar value)
-{
-    std::ostringstream row;
-
-    row
-        << "    " << std::left << std::setw(24) << label
-        << "  " << std::scientific << std::setprecision(6) << value;
-
-    std::cout << row.str() << '\n';
-}
-
-
-void Logger::keyValue(const Message& label, Scalar value, const Message& unit)
-{
-    std::ostringstream row;
-
-    row
-        << "    " << std::left << std::setw(24) << label
-        << "  " << std::fixed << std::setprecision(6) << value
-        << ' ' << unit;
-
-    std::cout << row.str() << '\n';
-}
-
-
-void Logger::keyValue(const Message& label, int value)
-{
-    std::ostringstream row;
-
-    row
-        << "    " << std::left  << std::setw(24) << label
-        << "  " << std::right << std::setw(12) << value;
-
-    std::cout << row.str() << '\n';
-}
-
-
-void Logger::keyValue(const Message& label, Count value)
-{
-    std::ostringstream row;
-
-    row
-        << "    " << std::left  << std::setw(24) << label
-        << "  " << std::right << std::setw(12) << value;
-
-    std::cout << row.str() << '\n';
-}
-
-
-void Logger::keyValue(const Message& label, const Message& value)
-{
-    std::ostringstream row;
-    
-    row
-        << "    " << std::left << std::setw(24) << label
-        << "  " << value;
-
-    std::cout << row.str() << '\n';
 }

@@ -28,7 +28,7 @@
 
 // Project headers
 #include "MomentumTransport.h"
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 #include "Matrix.h"
 #include "LinearSolvers.h"
 #include "TransportEquation.h"
@@ -48,7 +48,7 @@ public:
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
-        const ConvectionSchemes& momentumConvectionScheme,
+        const ConvectionScheme& momentumConvectionScheme,
         LinearSolver& momentumSolver,
         LinearSolver& pressureSolver,
         TurbulenceModel& turbulence,
@@ -93,8 +93,7 @@ protected:
     /// Build cell and face effective viscosity
     void updateEffectiveViscosity();
 
-    /// Build the pressure-gradient source, velocity gradients and the
-    /// transpose-gradient source; reset DU_ accumulators
+    /// Build the gradient sources and reset the DU_ accumulators
     void assembleMomentum();
 
     /// Solve the three momentum components
@@ -135,7 +134,7 @@ protected:
 // **************************** Protected Accessors ***************************
 
     /// Momentum convection scheme
-    [[nodiscard]] const ConvectionSchemes&
+    [[nodiscard]] const ConvectionScheme&
     momentumConvectionScheme() const noexcept
     {
         return momentumConvectionScheme_;
@@ -188,7 +187,7 @@ private:
 // Segregated dependencies
 
     /// Reference to the momentum convection scheme
-    const ConvectionSchemes& momentumConvectionScheme_;
+    const ConvectionScheme& momentumConvectionScheme_;
 
     /// Linear solver for momentum equations
     LinearSolver& momentumSolver_;

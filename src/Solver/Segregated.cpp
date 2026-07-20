@@ -41,7 +41,7 @@ Segregated::Segregated
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
-    const ConvectionSchemes& momentumConvectionScheme,
+    const ConvectionScheme& momentumConvectionScheme,
     LinearSolver& momentumSolver,
     LinearSolver& pressureSolver,
     TurbulenceModel& turbulence,
@@ -84,8 +84,7 @@ Segregated::Segregated
     alphaP_{alphaP},
     nNonOrthogonalCorrectors_{nNonOrthogonalCorrectors}
 {
-    // Pure-Neumann pressure (no Dirichlet anchor on ANY rank) leaves the
-    // p' system with a constant null space the Krylov solver must know
+    // No Dirichlet anchor on ANY rank leaves p' with a constant null space
     Count fixedPressurePatches = 0;
 
     for (const BoundaryPatch& patch : mesh.patches())
@@ -327,8 +326,7 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
         }
     }
 
-    // KSP writes owned entries only: refresh U ghosts before any face
-    // kernel reads them (one batched message per neighbor)
+    // KSP writes owned entries only: refresh U ghosts before any face read
     exchangeHalos(mesh(), {&Ux(), &Uy(), &Uz()});
 
     buildFaceDiagonal();
@@ -527,9 +525,7 @@ void Segregated::solvePressureCorrection()
         .gradScheme = gradientScheme()
     };
 
-    // Pure-Neumann pressure: tell the KSP the constant vector is in the
-    // null space. Attached around the corrector loop only — the Matrix
-    // is shared with the momentum and turbulence systems
+    // Attached around the corrector loop only (the Matrix is shared)
     if (pCorrNeedsNullSpace_)
     {
         MatNullSpace constantNullSpace = nullptr;
@@ -583,8 +579,7 @@ void Segregated::solvePressureCorrection()
             );
         }
 
-        // The corrector's face terms read p' and grad p' at both
-        // cells of every cut face
+        // The corrector reads p' and grad p' at both cells of every cut
         exchangeHalos(mesh(), {&pCorr_});
 
         // grad(p') feeds the next corrector's non-orthogonal term

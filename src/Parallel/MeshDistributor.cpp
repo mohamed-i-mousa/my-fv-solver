@@ -32,7 +32,7 @@
 namespace
 {
 
-// MPI message tags for the two-message (length, payload) handshake
+// MPI message tags
 constexpr int sizeTag = 40;
 constexpr int payloadTag = 41;
 
@@ -261,8 +261,11 @@ SubmeshData MeshDistributor::distribute(std::vector<SubmeshData> blocks)
         {
             const std::vector<char> bytes = serialize(blocks[rank]);
 
-            if (bytes.size()
-              > static_cast<Count>(std::numeric_limits<int>::max()))
+            if
+            (
+                bytes.size()
+              > static_cast<Count>(std::numeric_limits<int>::max())
+            )
             {
                 FatalError
                 (

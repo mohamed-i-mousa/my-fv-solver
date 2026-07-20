@@ -40,7 +40,7 @@ public:
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
-        const ConvectionSchemes& momentumConvectionScheme,
+        const ConvectionScheme& momentumConvectionScheme,
         LinearSolver& momentumSolver,
         LinearSolver& pressureSolver,
         TurbulenceModel& turbulence,

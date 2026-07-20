@@ -43,9 +43,9 @@ RANS::RANS
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
-    const ConvectionSchemes& kScheme,
+    const ConvectionScheme& kScheme,
     LinearSolver& kSolver,
-    const ConvectionSchemes& dissipationScheme,
+    const ConvectionScheme& dissipationScheme,
     LinearSolver& dissipationSolver,
     Scalar deltaT,
     Scalar nu,
@@ -122,20 +122,6 @@ void RANS::updatePrevStepDerivatives()
 }
 
 
-std::optional<TransientTerm> RANS::ddtTerm
-(
-    const ScalarField& phiPrevStep,
-    const ScalarField& ddtPrevStep
-) const
-{
-    if (!timeScheme_.isTransient())
-    {
-        return std::nullopt;
-    }
-
-    return TransientTerm{timeScheme_, deltaT_, phiPrevStep, &ddtPrevStep};
-}
-
 // ************************ Inlet Condition Calculators ***********************
 
 Scalar RANS::inletK
@@ -172,6 +158,41 @@ Scalar RANS::boundaryTurbulentViscosity
 }
 
 
+FaceData<Scalar> RANS::wallShearStress
+(
+    const ScalarField& Ux,
+    const ScalarField& Uy,
+    const ScalarField& Uz
+) const
+{
+    FaceData<Scalar> shearStress(S(0.0));
+
+    #pragma omp parallel for schedule(static)
+    for (Index i = 0; i < wallFunctionFaceIndices_.size(); ++i)
+    {
+        const Index faceIdx = wallFunctionFaceIndices_[i];
+        const auto& face = mesh_.faces()[faceIdx];
+        const Index cellIdx = face.ownerCell();
+
+        // Project velocity onto wall plane (tangential component)
+        const Vector Ucell(Ux[cellIdx], Uy[cellIdx], Uz[cellIdx]);
+        const Scalar normalVelocity = dot(Ucell, face.normal());
+        const Vector tangentVelocity =
+            Ucell - face.normal() * normalVelocity;
+        const Scalar tangentVelocityMag = magnitude(tangentVelocity);
+
+        const Scalar tau =
+            yPlus_[face.idx()] < yPlusLam_
+          ? nu_ * tangentVelocityMag / y_[face.idx()]
+          : cmu25() * cmu25() * k_[cellIdx];
+
+        shearStress[face.idx()] = std::min(tau, S(1000.0));
+    }
+
+    return shearStress;
+}
+
+
 RANS::CellDataPair RANS::cellDataOutputs() const
 {
     return
@@ -204,6 +225,21 @@ RANS::ResidualPair RANS::residualOutputs() const
 
 // ****************************** Shared Methods ******************************
 
+std::optional<TransientTerm> RANS::ddtTerm
+(
+    const ScalarField& phiPrevStep,
+    const ScalarField& ddtPrevStep
+) const
+{
+    if (!timeScheme_.isTransient())
+    {
+        return std::nullopt;
+    }
+
+    return TransientTerm{timeScheme_, deltaT_, phiPrevStep, &ddtPrevStep};
+}
+
+
 void RANS::cellToFaceDiffusion
 (
     const ScalarField& cellGamma,
@@ -235,8 +271,7 @@ void RANS::updateWallDistance()
     wallDistance_.setAll(S(1e10));
     nearestWallPoint_.setAll(Vector{S(1e15), S(1e15), S(1e15)});
 
-    // Seed wall-adjacent cells with the perpendicular distance to each
-    // wall face centroid
+    // Seed wall-adjacent cells with the distance to each wall centroid
     for (const auto& face : mesh_.faces())
     {
         if (!face.isBoundary()) continue;
@@ -265,8 +300,7 @@ void RANS::updateWallDistance()
 
     for (Index iter = 0; iter < maxIterations; ++iter)
     {
-        // Ghosts carry the neighbor ranks' latest state, so the wave
-        // crosses the inter-rank cuts one exchange per sweep
+        // The wave crosses the cuts one exchange per sweep
         exchangeHalos(mesh_, {&wallDistance_});
         exchangeHalos(mesh_, {&nearestWallPoint_});
 
@@ -312,8 +346,7 @@ void RANS::updateWallDistance()
             }
         }
 
-        // Collective verdict: every rank sweeps the same number of
-        // times or the exchanges above deadlock
+        // Every rank sweeps the same number of times or this deadlocks
         if (globalMax(maxChange) < tolerance)
         {
             wallDistanceConverged_ = true;
@@ -465,41 +498,6 @@ void RANS::updateYPlus()
         yPlus_[face.idx()] =
             cmu25() * std::sqrt(k_[cellIdx]) * y_[face.idx()] / nu_;
     }
-}
-
-
-FaceData<Scalar> RANS::wallShearStress
-(
-    const ScalarField& Ux,
-    const ScalarField& Uy,
-    const ScalarField& Uz
-) const
-{
-    FaceData<Scalar> shearStress(S(0.0));
-
-    #pragma omp parallel for schedule(static)
-    for (Index i = 0; i < wallFunctionFaceIndices_.size(); ++i)
-    {
-        const Index faceIdx = wallFunctionFaceIndices_[i];
-        const auto& face = mesh_.faces()[faceIdx];
-        const Index cellIdx = face.ownerCell();
-
-        // Project velocity onto wall plane (tangential component)
-        const Vector Ucell(Ux[cellIdx], Uy[cellIdx], Uz[cellIdx]);
-        const Scalar normalVelocity = dot(Ucell, face.normal());
-        const Vector tangentVelocity =
-            Ucell - face.normal() * normalVelocity;
-        const Scalar tangentVelocityMag = magnitude(tangentVelocity);
-
-        const Scalar tau =
-            yPlus_[face.idx()] < yPlusLam_
-          ? nu_ * tangentVelocityMag / y_[face.idx()]
-          : cmu25() * cmu25() * k_[cellIdx];
-
-        shearStress[face.idx()] = std::min(tau, S(1000.0));
-    }
-
-    return shearStress;
 }
 
 

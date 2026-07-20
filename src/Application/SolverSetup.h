@@ -21,7 +21,7 @@
 class BoundaryConditions;
 class TimeScheme;
 class GradientScheme;
-class ConvectionSchemes;
+class ConvectionScheme;
 class TurbulenceModel;
 class LinearSolver;
 class Mesh;
@@ -53,16 +53,16 @@ struct SolverModules
     std::unique_ptr<GradientScheme> gradScheme;
 
     /// Default convection scheme fallback
-    std::unique_ptr<ConvectionSchemes> defaultConvectionScheme;
+    std::unique_ptr<ConvectionScheme> defaultConvectionScheme;
 
     /// Momentum equation convection scheme override
-    std::unique_ptr<ConvectionSchemes> momentumConvectionScheme;
+    std::unique_ptr<ConvectionScheme> momentumConvectionScheme;
 
     /// k equation convection scheme override
-    std::unique_ptr<ConvectionSchemes> kConvectionScheme;
+    std::unique_ptr<ConvectionScheme> kConvectionScheme;
 
     /// omega equation convection scheme override
-    std::unique_ptr<ConvectionSchemes> omegaConvectionScheme;
+    std::unique_ptr<ConvectionScheme> omegaConvectionScheme;
 
     /// Momentum linear solver
     std::unique_ptr<LinearSolver> momentumSolver;

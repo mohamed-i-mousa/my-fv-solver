@@ -17,11 +17,11 @@
 
 // ********************************** Headers *********************************
 
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 
 // *********************** class SecondOrderUpwindScheme **********************
 
-class SecondOrderUpwindScheme final : public ConvectionSchemes
+class SecondOrderUpwindScheme final : public ConvectionScheme
 {
 public:
 

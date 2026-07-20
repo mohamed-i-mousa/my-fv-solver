@@ -73,10 +73,10 @@ add_executable(${PROJECT_NAME}
     src/Fields/Field.cpp
     src/BoundaryConditions/BoundaryData.cpp
     src/BoundaryConditions/BoundaryConditions.cpp
-    src/BoundaryConditions/BoundaryConditionsLoader.cpp
+    src/BoundaryConditions/BCLoader.cpp
     src/Schemes/GradientSchemes/GradientScheme.cpp
     src/Schemes/GradientSchemes/LeastSquares.cpp
-    src/Schemes/ConvectionSchemes/ConvectionSchemes.cpp
+    src/Schemes/ConvectionSchemes/ConvectionScheme.cpp
     src/Schemes/ConvectionSchemes/UpwindScheme.cpp
     src/Schemes/ConvectionSchemes/CentralDifferenceScheme.cpp
     src/Schemes/ConvectionSchemes/SecondOrderUpwindScheme.cpp

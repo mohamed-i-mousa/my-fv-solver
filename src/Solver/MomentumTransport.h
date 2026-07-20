@@ -42,7 +42,7 @@
 // *************************** Forward Declarations ***************************
 
 class TimeScheme;
-class ConvectionSchemes;
+class ConvectionScheme;
 class LinearSolver;
 
 // *************************** struct TransientFields *************************
@@ -107,7 +107,7 @@ public:
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
-        const ConvectionSchemes& momentumConvectionScheme,
+        const ConvectionScheme& momentumConvectionScheme,
         LinearSolver& momentumSolver,
         LinearSolver& pressureSolver,
         TurbulenceModel& turbulence,
@@ -131,8 +131,7 @@ public:
 
 // ****************************** Solver Driver *******************************
 
-    /// Steady: run outer iterations to convergence
-    /// Transient: advance one time step
+    /// Steady: iterate to convergence. Transient: advance one time step
     void solve
     (
         Count step = 0,

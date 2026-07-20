@@ -37,7 +37,7 @@
 class BoundaryConditions;
 class Mesh;
 class TimeScheme;
-class ConvectionSchemes;
+class ConvectionScheme;
 class GradientScheme;
 class LinearSolver;
 
@@ -86,9 +86,9 @@ public:
         const BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
-        const ConvectionSchemes& kScheme,
+        const ConvectionScheme& kScheme,
         LinearSolver& kSolver,
-        const ConvectionSchemes& omegaScheme,
+        const ConvectionScheme& omegaScheme,
         LinearSolver& omegaSolver,
         Scalar deltaT,
         Scalar nu,

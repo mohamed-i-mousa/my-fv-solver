@@ -104,8 +104,7 @@ void requireStatus(herr_t status, const Message& what)
 }
 
 
-// File-access plist: MPI-IO on the world communicator when the run is
-// parallel, so every rank shares one file (caller closes)
+// File-access plist: MPI-IO in parallel, so every rank shares one file
 hid_t createFileAccessPlist(const Message& what)
 {
     const hid_t plist = requireValid(H5Pcreate(H5P_FILE_ACCESS), what);
@@ -123,8 +122,7 @@ hid_t createFileAccessPlist(const Message& what)
 }
 
 
-// Transfer plist: collective MPI-IO when the run is parallel (caller
-// closes)
+// Transfer plist: collective MPI-IO when the run is parallel
 hid_t createTransferPlist(const Message& what)
 {
     const hid_t plist = requireValid(H5Pcreate(H5P_DATASET_XFER), what);
@@ -138,9 +136,7 @@ hid_t createTransferPlist(const Message& what)
 }
 
 
-// Select this rank's slab (base file row + rows.rowOffset) and write it
-// collectively; a rank with zero local rows participates with an empty
-// selection so the collective write completes
+// Write this rank's slab collectively; zero local rows selects nothing
 void writeSlab
 (
     hid_t dataset,
@@ -196,8 +192,7 @@ void writeSlab
         H5Pclose
     };
 
-    // An empty vector's data() may be null; HDF5 rejects a null buffer
-    // even under an empty selection
+    // HDF5 rejects a null buffer even under an empty selection
     static const char emptyBuffer = 0;
     const void* buffer = rows.localRows == 0 ? &emptyBuffer : data;
 
@@ -521,8 +516,7 @@ void writeDataset
         H5Pclose
     };
 
-    // Compression is serial-only: filtered chunks under collective MPI-IO
-    // funnel each chunk through a single owner rank
+    // Compression is serial-only: filtered chunks funnel through one rank
     if (!Comm::parallelRun() && rows.globalRows >= compressionThreshold)
     {
         const hsize_t chunk[2] =
@@ -555,8 +549,7 @@ void writeDataset
         H5Dclose
     };
 
-    // rows.globalRows is rank-identical, so every rank takes this branch
-    // together — a globally empty dataset skips the collective write
+    // Rank-identical, so a globally empty dataset skips the write on all
     if (rows.globalRows > 0)
     {
         writeSlab(dataset.get(), memType, rows, columns, 0, data, what);
@@ -607,8 +600,7 @@ void appendRows
 
         requireStatus(H5Pset_chunk(plist.get(), rank, chunk), what);
 
-        // Compression is serial-only: filtered chunks under collective
-        // MPI-IO funnel each chunk through a single owner rank
+        // Compression is serial-only: filtered chunks funnel through one
         if (!Comm::parallelRun())
         {
             requireStatus(H5Pset_shuffle(plist.get()), what);
@@ -635,9 +627,7 @@ void appendRows
         };
     }
 
-    // rows.globalRows is rank-identical, so every rank returns together;
-    // a locally empty rank must NOT return here — the extension and the
-    // write below are collective
+    // Rank-identical: a locally empty rank must NOT return here
     if (rows.globalRows == 0)
     {
         return;

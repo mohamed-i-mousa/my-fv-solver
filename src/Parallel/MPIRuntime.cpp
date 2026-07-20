@@ -38,8 +38,6 @@ MPIRuntime::MPIRuntime()
 
     Comm::init();
 
-    // OpenMP threads compute within each rank, but only the main thread
-    // makes MPI calls - anything below funneled support cannot honor that
     if (providedThreadSupport < MPI_THREAD_FUNNELED && Comm::master())
     {
         Warning("MPI runtime provides no funneled-thread support");

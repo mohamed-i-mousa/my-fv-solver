@@ -20,7 +20,7 @@
 #include "BoundaryConditions.h"
 #include "TimeScheme.h"
 #include "GradientScheme.h"
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 #include "LinearSolvers.h"
 #include "PETScRuntime.h"
 #include "MomentumTransport.h"
@@ -44,7 +44,7 @@ void makeConvectionSchemes
 )
 {
     modules.defaultConvectionScheme =
-        ConvectionSchemes::create(config.defaultScheme);
+        ConvectionScheme::create(config.defaultScheme);
     modules.momentumConvectionScheme.reset();
     modules.kConvectionScheme.reset();
     modules.omegaConvectionScheme.reset();
@@ -52,25 +52,25 @@ void makeConvectionSchemes
     if (!config.momentumScheme.empty())
     {
         modules.momentumConvectionScheme =
-            ConvectionSchemes::create(config.momentumScheme);
+            ConvectionScheme::create(config.momentumScheme);
     }
     if (!config.kScheme.empty())
     {
         modules.kConvectionScheme =
-            ConvectionSchemes::create(config.kScheme);
+            ConvectionScheme::create(config.kScheme);
     }
     if (!config.omegaScheme.empty())
     {
         modules.omegaConvectionScheme =
-            ConvectionSchemes::create(config.omegaScheme);
+            ConvectionScheme::create(config.omegaScheme);
     }
 }
 
 
-const ConvectionSchemes& resolveConvectionScheme
+const ConvectionScheme& resolveConvectionScheme
 (
-    const std::unique_ptr<ConvectionSchemes>& specific,
-    const std::unique_ptr<ConvectionSchemes>& fallback
+    const std::unique_ptr<ConvectionScheme>& specific,
+    const std::unique_ptr<ConvectionScheme>& fallback
 )
 {
     if (specific)

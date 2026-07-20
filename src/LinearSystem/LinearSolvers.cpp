@@ -44,14 +44,12 @@ PetscLinearSolver::PetscLinearSolver
     // Scope case-file petscOptions entries to this equation's solver
     PETSC_CHECK(KSPSetOptionsPrefix(ksp_, optionsPrefix.c_str()));
 
-    // Jacobi (diagonal) preconditioning: the parity baseline; runtime
-    // overridable through the case file's petscOptions string
+    // Jacobi baseline, overridable through the case file's petscOptions
     PC preconditioner = nullptr;
     PETSC_CHECK(KSPGetPC(ksp_, &preconditioner));
     PETSC_CHECK(PCSetType(preconditioner, PCJACOBI));
 
-    // Converge on the true residual |r|/|b|, matching the reported
-    // diagnostics (the default preconditioned norm would test |P^-1 r|)
+    // Converge on the true residual |r|/|b|, matching the diagnostics
     PETSC_CHECK(KSPSetNormType(ksp_, KSP_NORM_UNPRECONDITIONED));
 
     // The current field values seed the Krylov iteration
@@ -91,9 +89,7 @@ void PetscLinearSolver::solve
         FatalError("LinearSolver: x and b size mismatch");
     }
 
-    // Lazy solution wrapper: sized on first solve (local = owned rows),
-    // reused afterwards. VECSTANDARD resolves seq/mpi with the Mat; the
-    // caller's owned-prefix storage is placed over it per solve
+    // Solution wrapper sized on the first solve, reused afterwards
     if (solution_ == nullptr)
     {
         PETSC_CHECK(VecCreate(PETScRuntime::comm(), &solution_));
@@ -106,9 +102,6 @@ void PetscLinearSolver::solve
 
     PETSC_CHECK(KSPSetOperators(ksp_, A, A));
 
-    // Divergence abort disabled (dtol = unlimited): BiCGSTAB residuals can
-    // spike transiently and recover; aborting would hand a garbage iterate
-    // to the field, and the non-finite rollback guard already protects
     PETSC_CHECK
     (
         KSPSetTolerances

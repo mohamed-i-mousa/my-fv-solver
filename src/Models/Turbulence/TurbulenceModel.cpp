@@ -21,7 +21,7 @@
 
 // Project headers
 #include "BoundaryConditions.h"
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 #include "GradientScheme.h"
 #include "Laminar.h"
 #include "LinearSolvers.h"
@@ -38,9 +38,9 @@ std::unique_ptr<TurbulenceModel> TurbulenceModel::create
     const BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
-    const ConvectionSchemes& kScheme,
+    const ConvectionScheme& kScheme,
     LinearSolver& kSolver,
-    const ConvectionSchemes& omegaScheme,
+    const ConvectionScheme& omegaScheme,
     LinearSolver& omegaSolver,
     Scalar deltaT,
     Scalar nu,

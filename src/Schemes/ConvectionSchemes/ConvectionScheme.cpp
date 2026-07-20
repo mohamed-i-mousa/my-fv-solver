@@ -6,13 +6,13 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file ConvectionSchemes.cpp
+ * @file ConvectionScheme.cpp
  * @brief Runtime selection of convection schemes
  *****************************************************************************/
 
 // ********************************** Headers *********************************
 
-#include "ConvectionSchemes.h"
+#include "ConvectionScheme.h"
 
 // Project headers
 #include "CentralDifferenceScheme.h"
@@ -22,7 +22,7 @@
 
 // **************************** Runtime Selection ****************************
 
-std::unique_ptr<ConvectionSchemes> ConvectionSchemes::create
+std::unique_ptr<ConvectionScheme> ConvectionScheme::create
 (
     const Name& schemeName
 )
@@ -51,7 +51,7 @@ std::unique_ptr<ConvectionSchemes> ConvectionSchemes::create
 }
 
 
-NameList ConvectionSchemes::availableSchemes()
+NameList ConvectionScheme::availableSchemes()
 {
     return {"Upwind", "CentralDifference", "SecondOrderUpwind"};
 }
