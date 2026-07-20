@@ -20,9 +20,6 @@
 #include <iostream>
 #include <algorithm>
 
-// External library headers
-#include <omp.h>
-
 // Project headers
 #include "Scalar.h"
 #include "HaloExchange.h"
@@ -106,7 +103,6 @@ Segregated::Segregated
     // Initialize RhieChowFlowRate_ with linear interpolation
     const Count numFaces = this->mesh().numFaces();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = this->mesh().faces()[faceIdx];
@@ -148,7 +144,6 @@ Scalar Segregated::pressureResidual() const noexcept
 
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static) reduction(+:sumP2)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         sumP2 += pressure()[cellIdx] * pressure()[cellIdx];
@@ -167,14 +162,14 @@ void Segregated::updateEffectiveViscosity()
     const Count numFaces = mesh().numFaces();
 
     const ScalarField& nut = turbulence().turbulentViscosity();
-    #pragma omp parallel for schedule(static)
+
+    // Build cell-based effective viscosity
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         nuEff_[cellIdx] = nu() + nut[cellIdx];
     }
 
     // Build face-based effective viscosity
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = mesh().faces()[faceIdx];
@@ -203,7 +198,6 @@ void Segregated::assembleMomentum()
     DU_.setAll(S(0.0));
 
     // Pressure gradient source term (depends on the current gradP_)
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar volume = mesh().cells()[cellIdx].volume();
@@ -293,7 +287,12 @@ void Segregated::solveMomentum(const TransientFields* prevStep)
     };
 
     // Build and implicitly solve each under-relaxed component
-    for (Index momentumComponent = 0; momentumComponent < 3; ++momentumComponent)
+    for
+    (
+        Index momentumComponent = 0;
+        momentumComponent < 3;
+        ++momentumComponent
+    )
     {
         matrixConstruct_.buildMatrix(equations[momentumComponent]);
 
@@ -338,7 +337,6 @@ void Segregated::diagonalDU(Index component)
     const std::span<const Scalar> diagonal = matrixConstruct_.diagonal();
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         DU_[cellIdx] += diagonal[cellIdx];
@@ -346,7 +344,6 @@ void Segregated::diagonalDU(Index component)
 
     if (component == 2)
     {
-        #pragma omp parallel for schedule(static)
         for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
         {
             DU_[cellIdx] =
@@ -364,7 +361,6 @@ void Segregated::buildFaceDiagonal()
 {
     const Count numFaces = mesh().numFaces();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = mesh().faces()[faceIdx];
@@ -398,7 +394,6 @@ void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
 {
     const Count numFaces = mesh().numFaces();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = mesh().faces()[faceIdx];
@@ -495,7 +490,6 @@ void Segregated::solvePressureCorrection()
     const Count numCells = mesh().numOwnedCells();
 
     // Compute mass imbalance source term
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         Scalar net = S(0.0);
@@ -583,7 +577,6 @@ void Segregated::solvePressureCorrection()
         exchangeHalos(mesh(), {&pCorr_});
 
         // grad(p') feeds the next corrector's non-orthogonal term
-        #pragma omp parallel for schedule(static)
         for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
         {
             gradPCorr_[cellIdx] =
@@ -604,7 +597,6 @@ void Segregated::correctVelocity()
 {
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         Ux()[cellIdx] -= DU_[cellIdx] * gradPCorr_[cellIdx].x();
@@ -618,7 +610,6 @@ void Segregated::correctVelocity()
     // Update face velocities
     const Count numFaces = mesh().numFaces();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = mesh().faces()[faceIdx];
@@ -647,7 +638,6 @@ void Segregated::correctFlowRate()
     // Update mass flux on faces
     const Count numFaces = mesh().numFaces();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = mesh().faces()[faceIdx];
@@ -705,7 +695,6 @@ void Segregated::correctPressure()
 
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static) reduction(+:sumSq)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         sumSq += pCorr_[cellIdx] * pCorr_[cellIdx];
@@ -715,7 +704,6 @@ void Segregated::correctPressure()
         std::sqrt(globalSum(sumSq) / S(totalOwnedCells()));
 
     // Apply pressure correction
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         pressure()[cellIdx] += alphaP_ * pCorr_[cellIdx];
@@ -730,7 +718,6 @@ void Segregated::addTransposeGradientSource()
 {
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         Scalar sumX = S(0.0);

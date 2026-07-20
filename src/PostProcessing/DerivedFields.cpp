@@ -34,7 +34,6 @@ ScalarField velocityMagnitude
 )
 {
     ScalarField result;
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < Ux.size(); ++cellIdx)
     {
         result[cellIdx] = std::sqrt
@@ -50,7 +49,6 @@ ScalarField velocityMagnitude
 ScalarField vorticityMagnitude(const VectorField& vorticity)
 {
     ScalarField result;
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < vorticity.size(); ++cellIdx)
     {
         result[cellIdx] = magnitude(vorticity[cellIdx]);
@@ -67,7 +65,6 @@ ScalarField QCriterion
 {
     ScalarField qCriterion;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < gradUx.size(); ++cellIdx)
     {
         // Q = 0.5 * (||Omega||^2 - ||S||^2)
@@ -92,7 +89,6 @@ ScalarField strainRateMagnitude
 {
     ScalarField strainRateMag;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < gradUx.size(); ++cellIdx)
     {
         // Strain rate magnitude = sqrt(2 * S_ij * S_ij)

@@ -121,9 +121,6 @@ struct CaseConfiguration
     /// Whether mesh quality checks should run
     bool checkQuality;
 
-    /// OpenMP/Eigen thread count
-    Count numThreads;
-
     /// Velocity-coupling algorithm
     Name algorithm;
 

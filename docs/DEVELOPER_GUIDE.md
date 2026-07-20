@@ -14,6 +14,7 @@ This document explains the internal architecture and implementation details of t
 - Boundary conditions system
 - Numerical schemes (gradients, convection, diffusion)
 - Linear system assembly (`Matrix`)
+- Parallelization (MPI)
 - SIMPLE algorithm (pressure–velocity coupling)
 - Rhie–Chow face-velocity interpolation
 - Turbulence model (k–omega SST)
@@ -52,6 +53,16 @@ following the OpenFOAM convention.
     diagonal and explicit source
 - **`src/LinearSystem/`**: algebraic system assembly and solving
   - `Matrix.h/.cpp`, `LinearSolvers.h/.cpp`, `TransportEquation.h`
+- **`src/Parallel/`**: MPI runtime, mesh decomposition and inter-rank data movement
+  - `MPIRuntime.h/.cpp` (RAII ownership of the MPI runtime), `Comm.h/.cpp`
+    (rank identity), `Reduce.h/.cpp` (global reductions),
+    `MPIScalarType.h`
+  - `MeshDecomposer.h/.cpp` (METIS partitioning into per-rank submeshes),
+    `MeshDistributor.h/.cpp` (ships each rank its block), `SubmeshData.h`,
+    `DecompositionChecker.h/.cpp` (collective validation of the result)
+  - `ProcessorPatch.h` (metadata of one inter-rank cut),
+    `HaloExchange.h` (header-only ghost-cell update),
+    `GlobalIndex.h/.cpp` (local-to-global cell numbering for PETSc)
 - **`src/Solver/`**: segregated pressure–velocity algorithms (a three-level
   hierarchy)
   - `MomentumTransport.h/.cpp`: abstract base and the single driver `solve()`
@@ -395,127 +406,43 @@ relaxation. PISO's corrector steps use it to advance momentum with the current
 flux before each pressure correction.
 
 
-## Parallelization (OpenMP)
+## Parallelization (MPI)
 
-The solver uses shared-memory OpenMP for hot cell and face loops. There is
-**no domain decomposition**: that is an MPI concept. OpenMP threads share the
-same address space and operate on the full mesh simultaneously.
+The solver is parallelized by MPI domain decomposition only — there is no
+shared-memory threading, so each rank is single-threaded. The same binary
+serves both cases: `./Turblyze case` runs serially, `mpirun -np N ./Turblyze
+case` in parallel, with no case-file changes.
 
-### Eigen RowMajor requirement
+Decomposition happens at runtime in `MeshCreator::create()`. The master rank
+reads the complete mesh, `MeshDecomposer` partitions it with METIS on the cell
+dual graph and extracts one `SubmeshData` block per rank, `MeshDistributor`
+ships the blocks, and `DecompositionChecker` collectively validates the result.
+Each rank then owns a submesh whose cell list is `[owned cells | ghost tail]`:
+solver and assembly cell loops run over `mesh.numOwnedCells()`, and the ghost
+cells beyond that bound are read-only copies of neighbor ranks' cells, refreshed
+by communication. Every inter-rank cut is a `ProcessorPatch`, and the faces on
+it carry `PatchType::processor` — so any patch loop that means "physical
+boundary" must skip `PatchType::processor` patches. `GlobalIndex` maps owned
+cells to the rank-major global numbering PETSc assembles against.
 
-`Eigen::BiCGSTAB` only parallelizes its sparse matrix-vector product when the
-matrix is stored **row-major**. The column-major default produces single-threaded
-solves even with `-fopenmp` active, silently. `Matrix.h` therefore declares:
+Ghost values are updated by `exchangeHalos(mesh, {...})` from `HaloExchange.h`.
+The rule: after any write to owned-cell values that a face kernel or stencil
+later reads across a partition cut, `exchangeHalos` must run before that read.
+Because one call sends a single packed message per neighbor rank, fields
+produced together should be batched into ONE call rather than exchanged
+individually. Call sites in `Segregated.cpp`, `PISO.cpp`,
+`MomentumTransport.cpp`, `kOmegaSST.cpp` and `RANS.cpp` are the worked examples.
 
-```cpp
-Eigen::SparseMatrix<Scalar, Eigen::RowMajor> matrixA_;
-```
+The overriding correctness constraint is lockstep: every rank must reach every
+collective — reductions (`globalSum`/`globalMax`/`globalMin`/`globalOr`), halo
+exchanges, collective HDF5 writes, and collective constructors. Never guard a
+collective with a per-rank condition; a missing collective on one rank is a
+hang, not an error message. A missing or misplaced halo exchange fails silently
+instead, converging to a subtly wrong answer.
 
-**Never change this to the Eigen default `ColMajor`.** The same type must be
-propagated through `LinearSolvers.h` (all BiCGSTAB / PCG declarations). The
-`ConjugateGradient` solver additionally requires `Lower|Upper` UpLo, which is
-already set in `LinearSolvers.h` and must be preserved.
-
-### Matrix assembly: per-thread buffer pattern
-
-`Matrix::buildMatrix` loops over all faces. Internal faces write to *both* owner
-and neighbor cells, so a naive parallel face loop would race on `tripletList_`
-and `vectorB_`. The chosen strategy is thread-local buffers + serial merge:
-
-```cpp
-// T tracks the OpenMP runtime thread count
-// (set in CFDApplication.cpp's initParallelism helper via omp_set_num_threads)
-const Count T = static_cast<Count>(omp_get_max_threads());
-std::vector<std::vector<Eigen::Triplet<Scalar>>> perThreadTriplets_(T);
-std::vector<Matrix::Vec> perThreadB_(T, Matrix::Vec::Zero(eIdx(numCells)));
-
-#pragma omp parallel
-{
-    const int tid = omp_get_thread_num();
-    auto& triplets = perThreadTriplets_[static_cast<Index>(tid)];
-    auto& localB = perThreadB_[static_cast<Index>(tid)];
-
-    #pragma omp for schedule(static)
-    for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
-    {
-        const Face& face = mesh_.faces()[faceIdx];
-        if (face.isBoundary())
-            assembleBoundaryFace(face, equation, triplets, localB);
-        else
-            assembleInternalFace(face, equation, triplets, localB);
-    }
-}
-
-// serial merge, O(numFaces), not on the hot path
-for (auto& v : perThreadTriplets_)
-    tripletList_.insert(tripletList_.end(), move_iterator(v.begin()), ...);
-for (const auto& v : perThreadB_) vectorB_ += v;
-
-matrixA_.setFromTriplets(...);
-```
-
-The `assembleInternalFace` and `assembleBoundaryFace` helpers receive the
-thread-local `triplets` and `localB` by reference; they never touch any shared
-state.
-
-`Matrix::setValues` is deliberately left serial: it processes a small number
-of constrained cells (typically wall patches) and has irregular neighbor
-accesses that do not amortize thread-launch overhead.
-
-### Face loops that write two cells: scatter vs gather
-
-Any face loop that accumulates into `field[ownerIdx]` **and** `field[neighborIdx]`
-is a scatter loop with a write race. There are two safe approaches:
-
-1. **Per-thread buffer (used in Matrix)**: allocate one copy of the output
-   array per thread, reduce after the parallel region.
-2. **Rewrite as a per-cell gather (preferred for simple accumulations)**:
-   loop over cells instead of faces; inside each cell loop, iterate
-   `cell.faceIndices()` + `cell.faceSigns()` to sum face contributions.
-
-`Segregated::addTransposeGradientSource` and `RANS::velocityDivergence` use the
-gather approach. Prefer gather for new code: it is race-free, avoids temporary
-allocations, and often has better cache behavior.
-
-### What is and is not parallel
-
-| Component | Parallel? | Notes |
-|---|---|---|
-| SpMV inside BiCGSTAB/PCG | YES | RowMajor partitions rows across threads |
-| Dot products / norms in BiCGSTAB/PCG | YES | Eigen OpenMP reduction |
-| Jacobi preconditioner apply | YES | Diagonal scaling |
-| Matrix assembly (face loop) | YES | Per-thread buffer pattern |
-| `Matrix::relax()` | YES | Per-row, no neighbor writes |
-| `Matrix::setValues()` | NO | Small; left serial intentionally |
-| SIMPLE cell-update loops | YES | Per-cell, no neighbor writes |
-| Gradient precomputation | YES | Per-cell LLT/LU, no shared write |
-| `limitGradient` | YES | Per-cell |
-| kOmegaSST cell loops | YES | Per-cell |
-| `RANS::updateWallDistance` | NO | Iterative wave propagation with owner+neighbor writes; runs once at startup |
-
-### Adding OpenMP to new loops
-
-Follow this checklist before adding `#pragma omp parallel for`:
-
-1. **Check write destinations.** If a loop writes only to `array[loopIdx]`,
-   it is race-free, so add the pragma directly.
-2. **Check reductions.** If the loop accumulates a scalar (residual, norm),
-   use `reduction(+:varName)` on the pragma.
-3. **Watch for face loops.** Any loop over faces that writes to owner *and*
-   neighbor is a scatter race. Rewrite as per-cell gather (preferred) or use
-   the per-thread buffer pattern.
-4. **Do not nest parallel regions.** `GradientScheme::cellGradient` is called
-   from within parallel cell loops; it must remain serial.
-5. **Verify with ThreadSanitizer** on a small mesh after each new parallel
-   region: `g++ -fsanitize=thread ...`.
-
-### macOS / Apple Clang note
-
-Apple's stock Clang omits OpenMP. `CMakeLists.txt` detects this and sets the
-Homebrew libomp prefix and `-Xpreprocessor -fopenmp` flags automatically before
-calling `find_package(OpenMP REQUIRED)`. This shim is macOS-only; it is guarded
-by `if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")` and does not affect Linux
-builds.
+`.claude/rules/parallel.md` and `docs/MULTI_GPU_DESIGN.md` § 2.5 are the
+authoritative contracts — § 2.5 lists exactly which fields are exchanged where
+in one outer iteration. The implementation lives in `src/Parallel/`.
 
 
 ## SIMPLE algorithm
@@ -1139,7 +1066,6 @@ The solver uses `CaseReader` for runtime configuration instead of hard-coded par
 The default `defaultCase` file is organized into logical sections:
 
 ```cpp
-parallelism { numThreads int; }
 mesh { file path; checkQuality bool; }
 physicalProperties { rho scalar; mu scalar; }
 initialConditions { U vector; p scalar; }
@@ -1199,8 +1125,7 @@ runtime.solver =
 flowchart TD
   A[main.cpp / CFDApplication] --> B[CaseReader]
   B --> C[CaseConfig::loadConfiguration]
-  C --> D[initParallelism]
-  D --> E[MeshCreator::create]
+  C --> E[MeshCreator::create]
   E --> F[BCLoader]
   F --> G[SolverSetup::configure]
   G --> G2{isTransient?}

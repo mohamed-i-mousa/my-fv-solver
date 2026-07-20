@@ -98,16 +98,11 @@ void reportStatistics(const MomentumTransport& solver)
 
     const ScalarField velocityMag = VTK::velocityMagnitude(Ux, Uy, Uz);
 
-    // Seeds are the reduction identities, valid for an empty partition
     Scalar maximumVelocity = S(0.0);
     Scalar averageVelocity = S(0.0);
     Scalar maximumPressure = std::numeric_limits<Scalar>::lowest();
     Scalar minimumPressure = std::numeric_limits<Scalar>::max();
 
-    #pragma omp parallel for schedule(static) \
-        reduction(max:maximumVelocity, maximumPressure) \
-        reduction(min:minimumPressure) \
-        reduction(+:averageVelocity)
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const Scalar vmag = velocityMag[cellIdx];

@@ -97,7 +97,6 @@ void RANS::updatePrevStepDerivatives()
     const ScalarField& dissipationNew = dissipation();
     const Count numCells = mesh_.numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar volume = mesh_.cells()[cellIdx].volume();
@@ -167,7 +166,6 @@ FaceData<Scalar> RANS::wallShearStress
 {
     FaceData<Scalar> shearStress(S(0.0));
 
-    #pragma omp parallel for schedule(static)
     for (Index i = 0; i < wallFunctionFaceIndices_.size(); ++i)
     {
         const Index faceIdx = wallFunctionFaceIndices_[i];
@@ -248,7 +246,6 @@ void RANS::cellToFaceDiffusion
 {
     const Count numFaces = mesh_.numFaces();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < numFaces; ++faceIdx)
     {
         const Face& face = mesh_.faces()[faceIdx];
@@ -463,7 +460,6 @@ void RANS::initializeWallFunctionGeometry
 
     constexpr Scalar wallCellFractionTol = S(0.1);
 
-    #pragma omp parallel for schedule(static)
     for (Index i = 0; i < wallCellIndices_.size(); ++i)
     {
         const Index cellIdx = wallCellIndices_[i];
@@ -488,7 +484,6 @@ void RANS::initializeWallFunctionGeometry
 
 void RANS::updateYPlus()
 {
-    #pragma omp parallel for schedule(static)
     for (Index i = 0; i < wallFunctionFaceIndices_.size(); ++i)
     {
         const Index faceIdx = wallFunctionFaceIndices_[i];
@@ -507,7 +502,6 @@ ScalarField RANS::computeStrainRateMagnitude(const TensorField& gradU) const
 
     ScalarField strainRateMag;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         // S = sqrt(2 * S_ij * S_ij), S_ij = 0.5*(du_i/dx_j + du_j/dx_i)
@@ -528,7 +522,6 @@ ScalarField RANS::velocityDivergence
 
     ScalarField divU;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const auto& cell = mesh_.cells()[cellIdx];
@@ -572,7 +565,6 @@ Scalar RANS::normalisedFieldResidual
     Scalar diffSq = S(0.0);
     Scalar prevSq = S(0.0);
 
-    #pragma omp parallel for schedule(static) reduction(+:diffSq, prevSq)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar dField = field[cellIdx] - previousField[cellIdx];

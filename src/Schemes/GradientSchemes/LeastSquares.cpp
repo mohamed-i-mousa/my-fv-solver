@@ -16,7 +16,6 @@
 #include "LeastSquares.h"
 
 // External library headers
-#include <omp.h>
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
 #include <Eigen/LU>
@@ -180,7 +179,6 @@ void LeastSquares::precomputeInverseATA()
 
     Count degenerateCells = 0;
 
-    #pragma omp parallel for schedule(static) reduction(+:degenerateCells)
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         Matrix3 ATA;

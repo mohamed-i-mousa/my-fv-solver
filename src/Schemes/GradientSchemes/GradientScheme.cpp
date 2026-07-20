@@ -18,9 +18,6 @@
 // Standard library headers
 #include <algorithm>
 
-// External library headers
-#include <omp.h>
-
 // Project headers
 #include "ErrorHandler.h"
 #include "LeastSquares.h"
@@ -120,7 +117,6 @@ void GradientScheme::limitGradient
     const bool isVelocity =
         field == Field::Ux || field == Field::Uy || field == Field::Uz;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Cell& cell = mesh_.cells()[cellIdx];
@@ -198,7 +194,6 @@ void GradientScheme::fieldGradient
 {
     const Count numCells = mesh_.numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         gradPhi[cellIdx] = cellGradient(field, phi, cellIdx);

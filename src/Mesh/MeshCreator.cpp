@@ -43,7 +43,6 @@ void prepareGeometry(Mesh& mesh, bool debug)
     auto& faces = mesh.faces();
     const auto& nodes = mesh.nodes();
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < faces.size(); ++faceIdx)
     {
         faceIntegrals[faceIdx] =
@@ -58,7 +57,6 @@ void prepareGeometry(Mesh& mesh, bool debug)
     auto& cells = mesh.cells();
     const Count numOwnedCells = mesh.numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         cells[cellIdx].geometricProperties(faces, faceIntegrals);
@@ -69,7 +67,6 @@ void prepareGeometry(Mesh& mesh, bool debug)
             << "Geometric properties calculated for cells." << '\n';
     }
 
-    #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < faces.size(); ++faceIdx)
     {
         faces[faceIdx].distances(cells);

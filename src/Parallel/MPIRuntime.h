@@ -18,11 +18,8 @@
  * leaves MPI running, and the reverse destruction order in main()
  * guarantees this destructor's MPI_Finalize runs last.
  *
- * The constructor requests MPI_THREAD_FUNNELED: OpenMP threads compute
- * within each rank, but only the main thread makes MPI calls.
- *
  * @class MPIRuntime
- * - Constructor runs MPI_Init_thread, then Comm::init()
+ * - Constructor runs MPI_Init, then Comm::init()
  * - Destructor runs MPI_Finalize
  *****************************************************************************/
 

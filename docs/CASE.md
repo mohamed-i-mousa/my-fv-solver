@@ -25,7 +25,6 @@ This document provides a comprehensive reference for configuring the Turblyze so
   - [11. turbulence](#11-turbulence)
   - [12. forces](#12-forces-optional)
   - [13. output](#13-output)
-  - [14. parallelism](#14-parallelism-optional)
 
 ## Overview
 
@@ -544,20 +543,3 @@ output
   export statistics. When
   `false`, only essential output is shown (phase headers, iteration residuals,
   convergence status, flow statistics, and error/warning messages).
-
-### 14. parallelism (Optional)
-Shared-memory parallelism settings.
-
-```cpp
-parallelism
-{
-    numThreads      4;      // Optional: number of OpenMP threads (default: 1)
-}
-```
-
-**Notes**:
-- When omitted, the solver runs single-threaded
-- Sets the thread count for all OpenMP loops (matrix assembly, gradient
-  reconstruction, cell-update sweeps, turbulence transport) and Eigen's
-  sparse solvers
-- Section can appear anywhere in the case file, since parsing is order-independent

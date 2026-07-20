@@ -20,9 +20,6 @@
 #include <algorithm>
 #include <limits>
 
-// External library headers
-#include <omp.h>
-
 // Project headers
 #include "HaloExchange.h"
 #include "Logger.h"
@@ -100,7 +97,6 @@ kOmegaSST::kOmegaSST
     // nut = k/omega until strain rate and F23 reach the SST limiter
     const Count numCells = mesh.numCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         nut()[cellIdx] =
@@ -208,10 +204,6 @@ void kOmegaSST::solve
         Scalar nutMax = std::numeric_limits<Scalar>::lowest();
         Scalar nutSum = S(0.0);
 
-        #pragma omp parallel for schedule(static) \
-            reduction(+:kSum, omegaSum, nutSum) \
-            reduction(min:kMin, omegaMin, nutMin) \
-            reduction(max:kMax, omegaMax, nutMax)
         for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
         {
             kMin = std::min(kMin, k()[cellIdx]);
@@ -271,7 +263,6 @@ void kOmegaSST::updateNutWall()
 {
     nutWall().setAll(S(0.0));
 
-    #pragma omp parallel for schedule(static)
     for (Index i = 0; i < wallFunctionFaceIndices().size(); ++i)
     {
         const Index faceIdx = wallFunctionFaceIndices()[i];
@@ -297,7 +288,6 @@ void kOmegaSST::updateNutWall()
 
 void kOmegaSST::updateOmegaWallValues()
 {
-    #pragma omp parallel for schedule(static)
     for (Index i = 0; i < wallFunctionFaceIndices().size(); ++i)
     {
         const Index faceIdx = wallFunctionFaceIndices()[i];
@@ -421,7 +411,6 @@ ScalarField kOmegaSST::kProduction
     const Count numCells = mesh().numOwnedCells();
     ScalarField Pk;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar S2 =
@@ -443,7 +432,6 @@ ScalarField kOmegaSST::crossDiffusion
     const Count numCells = mesh().numOwnedCells();
     ScalarField CDkOmega;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         CDkOmega[cellIdx] =
@@ -465,7 +453,6 @@ ScalarField kOmegaSST::blendingF1
     constexpr Scalar CDkOmegaMin = S(1e-10);
     ScalarField f1;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar y = std::max(wallDistance()[cellIdx], vSmallValue);
@@ -504,7 +491,6 @@ ScalarField kOmegaSST::blendingF2() const
     const Count numCells = mesh().numOwnedCells();
     ScalarField f2;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar y = std::max(wallDistance()[cellIdx], vSmallValue);
@@ -535,7 +521,6 @@ ScalarField kOmegaSST::blendingF3() const
     const Count numCells = mesh().numOwnedCells();
     ScalarField f3;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar y = std::max(wallDistance()[cellIdx], vSmallValue);
@@ -567,7 +552,6 @@ ScalarField kOmegaSST::blendingF23
 
     if (useF3_)
     {
-        #pragma omp parallel for schedule(static)
         for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
         {
             f23[cellIdx] = f2[cellIdx] * f3[cellIdx];
@@ -575,7 +559,6 @@ ScalarField kOmegaSST::blendingF23
     }
     else
     {
-        #pragma omp parallel for schedule(static)
         for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
         {
             f23[cellIdx] = f2[cellIdx];
@@ -595,7 +578,6 @@ ScalarField kOmegaSST::omegaProduction
     const Count numCells = mesh().numOwnedCells();
     ScalarField POmega;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar S2 =
@@ -615,7 +597,6 @@ ScalarField kOmegaSST::computeGammaK(const ScalarField& f1) const
     const Count numCells = mesh().numOwnedCells();
     ScalarField GammaK;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar sigmaK =
@@ -633,7 +614,6 @@ ScalarField kOmegaSST::computeGammaOmega(const ScalarField& f1) const
     const Count numCells = mesh().numOwnedCells();
     ScalarField GammaOmega;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar sigmaOmega =
@@ -657,7 +637,6 @@ void kOmegaSST::limitProduction
 {
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         // Limit k production:
@@ -716,7 +695,6 @@ void kOmegaSST::solveOmegaEquation
     ScalarList& vectorB = matrixConstruct()->vectorB();
 
     // Add source terms
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
@@ -797,7 +775,6 @@ void kOmegaSST::boundOmega()
 {
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar omegaLowerBound =
@@ -842,7 +819,6 @@ void kOmegaSST::solveKEquation
     ScalarList& vectorB = matrixConstruct()->vectorB();
 
     // Add k source terms
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar cellVolume = mesh().cells()[cellIdx].volume();
@@ -893,7 +869,6 @@ void kOmegaSST::boundK()
 {
     const Count numCells = mesh().numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         k()[cellIdx] = std::max(k()[cellIdx], smallValue);
@@ -912,7 +887,6 @@ ScalarField kOmegaSST::computeTurbulentViscosity
     const Count numCells = mesh().numOwnedCells();
     ScalarField nut;
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         nut[cellIdx] =

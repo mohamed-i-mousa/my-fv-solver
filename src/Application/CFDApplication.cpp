@@ -20,9 +20,6 @@
 #include <cmath>
 #include <iostream>
 
-// External library headers
-#include <omp.h>
-
 // Project headers
 #include "BCLoader.h"
 #include "BoundaryConditions.h"
@@ -42,15 +39,6 @@
 
 namespace
 {
-
-void initParallelism(int numThreads)
-{
-    omp_set_num_threads(numThreads);
-
-    std::cout
-        << "OpenMP threads: " << numThreads << '\n';
-}
-
 
 void runSteady
 (
@@ -231,9 +219,6 @@ void CFDApplication::run()
     // Read the case file and load configuration
     CaseReader caseReader(caseFile_);
     const CaseConfiguration config = CaseConfig::loadConfiguration(caseReader);
-
-    // Initialize parallelism
-    initParallelism(static_cast<int>(config.numThreads));
 
     // Create mesh (decomposed across ranks in a parallel run)
     Mesh mesh = MeshCreator::create(config);

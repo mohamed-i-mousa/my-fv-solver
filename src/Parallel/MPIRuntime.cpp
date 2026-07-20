@@ -20,28 +20,14 @@
 
 // Project headers
 #include "Comm.h"
-#include "ErrorHandler.h"
 
 // ************************* Special Member Functions *************************
 
 MPIRuntime::MPIRuntime()
 {
-    int providedThreadSupport = 0;
-
-    MPI_Init_thread
-    (
-        nullptr,
-        nullptr,
-        MPI_THREAD_FUNNELED,
-        &providedThreadSupport
-    );
+    MPI_Init(nullptr, nullptr);
 
     Comm::init();
-
-    if (providedThreadSupport < MPI_THREAD_FUNNELED && Comm::master())
-    {
-        Warning("MPI runtime provides no funneled-thread support");
-    }
 }
 
 

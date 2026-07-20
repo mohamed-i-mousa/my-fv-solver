@@ -35,18 +35,7 @@ find_package(MPI REQUIRED COMPONENTS CXX)
 find_path(METIS_INCLUDE_DIR metis.h REQUIRED)
 find_library(METIS_LIBRARY metis REQUIRED)
 
-# find OpenMP package (required for parallelization)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    set(LIBOMP_PREFIX "/opt/homebrew/opt/libomp")
-    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
-    set(OpenMP_CXX_LIB_NAMES "omp")
-    set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.dylib")
-endif()
-
-find_package(OpenMP REQUIRED)
-
-# Find the HDF5 C library (must be a parallel/MPI build: the VTKHDF
-# writers do collective MPI-IO into one shared file per grid)
+# Find the HDF5 C library
 set(HDF5_PREFER_PARALLEL ON)
 find_package(HDF5 REQUIRED COMPONENTS C)
 
@@ -178,12 +167,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     endif()
 endif()
 
-# Link executable against HDF5, PETSc, MPI, METIS, Eigen3, and OpenMP
+# Link executable against HDF5, PETSc, MPI, METIS, and Eigen3
 target_link_libraries(${PROJECT_NAME} PRIVATE
     HDF5::HDF5
     PkgConfig::PETSC
     MPI::MPI_CXX
     ${METIS_LIBRARY}
     Eigen3::Eigen
-    OpenMP::OpenMP_CXX
 )

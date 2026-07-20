@@ -88,7 +88,7 @@ this order:
 // Standard library headers
 #include <vector>
 
-// External library headers     (Eigen, OpenMP, HDF5)
+// External library headers     (Eigen, PETSc, HDF5)
 #include <eigen3/Eigen/SparseCore>
 
 // Project headers

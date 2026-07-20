@@ -516,26 +516,6 @@ CaseConfiguration loadConfiguration(const CaseReader& reader)
     config.meshFile = mesh.lookup<FilePath>("file");
     config.checkQuality = mesh.lookupOrDefault<bool>("checkQuality", true);
 
-    config.numThreads = 1;
-    if (reader.hasSection("parallelism"))
-    {
-        const auto& parallelism = reader.section("parallelism");
-        const int n = parallelism.lookupOrDefault<int>("numThreads", 1);
-
-        if (n <= 0)
-        {
-            Warning
-            (
-                "parallelism.numThreads must be a positive integer; "
-                "defaulting to 1 (serial)."
-            );
-        }
-        else
-        {
-            config.numThreads = static_cast<Count>(n);
-        }
-    }
-
     const auto& physicalProperties = reader.section("physicalProperties");
 
     config.rho = physicalProperties.lookup<Scalar>("rho");

@@ -144,12 +144,8 @@ AeroForces computeForces
 
     const FaceList& faces = mesh.faces();
 
-    Scalar pressureForceX = S(0.0);
-    Scalar pressureForceY = S(0.0);
-    Scalar pressureForceZ = S(0.0);
-    Scalar frictionForceX = S(0.0);
-    Scalar frictionForceY = S(0.0);
-    Scalar frictionForceZ = S(0.0);
+    Vector pressureForceSum(S(0.0), S(0.0), S(0.0));
+    Vector frictionForceSum(S(0.0), S(0.0), S(0.0));
 
     // A rank without the patch only joins the collective sums below
     if (patch != nullptr)
@@ -157,9 +153,6 @@ AeroForces computeForces
         const Index firstFaceIdx = patch->firstFaceIdx();
         const Index lastFaceIdx = patch->lastFaceIdx();
 
-        #pragma omp parallel for schedule(static) \
-            reduction(+:pressureForceX, pressureForceY, pressureForceZ) \
-            reduction(+:frictionForceX, frictionForceY, frictionForceZ)
         for
         (
             Index faceIdx = firstFaceIdx;
@@ -176,9 +169,7 @@ AeroForces computeForces
                 bcManager.boundaryFaceValue(Field::p, pressure, face);
             const Vector pressureContribution =
                 (config.rho * pressureFace * face.projectedArea()) * normal;
-            pressureForceX += pressureContribution.x();
-            pressureForceY += pressureContribution.y();
-            pressureForceZ += pressureContribution.z();
+            pressureForceSum += pressureContribution;
 
             // Skin-friction force
             const Vector cellVelocity(Ux[cellIdx], Uy[cellIdx], Uz[cellIdx]);
@@ -196,18 +187,14 @@ AeroForces computeForces
 
                 const Vector frictionContribution =
                     (shearStress * face.contactArea()) * shearDirection;
-                frictionForceX += frictionContribution.x();
-                frictionForceY += frictionContribution.y();
-                frictionForceZ += frictionContribution.z();
+                frictionForceSum += frictionContribution;
             }
         }
     }
 
     // Each rank integrates its share of the patch; combine onto every rank
-    const Vector pressureForce =
-        globalSum(Vector(pressureForceX, pressureForceY, pressureForceZ));
-    const Vector frictionForce =
-        globalSum(Vector(frictionForceX, frictionForceY, frictionForceZ));
+    const Vector pressureForce = globalSum(pressureForceSum);
+    const Vector frictionForce = globalSum(frictionForceSum);
 
     const Vector& dragDir = config.dragDirection;
     const Vector& liftDir = config.liftDirection;

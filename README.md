@@ -32,7 +32,7 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 
 - **Wall Distance Calculation**: Mesh wave iterative propagation for accurate turbulence modeling
 
-- **Shared-Memory Parallelism (OpenMP)**: All major compute loops (matrix assembly, gradient reconstruction, cell-update sweeps, turbulence transport) use OpenMP. Eigen's `BiCGSTAB` and `ConjugateGradient` solvers also use OpenMP via a RowMajor sparse-matrix layout. Thread count is set via `parallelism.numThreads` in the case file.
+- **Distributed-Memory Parallelism (MPI)**: Runtime METIS domain decomposition with ghost-cell halo exchange. The same binary runs serially or under `mpirun -np N ./Turblyze case`, with no case-file changes. Linear systems are solved with PETSc Krylov solvers.
 
 - **VTKHDF Export**: Comprehensive output including all flow variables and turbulence quantities, written directly through the HDF5 library in VTK's modern `.vtkhdf` format.
 
@@ -51,33 +51,29 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 - **Linux** or **macOS** environment
 
 ### Dependencies
-- **Eigen 3**: Linear algebra library (header-only)
-- **HDF5**: C library used to write the VTKHDF output format
-- **OpenMP**: Shared-memory parallelism (bundled with GCC/Clang on Linux;
-  Homebrew `libomp` on macOS)
+- **Eigen 3**: Linear algebra (header-only), used for the least-squares gradient precompute
+- **PETSc**: Krylov linear solvers, located through `pkg-config` (so
+  `pkg-config` itself is required at configure time)
+- **MPI**: any MPI implementation providing a C++-capable compiler wrapper
+  (the `CXX` component); initialized through PETSc and called directly in
+  `src/Parallel/`
+- **METIS**: mesh partitioning for the runtime domain decomposition
+- **HDF5 (parallel/MPI build)**: C library used to write the VTKHDF output.
+  The VTKHDF writers do collective MPI-IO into one shared file per grid, so a
+  **serial HDF5 build fails the configure step with a fatal error**. Install
+  the MPI-enabled package, or point `HDF5_ROOT` at a parallel installation.
 
 #### Installation on Ubuntu/Debian:
 ```bash
-sudo apt install build-essential cmake libeigen3-dev libhdf5-dev
+sudo apt install build-essential cmake pkg-config libeigen3-dev libopenmpi-dev petsc-dev libmetis-dev libhdf5-openmpi-dev
 ```
 
 #### Installation on MacOS:
 ```bash
-brew install cmake eigen hdf5 libomp
+brew install cmake pkg-config eigen open-mpi petsc metis hdf5-mpi
 ```
 
-> **Note (OpenMP setup)**: The `CMakeLists.txt` is tailored to two configurations:
-> - **Linux with GCC/Clang**: OpenMP ships with the compiler; nothing to do.
-> - **Apple Silicon macOS with AppleClang + Homebrew `libomp`**: the build
->   wires in `-Xpreprocessor -fopenmp` and the libomp path
->   `/opt/homebrew/opt/libomp` (hardcoded). Run `brew install libomp` first.
->
-> If you are using a different setup (Intel Mac, Homebrew GCC, Homebrew
-> LLVM/Clang, Intel oneAPI, MSVC, cross-compiler, custom libomp install, …),
-> remove or adapt the `if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")` block
-> in `CMakeLists.txt` so that the stock `find_package(OpenMP REQUIRED)` can
-> discover your compiler's native OpenMP runtime.
-
+On macOS, the serial `hdf5` formula and `hdf5-mpi` conflict: if a serial `hdf5` is linked, unlink it (`brew unlink hdf5 && brew link hdf5-mpi`) before configuring, otherwise CMake finds the serial build and stops.
 
 
 ## Building the Solver
@@ -110,6 +106,13 @@ Run from the `build.nosync/` directory to ensure correct path resolution:
 cd build.nosync
 ./Turblyze                     # Uses the default `defaultCase` file
 ./Turblyze customCase          # Uses a custom case file
+```
+
+### Parallel Execution
+The same binary runs in parallel under MPI, with no case-file changes. The mesh is decomposed at runtime with METIS:
+```bash
+mpirun -np 4 ./Turblyze              # Uses the default `defaultCase` file
+mpirun -np 4 ./Turblyze customCase   # Uses a custom case file
 ```
 
 ### Case File System
@@ -302,7 +305,6 @@ Directions under consideration for future development, aspirational, not commitm
 - [ ] Fully-coupled implicit solver
 - [ ] Additional turbulence models
 - [ ] Additional mesh formats (e.g. OpenFOAM polyMesh, CGNS)
-- [ ] Distributed-memory parallelism (MPI) beyond the current shared-memory OpenMP
 
 ## License and Support
 

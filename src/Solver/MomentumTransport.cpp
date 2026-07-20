@@ -22,9 +22,6 @@
 #include <sstream>
 #include <algorithm>
 
-// External library headers
-#include <omp.h>
-
 // Project headers
 #include "Scalar.h"
 #include "HaloExchange.h"
@@ -298,7 +295,6 @@ void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
     // Called only on the transient path
     const Count numCells = mesh_.numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar volume = mesh_.cells()[cellIdx].volume();
@@ -340,7 +336,6 @@ void MomentumTransport::updateVelocityGradients()
 {
     const Count numOwnedCells = mesh_.numOwnedCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         gradUx_[cellIdx] =
@@ -371,7 +366,6 @@ void MomentumTransport::updateVelocityGradients()
     // Assembling exchanged components replaces an exchange
     const Count numCells = mesh_.numCells();
 
-    #pragma omp parallel for schedule(static)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         gradU_[cellIdx] =
@@ -521,21 +515,19 @@ Scalar MomentumTransport::massImbalance() const noexcept
 
     const Count numCells = mesh_.numOwnedCells();
 
-    #pragma omp parallel for schedule(static) reduction(+:totalNormImbalance)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
+        const auto& cell = mesh_.cells()[cellIdx];
+        const auto& faceIndices = cell.faceIndices();
+        const auto& faceSigns = cell.faceSigns();
+
         Scalar net = S(0.0);
         Scalar sumAbs = S(0.0);
 
-        for
-        (
-            Index j = 0;
-            j < mesh_.cells()[cellIdx].faceIndices().size();
-            ++j
-        )
+        for (Index j = 0; j < faceIndices.size(); ++j)
         {
-            const Index faceIdx = mesh_.cells()[cellIdx].faceIndices()[j];
-            const int sign = mesh_.cells()[cellIdx].faceSigns()[j];
+            const Index faceIdx = faceIndices[j];
+            const int sign = faceSigns[j];
             const Scalar mf = flux[faceIdx];
             net += S(sign) * mf;
             sumAbs += std::abs(mf);
@@ -558,7 +550,6 @@ Scalar MomentumTransport::velocityResidual() const noexcept
 
     const Count numCells = mesh_.numOwnedCells();
 
-    #pragma omp parallel for schedule(static) reduction(+:num, den)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const Scalar dx = Ux_[cellIdx] - UxPrevIter_[cellIdx];
@@ -588,8 +579,6 @@ MomentumTransport::computeCourant() const noexcept
     Scalar maxCourant = S(0.0);
     Scalar sumCourant = S(0.0);
 
-    #pragma omp parallel for schedule(static) \
-        reduction(max:maxCourant) reduction(+:sumCourant)
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
         const auto& cell = mesh_.cells()[cellIdx];

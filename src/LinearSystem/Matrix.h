@@ -24,28 +24,16 @@
  *       off-diagonal pairs    local-row off-diags    diagonals
  *
  * A processor face carries only the LOCAL cell's row here — the mirror
- * entry is assembled by the neighbor rank as its own processor face. One
- * extra scribble slot at the very end absorbs the remote-side write so
- * the face-assembly math stays branch-free; PETSc never sees it. This
- * rank's matrix rows, RHS, and diagonal cover owned cells only.
+ * entry is assembled by the neighbor rank as its own processor face. Both
+ * off-diagonal COO writes are still unconditional, so one extra scribble
+ * slot at the very end gives the remote side a harmless sink to land in;
+ * PETSc never sees it. This rank's matrix rows, RHS, and diagonal cover
+ * owned cells only.
  *
- * Assembly needs the race-free passes:
- * Pass 1:  internal face k touches only slots 2k/2k+1.
- * Pass 1b: processor face m touches only its single slot (+ scribble).
- * Pass 2:  boundary face m touches only boundaryDiag_[m]/boundaryRhs_[m].
- * Pass 3:  owned cell reads shared scratch but writes only its own
- *          diagonal slot + RHS entry — one writer per cell; ghost cells
- *          own no row and are never gathered.
- *
- * @class Matrix
- *
- * The Matrix class provides:
- * - Unified assembly for all transport equation types
- * - PETSc matrix/vector storage for the solve
- * - Deferred correction for higher-order convection schemes
- * - Non-orthogonal mesh corrections
- * - Implicit under-relaxation (Patankar) for solution stability
- * - Boundary condition integration during assembly
+ * Assembly is one scatter pass per face group: owned rows are primed with
+ * the cell source and any transient term, then every face adds its share
+ * to the rows it touches. A face whose far side is a ghost adds nothing
+ * there — that row belongs to the neighbor rank.
  *****************************************************************************/
 
 #pragma once
@@ -174,23 +162,11 @@ private:
     /// PETSc RHS vectorB_ storage
     Vec rhsVec_ = nullptr;
 
-    /// Staged COO values: [internal-face off-diagonals | cell diagonals]
+    /// Staged COO values: [internal | processor | diagonals | scribble]
     ScalarList cooValues_;
 
     /// Right-hand side staging
     ScalarList vectorB_;
-
-    /// Per-face diagonal contributions [2 per internal face: owner, neighbor]
-    ScalarList faceDiag_;
-
-    /// Per-face RHS contributions [2 per internal face: owner, neighbor]
-    ScalarList faceRhs_;
-
-    /// Per-boundary-face diagonal contribution to the owner cell
-    ScalarList boundaryDiag_;
-
-    /// Per-boundary-face RHS contribution to the owner cell
-    ScalarList boundaryRhs_;
 
     /// Face indices of every internal face, in slot order
     IndexList internalFaces_;
@@ -198,14 +174,11 @@ private:
     /// Face indices of every processor (inter-rank cut) face, slot order
     IndexList processorFaces_;
 
-    /// Face indices of every boundary face, in slot order
+    /// Face indices of every boundary face (no COO slot of their own)
     IndexList boundaryFaces_;
 
     /// faceIdx -> its COO slot (internal faces: +1 is the reverse)
     IndexList faceSlot_;
-
-    /// faceIdx -> owner/neighbor scratch pair base (internal + processor)
-    IndexList faceScratch_;
 
     /// First diagonal slot in cooValues_
     Index diagOffset_ = 0;
@@ -224,20 +197,18 @@ private:
 
 private:
 
-    /// Stage a two-cell face
+    /// Add a two-cell face's contribution to the owned rows it touches
     void assembleInternalFace
     (
-        Index scratchSlot,
         Index cooOwnerSlot,
         Index cooNeighborSlot,
         const Face& face,
         const TransportEquation& equation
     );
 
-    /// Stage boundary-face contributions into boundary scratch slot m
+    /// Add a boundary face's contribution to its owner cell's row
     void assembleBoundaryFace
     (
-        Index m,
         const Face& face,
         const TransportEquation& equation
     );
