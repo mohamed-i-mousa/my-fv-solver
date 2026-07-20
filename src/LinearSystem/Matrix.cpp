@@ -85,7 +85,7 @@ Matrix::Matrix
 
     // The fixed sparsity pattern, in GLOBAL rank-major indices
     const GlobalIndex globalCells(numOwnedCells);
-    const IndexListRef ghostGlobals = mesh_.ghostGlobalIndices();
+    const IndexList& ghostGlobals = mesh_.ghostGlobalIndices();
 
     std::vector<PetscInt> cooRows(numCoo);
     std::vector<PetscInt> cooCols(numCoo);
@@ -324,11 +324,11 @@ void Matrix::relax(Scalar alpha, const ScalarField& phiPrevIter)
 
 void Matrix::setValues
 (
-    IndexListRef cellIndices,
-    ScalarListRef values,
+    const IndexList& cellIndices,
+    const ScalarList& values,
     const ScalarField& ghostFractions,
     const ScalarField& ghostValues,
-    ScalarListRef fractions
+    const ScalarList& fractions
 )
 {
     const Count numOwnedCells = mesh_.numOwnedCells();

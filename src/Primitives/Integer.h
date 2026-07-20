@@ -20,7 +20,6 @@
 
 #include <cstddef>
 #include <vector>
-#include <span>
 
 // ********************************** Aliases *********************************
 
@@ -35,8 +34,3 @@ using IndexList = std::vector<Index>;
 
 /// An ordered, list of counts
 using CountList = std::vector<Count>;
-
-// ****************************** Borrowed views ******************************
-
-/// A non-owning, read-only view of an IndexList
-using IndexListRef = std::span<const Index>;

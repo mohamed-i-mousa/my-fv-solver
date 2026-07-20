@@ -49,7 +49,7 @@ namespace
 
 FaceIntegrals Face::geometricProperties
 (
-    NodeListRef allNodes
+    const NodeList& allNodes
 )
 {
     geometricPropertiesCalculated_ = false;
@@ -186,7 +186,7 @@ FaceIntegrals Face::geometricProperties
 }
 
 
-void Face::distances(CellListRef allCells)
+void Face::distances(const CellList& allCells)
 {
     dPf_ = centroid_ - allCells[ownerCell_].centroid();
     dPfMag_ = magnitude(dPf_);
@@ -208,7 +208,7 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
 {
     os  << "Face(ID: " << f.idx() << ", Nodes: [";
 
-    const auto nodes = f.nodeIndices();
+    const auto& nodes = f.nodeIndices();
     for (Index nodeIdx = 0; nodeIdx < nodes.size(); ++nodeIdx)
     {
         os  << nodes[nodeIdx]

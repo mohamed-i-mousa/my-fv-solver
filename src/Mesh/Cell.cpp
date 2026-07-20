@@ -28,8 +28,8 @@
 
 void Cell::geometricProperties
 (
-    FaceListRef allFaces,
-    std::span<const FaceIntegrals> allFaceIntegrals
+    const FaceList& allFaces,
+    const std::vector<FaceIntegrals>& allFaceIntegrals
 )
 {
     geometricPropertiesCalculated_ = false;
@@ -86,7 +86,7 @@ std::ostream& operator<<(std::ostream& os, const Cell& c)
 {
     os  << "Cell(ID: " << c.idx() << ", Faces: [";
 
-    const auto faces = c.faceIndices();
+    const auto& faces = c.faceIndices();
     for (Index faceIdx = 0; faceIdx < faces.size(); ++faceIdx)
     {
         os  << faces[faceIdx]
@@ -95,7 +95,7 @@ std::ostream& operator<<(std::ostream& os, const Cell& c)
 
     os  << "], Neighbors: [";
 
-    const auto neighbors = c.neighborCellIndices();
+    const auto& neighbors = c.neighborCellIndices();
     for (Index neighborIdx = 0; neighborIdx < neighbors.size(); ++neighborIdx)
     {
         os  << neighbors[neighborIdx]

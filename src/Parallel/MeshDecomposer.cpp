@@ -82,7 +82,7 @@ IndexList MeshDecomposer::partition() const
     }
 
     // Dual graph in CSR form: cells are vertices, internal faces edges
-    const FaceListRef faces = mesh_.faces();
+    const FaceList& faces = mesh_.faces();
 
     std::vector<idx_t> xadj(numCells + 1, 0);
 
@@ -210,7 +210,7 @@ std::vector<SubmeshData> MeshDecomposer::decompose() const
     // Patch of every boundary face (patches are contiguous face ranges)
     IndexList faceToPatch(numFaces, invalidIdx);
 
-    const PatchListRef patches = mesh_.patches();
+    const PatchList& patches = mesh_.patches();
 
     for (Index patchIdx = 0; patchIdx < patches.size(); ++patchIdx)
     {
@@ -259,9 +259,9 @@ SubmeshData MeshDecomposer::extractSubmesh
     const IndexList& faceToPatch
 ) const
 {
-    const FaceListRef faces = mesh_.faces();
-    const CellListRef cells = mesh_.cells();
-    const PatchListRef patches = mesh_.patches();
+    const FaceList& faces = mesh_.faces();
+    const CellList& cells = mesh_.cells();
+    const PatchList& patches = mesh_.patches();
 
     const Count numOwned = rankOffsets[rank + 1] - rankOffsets[rank];
 
@@ -421,10 +421,8 @@ SubmeshData MeshDecomposer::extractSubmesh
         block.patchLastFace.push_back(includedFaces.size() - 1);
     }
 
-    // ------------------------------------------------------------------
     // Node subset: first appearance along the local face order
-    // ------------------------------------------------------------------
-    const NodeListRef nodes = mesh_.nodes();
+    const NodeList& nodes = mesh_.nodes();
 
     IndexList localNodeIdx(nodes.size(), invalidIdx);
     Count numLocalNodes = 0;
@@ -497,8 +495,8 @@ SubmeshData MeshDecomposer::extractSubmesh
     for (const Index cellIdx : ownedOriginal)
     {
         const Cell& cell = cells[cellIdx];
-        const IndexListRef cellFaces = cell.faceIndices();
-        const Cell::FaceSignListRef signs = cell.faceSigns();
+        const IndexList& cellFaces = cell.faceIndices();
+        const Cell::FaceSignList& signs = cell.faceSigns();
 
         for (Index j = 0; j < cellFaces.size(); ++j)
         {

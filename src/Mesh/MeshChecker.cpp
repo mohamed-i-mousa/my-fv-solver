@@ -50,7 +50,7 @@ namespace
 // Print up to 10 IDs from a list, with truncation indicator
 void printIndicesList
 (
-    IndexListRef indices,
+    const IndexList& indices,
     Name entityName
 )
 {
@@ -118,7 +118,7 @@ Scalar faceSkewness
     Scalar faceCharacteristicLength = S(0.2) * magnitude(dPN) + vSmallValue;
 
     // Refine by finding max vertex extent in skewness direction
-    const IndexListRef nodeIndices = face.nodeIndices();
+    const IndexList& nodeIndices = face.nodeIndices();
 
     for (Index nodeIdx : nodeIndices)
     {
@@ -161,7 +161,7 @@ Scalar boundaryFaceSkewness
     Scalar faceCharacteristicLength = S(0.4) * magnitude(dPN) + vSmallValue;
 
     // Refine by finding max vertex extent in skewness direction
-    const IndexListRef nodeIndices = face.nodeIndices();
+    const IndexList& nodeIndices = face.nodeIndices();
 
     for (Index nodeIdx : nodeIndices)
     {
@@ -188,7 +188,7 @@ Scalar cellAspectRatio
     // Accumulate absolute face area components per direction
     Vector sumMagAreaComponents;
 
-    const auto faceIndices = cell.faceIndices();
+    const auto& faceIndices = cell.faceIndices();
 
     for (Index faceIdx : faceIndices)
     {

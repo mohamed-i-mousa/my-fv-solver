@@ -77,7 +77,7 @@ void exchangeHalos
 
     for (Index p = 0; p < numPatches; ++p)
     {
-        const IndexListRef sendCells = patches[p].sendCellIndices();
+        const IndexList& sendCells = patches[p].sendCellIndices();
 
         sendBuffers[p].reserve(numFields * sendCells.size());
 

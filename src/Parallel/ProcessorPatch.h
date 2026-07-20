@@ -91,7 +91,7 @@ public:
     }
 
     /// Owned cells to send, in the neighbor's ghost order
-    [[nodiscard]] IndexListRef sendCellIndices() const noexcept
+    [[nodiscard]] const IndexList& sendCellIndices() const noexcept
     {
         return sendCellIndices_;
     }

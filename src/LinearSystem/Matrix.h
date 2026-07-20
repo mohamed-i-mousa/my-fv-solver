@@ -72,10 +72,6 @@ class Matrix
 {
 public:
 
-    // Type reductions for readability
-    using ScalarListRef = std::span<const Scalar>;
-    using ScalarSpan = std::span<Scalar>;
-
 // ************************* Special Member Functions *************************
 
     /// Constructor: builds the PETSc system
@@ -107,11 +103,11 @@ public:
     /// Fix matrix rows to impose known cell values (ghosts included)
     void setValues
     (
-        IndexListRef cellIndices,
-        ScalarListRef values,
+        const IndexList& cellIndices,
+        const ScalarList& values,
         const ScalarField& ghostFractions,
         const ScalarField& ghostValues,
-        ScalarListRef fractions = {}
+        const ScalarList& fractions
     );
 
     /// Push the staged values into the PETSc matrix
@@ -151,13 +147,13 @@ public:
     }
 
     /// Get the matrix diagonal (const)
-    [[nodiscard]] ScalarListRef diagonal() const noexcept
+    [[nodiscard]] std::span<const Scalar> diagonal() const noexcept
     {
         return {cooValues_.data() + diagOffset_, mesh_.numOwnedCells()};
     }
 
     /// Get the staged matrix diagonal
-    [[nodiscard]] ScalarSpan diagonal() noexcept
+    [[nodiscard]] std::span<Scalar> diagonal() noexcept
     {
         return {cooValues_.data() + diagOffset_, mesh_.numOwnedCells()};
     }

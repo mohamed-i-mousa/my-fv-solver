@@ -40,8 +40,8 @@ namespace
 void prepareGeometry(Mesh& mesh, bool debug)
 {
     std::vector<FaceIntegrals> faceIntegrals(mesh.numFaces());
-    auto faces = mesh.faces();
-    const auto nodes = mesh.nodes();
+    auto& faces = mesh.faces();
+    const auto& nodes = mesh.nodes();
 
     #pragma omp parallel for schedule(static)
     for (Index faceIdx = 0; faceIdx < faces.size(); ++faceIdx)
@@ -55,7 +55,7 @@ void prepareGeometry(Mesh& mesh, bool debug)
             << "Geometric properties calculated for faces." << '\n';
     }
 
-    auto cells = mesh.cells();
+    auto& cells = mesh.cells();
     const Count numOwnedCells = mesh.numOwnedCells();
 
     #pragma omp parallel for schedule(static)

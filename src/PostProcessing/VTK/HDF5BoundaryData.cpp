@@ -177,9 +177,9 @@ void HDF5BoundaryData::writeGeometry()
 
     openHandles();
 
-    const NodeListRef allNodes = mesh_.nodes();
-    const FaceListRef allFaces = mesh_.faces();
-    const PatchListRef allPatches = mesh_.patches();
+    const NodeList& allNodes = mesh_.nodes();
+    const FaceList& allFaces = mesh_.faces();
+    const PatchList& allPatches = mesh_.patches();
 
     // Collect boundary patch faces over a compressed local point set
     std::unordered_map<Index, long long> nodeMap;
@@ -420,7 +420,7 @@ void HDF5BoundaryData::appendTimeStep
     openHandles();
 
     const Count numBoundaryFaces = boundaryFaceIndices_.size();
-    const FaceListRef allFaces = mesh_.faces();
+    const FaceList& allFaces = mesh_.faces();
 
     // Static patch metadata, re-emitted every step
     checkFieldConsistency("patchIdx");

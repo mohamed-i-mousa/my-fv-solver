@@ -145,7 +145,7 @@ public:
     ) const;
 
     /// Link boundary faces to their owning patches
-    void linkFaces(MutableFaceListRef faces);
+    void linkFaces(FaceList& faces);
 
     /// Validate boundary condition patch names against mesh patch names
     void validatePatchNames() const;

@@ -294,7 +294,7 @@ void Logger::residualSummary
     Scalar mass,
     Scalar velocity,
     Scalar pressure,
-    std::span<const Residuals> residuals
+    const std::vector<Residuals>& residuals
 )
 {
     std::ostringstream summary;

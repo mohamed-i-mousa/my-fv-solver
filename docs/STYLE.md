@@ -344,17 +344,23 @@ of the value is meaningful, since they signal intent to the reader (the compiler
 still sees the underlying type, so they are documentation, not type safety):
 
 - **`Integer.h`**: `Index` (addresses an element) and `Count` (a size or
-  quantity), both `std::size_t`; plus `IndexList`/`CountList` and the
-  `IndexListRef` (`std::span<const Index>`) view.
+  quantity), both `std::size_t`; plus `IndexList`/`CountList`.
 - **`StringTypes.h`**: owned text `Name` / `Token` / `FilePath` / `Message`
   (all `std::string`).
-- **`MeshContainers.h`**: owning `NodeList`/`FaceList`/`CellList`/`PatchList`
-  and the borrowed `*Ref` span views (`FaceListRef`, `MutableFaceListRef`, …).
+- **`MeshContainers.h`**: owning `NodeList`/`FaceList`/`CellList`/`PatchList`.
 
-The `*Ref` suffix marks a non-owning view in the name. Domain-narrow aliases
-(`FaceIndex`, `PatchName`) are intentionally **not** used, since a single `Index` /
-`Name` keeps the vocabulary small. Local aliases (e.g. `Face::OptionalIndex`,
-`CaseReader::EntryMap`) live next to the class that needs them.
+Borrowed views are plain references to these aliases — `const FaceList&` to
+read, `FaceList&` to mutate — which already carries the ownership and mutability
+in the type. `std::span` is reserved for the cases a reference cannot express: a
+sub-range of a larger buffer (`Matrix::diagonal()`, an interior slice of the COO
+values) or a pointer/length pair over non-vector storage
+(`LinearSolver::solve()`, the owned-cell prefix of a ghost-tailed `CellData`).
+A `std::span` in a signature therefore means "this is not a whole container".
+
+Domain-narrow aliases (`FaceIndex`, `PatchName`) are intentionally **not** used,
+since a single `Index` / `Name` keeps the vocabulary small. Local aliases (e.g.
+`Face::OptionalIndex`, `CaseReader::EntryMap`) live next to the class that needs
+them.
 
 ## Special Member Functions
 

@@ -149,7 +149,7 @@ public:
     }
 
     /// Get node connectivity
-    [[nodiscard]] IndexListRef nodeIndices() const noexcept
+    [[nodiscard]] const IndexList& nodeIndices() const noexcept
     {
         return nodeIndices_;
     }
@@ -237,7 +237,7 @@ public:
     /// Calculate Face centroid, normal, area, and second moment integral
     [[nodiscard]] FaceIntegrals geometricProperties
     (
-        NodeListRef allNodes
+        const NodeList& allNodes
     );
 
     /// Check if distance properties calculated
@@ -247,7 +247,7 @@ public:
     }
 
     /// Calculate distance properties of the face
-    void distances(CellListRef allCells);
+    void distances(const CellList& allCells);
 
 // ****************************** Private Members *****************************
 

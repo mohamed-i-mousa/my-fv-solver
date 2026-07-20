@@ -142,7 +142,7 @@ AeroForces computeForces
     const FaceData<Scalar> wallShearStress =
         turbulence.wallShearStress(Ux, Uy, Uz);
 
-    const FaceListRef faces = mesh.faces();
+    const FaceList& faces = mesh.faces();
 
     Scalar pressureForceX = S(0.0);
     Scalar pressureForceY = S(0.0);

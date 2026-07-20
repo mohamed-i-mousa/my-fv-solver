@@ -96,7 +96,7 @@ void checkCellAccounting
 /// Ghost centroids/volumes must BIT-match the owning rank's cells
 void checkGhostGeometry(const Mesh& mesh)
 {
-    const CellListRef cells = mesh.cells();
+    const CellList& cells = mesh.cells();
 
     for (const ProcessorPatch& patch : mesh.processorPatches())
     {
@@ -149,7 +149,7 @@ void checkGhostGeometry(const Mesh& mesh)
 /// Both copies of every cut face must BIT-match in geometry
 void checkCutFaceGeometry(const Mesh& mesh)
 {
-    const FaceListRef faces = mesh.faces();
+    const FaceList& faces = mesh.faces();
 
     for (const ProcessorPatch& patch : mesh.processorPatches())
     {
@@ -204,7 +204,7 @@ void checkGradientAcrossCuts(const Mesh& mesh)
 
     ScalarField phi;
 
-    const CellListRef cells = mesh.cells();
+    const CellList& cells = mesh.cells();
     const Count numCells = mesh.numCells();
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
@@ -219,7 +219,7 @@ void checkGradientAcrossCuts(const Mesh& mesh)
 
     // Owned cells adjacent to a cut, away from physical boundaries
     std::vector<bool> tested(mesh.numOwnedCells(), false);
-    const FaceListRef faces = mesh.faces();
+    const FaceList& faces = mesh.faces();
 
     Scalar maxError = S(0.0);
     Count testedCells = 0;

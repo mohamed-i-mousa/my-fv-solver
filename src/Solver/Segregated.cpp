@@ -738,8 +738,8 @@ void Segregated::addTransposeGradientSource()
         Scalar sumZ = S(0.0);
 
         const auto& cell = mesh().cells()[cellIdx];
-        const auto faceIndices = cell.faceIndices();
-        const auto faceSigns = cell.faceSigns();
+        const auto& faceIndices = cell.faceIndices();
+        const auto& faceSigns = cell.faceSigns();
 
         for (Index j = 0; j < faceIndices.size(); ++j)
         {

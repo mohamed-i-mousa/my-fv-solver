@@ -42,8 +42,8 @@ constexpr unsigned char polyhedronCellType = 42;
 
 Vector newellNormal
 (
-    IndexListRef faceNodes,
-    NodeListRef allNodes
+    const IndexList& faceNodes,
+    const NodeList& allNodes
 )
 {
     Vector normal;
@@ -128,9 +128,9 @@ void HDF5CellData::writeGeometry()
 
     openHandles();
 
-    const NodeListRef allNodes = mesh_.nodes();
-    const CellListRef allCells = mesh_.cells();
-    const FaceListRef allFaces = mesh_.faces();
+    const NodeList& allNodes = mesh_.nodes();
+    const CellList& allCells = mesh_.cells();
+    const FaceList& allFaces = mesh_.faces();
 
     // Owned cells only: the neighbor ranks write their own
     const Count numOwnedCells = mesh_.numOwnedCells();
@@ -171,14 +171,14 @@ void HDF5CellData::writeGeometry()
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
         const Cell& cell = allCells[cellIdx];
-        const auto faceIndices = cell.faceIndices();
+        const auto& faceIndices = cell.faceIndices();
 
         uniquePointIds.clear();
 
         for (Index faceIdx : faceIndices)
         {
             const Face& face = allFaces[faceIdx];
-            const auto nodeIndices = face.nodeIndices();
+            const auto& nodeIndices = face.nodeIndices();
 
             if (nodeIndices.size() < 3)
             {

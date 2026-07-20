@@ -120,25 +120,25 @@ public:
 // ************************** Const Accessor Methods **************************
 
     /// Read-only view of node coordinates
-    [[nodiscard]] NodeListRef nodes() const noexcept
+    [[nodiscard]] const NodeList& nodes() const noexcept
     {
         return nodes_;
     }
 
     /// Read-only view of faces
-    [[nodiscard]] FaceListRef faces() const noexcept
+    [[nodiscard]] const FaceList& faces() const noexcept
     {
         return faces_;
     }
 
     /// Read-only view of cells
-    [[nodiscard]] CellListRef cells() const noexcept
+    [[nodiscard]] const CellList& cells() const noexcept
     {
         return cells_;
     }
 
     /// Read-only view of boundary patches
-    [[nodiscard]] PatchListRef patches() const noexcept
+    [[nodiscard]] const PatchList& patches() const noexcept
     {
         return patches_;
     }
@@ -146,13 +146,13 @@ public:
 // ************************* Mutable Accessor Methods *************************
 
     /// Mutable view of faces
-    [[nodiscard]] MutableFaceListRef faces() noexcept
+    [[nodiscard]] FaceList& faces() noexcept
     {
         return faces_;
     }
 
     /// Mutable view of cells
-    [[nodiscard]] MutableCellListRef cells() noexcept
+    [[nodiscard]] CellList& cells() noexcept
     {
         return cells_;
     }
@@ -196,7 +196,7 @@ public:
 // ************************ Decomposition Accessor Methods ********************
 
     /// Global cell index of each ghost cell
-    [[nodiscard]] IndexListRef ghostGlobalIndices() const noexcept
+    [[nodiscard]] const IndexList& ghostGlobalIndices() const noexcept
     {
         return ghostGlobalIndices_;
     }

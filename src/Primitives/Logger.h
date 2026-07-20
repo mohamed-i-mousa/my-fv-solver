@@ -15,8 +15,8 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
-#include <span>
 #include <utility>
+#include <vector>
 
 // Project headers
 #include "Scalar.h"
@@ -110,7 +110,7 @@ namespace Logger
         Scalar mass,
         Scalar velocity,
         Scalar pressure,
-        std::span<const Residuals> residuals = {}
+        const std::vector<Residuals>& residuals
     );
 
 } // namespace Logger

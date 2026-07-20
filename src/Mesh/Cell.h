@@ -28,7 +28,6 @@
 // Standard library headers
 #include <cstdint>
 #include <vector>
-#include <span>
 #include <utility>
 
 // Project headers
@@ -44,7 +43,6 @@ class Cell
 public:
 
     using FaceSignList = std::vector<int8_t>;
-    using FaceSignListRef = std::span<const int8_t>;
 
 // ************************* Special Member Functions *************************
 
@@ -88,7 +86,7 @@ public:
     }
 
     /// Set all neighbor cell indices
-    void setNeighborCellIndices(IndexListRef neighbors)
+    void setNeighborCellIndices(const IndexList& neighbors)
     {
         neighborCellIndices_.assign(neighbors.begin(), neighbors.end());
     }
@@ -110,19 +108,19 @@ public:
     }
 
     /// Get bounding face indices
-    [[nodiscard]] IndexListRef faceIndices() const noexcept
+    [[nodiscard]] const IndexList& faceIndices() const noexcept
     {
         return faceIndices_;
     }
 
     /// Get neighboring cell indices
-    [[nodiscard]] IndexListRef neighborCellIndices() const noexcept
+    [[nodiscard]] const IndexList& neighborCellIndices() const noexcept
     {
         return neighborCellIndices_;
     }
 
     /// Get face normal direction signs
-    [[nodiscard]] FaceSignListRef faceSigns() const noexcept
+    [[nodiscard]] const FaceSignList& faceSigns() const noexcept
     {
         return faceSigns_;
     }
@@ -150,8 +148,8 @@ public:
     /// Calculate cell volume and centroid
     void geometricProperties
     (
-        FaceListRef allFaces,
-        std::span<const FaceIntegrals> allFaceIntegrals
+        const FaceList& allFaces,
+        const std::vector<FaceIntegrals>& allFaceIntegrals
     );
 
 // ****************************** Private Members *****************************

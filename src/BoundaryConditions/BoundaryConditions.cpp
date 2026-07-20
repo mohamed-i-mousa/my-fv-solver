@@ -242,7 +242,7 @@ Scalar BoundaryConditions::boundaryFaceValue
 }
 
 
-void BoundaryConditions::linkFaces(MutableFaceListRef faces)
+void BoundaryConditions::linkFaces(FaceList& faces)
 {
     for (const auto& patch : patches_)
     {
