@@ -72,9 +72,9 @@ public:
 // ****************************** Setter Methods ******************************
 
     /// Set patch name
-    void setPatchName(Name patchName) noexcept
+    void setName(Name patchName) noexcept
     {
-        patchName_ = std::move(patchName);
+        name_ = std::move(patchName);
     }
 
     /// Set patch type
@@ -83,15 +83,15 @@ public:
 // ***************************** Accessor Methods *****************************
 
     /// Get number of faces in this boundary patch
-    [[nodiscard]] Count numBoundaryFaces() const noexcept
+    [[nodiscard]] Count numFaces() const noexcept
     {
         return lastFaceIdx_ - firstFaceIdx_ + 1;
     }
 
     /// Get patch name
-    [[nodiscard]] const Name& patchName() const noexcept
+    [[nodiscard]] const Name& name() const noexcept
     {
-        return patchName_;
+        return name_;
     }
 
     /// Get patch type
@@ -117,7 +117,7 @@ public:
 private:
 
     /// Human-readable patch name
-    Name patchName_;
+    Name name_;
 
     /// Mapped boundary condition type
     PatchType type_ = PatchType::undefined;

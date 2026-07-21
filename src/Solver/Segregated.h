@@ -45,7 +45,7 @@ public:
     Segregated
     (
         const Mesh& mesh,
-        const BoundaryConditions& bc,
+        BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         const ConvectionScheme& momentumConvectionScheme,

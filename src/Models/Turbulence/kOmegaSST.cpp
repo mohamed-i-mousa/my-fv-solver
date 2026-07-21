@@ -71,12 +71,7 @@ kOmegaSST::kOmegaSST
     // Compute yPlusLam and wall-function geometry
     updateYPlusLam(coeffs_.kappa, coeffs_.E);
     updateWallDistance();
-    initializeWallFunctionGeometry
-    (
-        bcManager(),
-        Field::omega,
-        BCType::omegaWallFunction
-    );
+    initializeWallFunctionGeometry(bcManager(), Field::omega);
     wallCellOmega_.assign(wallCellIndices().size(), S(0.0));
 
     // The ghosts show the neighbor's constrained cells

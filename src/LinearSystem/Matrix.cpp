@@ -542,141 +542,40 @@ void Matrix::assembleBoundaryFace
 )
 {
     const Index ownerIdx = face.ownerCell();
-    const BoundaryData& bc =
-        bcManager_.fieldBC(face.patch()->get().patchName(), equation.field);
-    const Vector Sf = face.normal() * face.projectedArea();
-    const Vector ePf = normalized(face.dPf());
-    const Scalar dPfMag = face.dPfMag();
-    const Vector Ef = (dot(Sf, Sf) / dot(Sf, ePf)) * ePf;
-    const Scalar Gammaf = equation.GammaFace[face.idx()];
-    const Scalar aDiff = Gammaf * magnitude(Ef) / (dPfMag + vSmallValue);
-    const ConvectionTerm* convection =
-        equation.convection ? &*equation.convection : nullptr;
+    const Index boundaryIdx = bcManager_.boundaryIdx(face.idx());
 
-    // Owner-cell contributions, scattered into its row below
-    Scalar diag = S(0.0);
-    Scalar rhs = S(0.0);
-
-    using enum BCType;
-    const BCType type = bc.type();
-
-    switch (type)
+    if (!bcManager_.isRegistered(equation.field, boundaryIdx))
     {
-        case fixedValue:
-        case noSlip:
-        {
-            // Dirichlet BC: phiB is prescribed
-            Scalar phiB = S(0.0);
-
-            if (type != noSlip)
-            {
-                phiB = bc.fixedScalarValue();
-            }
-
-            // Diffusion contribution
-            diag += aDiff;
-            rhs += aDiff * phiB;
-
-            // Convection contribution
-            if (convection != nullptr)
-            {
-                const Scalar aConv = convection->flowRate[face.idx()];
-
-                rhs -= aConv * phiB;
-            }
-
-            break;
-        }
-        case fixedGradient:
-        {
-            const Scalar gradient = bc.fixedScalarGradient();
-            const Scalar dn = dot(face.dPf(), face.normal());
-
-            rhs += Gammaf * gradient * face.projectedArea();
-
-            // Boundary value for convection: phi_b = phi_P + grad * dn
-            if (convection != nullptr)
-            {
-                const Scalar aConv = convection->flowRate[face.idx()];
-
-                diag += aConv;
-                rhs -= aConv * gradient * dn;
-            }
-
-            break;
-        }
-        case zeroGradient:
-        case kWallFunction:
-        case nutWallFunction:
-        case omegaWallFunction:
-        {
-            // Zero normal gradient: only convection
-            if (convection != nullptr)
-            {
-                diag += convection->flowRate[face.idx()];
-            }
-            // No convection + zero gradient = no contribution
-            break;
-        }
-        case symmetry:
-        {
-            // Symmetry plane carries zero normal mass flux
-            if (!equation.velocity.has_value())
-            {
-                break;
-            }
-
-            const VelocityComponents& U = *equation.velocity;
-            const Vector n = face.normal();
-            const Scalar UxP = U.Ux[ownerIdx];
-            const Scalar UyP = U.Uy[ownerIdx];
-            const Scalar UzP = U.Uz[ownerIdx];
-
-            Scalar ni = S(0.0);
-            Scalar UnCross = S(0.0);    // sum_{j!=i} n_j * U_{P,j}
-
-            switch (equation.field)
-            {
-                case Field::Ux:
-                    ni = n.x();
-                    UnCross = n.y() * UyP + n.z() * UzP;
-                    break;
-                case Field::Uy:
-                    ni = n.y();
-                    UnCross = n.x() * UxP + n.z() * UzP;
-                    break;
-                case Field::Uz:
-                    ni = n.z();
-                    UnCross = n.x() * UxP + n.y() * UyP;
-                    break;
-                default:
-                    break;
-            }
-
-            diag += aDiff * ni * ni;
-            rhs -= aDiff * ni * UnCross;
-            break;
-        }
-        default:
-        {
-            // Unhandled BC type: default to zero gradient
-            Warning
-            (
-                "Undefined boundary condition type for field "
-              + Name(fieldToString(equation.field)) + " on patch "
-              + face.patch()->get().patchName()
-              + ". Applying zero gradient."
-            );
-
-            if (convection != nullptr)
-            {
-                diag += convection->flowRate[face.idx()];
-            }
-            break;
-        }
+        FatalError
+        (
+            "Boundary condition not found for patch "
+          + face.patch()->get().name()
+          + " and field " + Name(fieldToString(equation.field))
+        );
     }
 
+    const Scalar GammaSf =
+        equation.GammaFace[face.idx()] * face.projectedArea();
+
+    const Scalar flux =
+        equation.convection
+      ? equation.convection->flowRate[face.idx()]
+      : S(0.0);
+
+    // The boundary type owns its diagonal/source linearization; the manager
+    // serves the per-face geometry and owner-velocity it reads
+    const BoundaryType& boundaryType =
+        bcManager_.boundaryType(equation.field, boundaryIdx);
+    const Scalar diffMetric = bcManager_.diffMetric(boundaryIdx);
+    const Scalar normalDistance = bcManager_.normalDistance(boundaryIdx);
+    const Vector& normal = bcManager_.normal(boundaryIdx);
+    const Vector& ownerVelocity = bcManager_.ownerVelocity(boundaryIdx);
+
     // A boundary face's owner is always an owned cell, so no guard here
-    cooValues_[diagOffset_ + ownerIdx] += diag;
-    vectorB_[ownerIdx] += rhs;
+    cooValues_[diagOffset_ + ownerIdx] +=
+        boundaryType.addToDiagonal(flux, GammaSf, diffMetric, normal);
+    vectorB_[ownerIdx] += boundaryType.addToSource
+    (
+        flux, GammaSf, diffMetric, normalDistance, normal, ownerVelocity
+    );
 }

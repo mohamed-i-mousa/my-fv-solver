@@ -67,17 +67,6 @@ public:
         Index cellIdx
     ) const override;
 
-    /// Update the symmetry-plane mirror term in the velocity gradients
-    void updateSymmetryVelocityGradient
-    (
-        const ScalarField& Ux,
-        const ScalarField& Uy,
-        const ScalarField& Uz,
-        VectorField& gradUx,
-        VectorField& gradUy,
-        VectorField& gradUz
-    ) const override;
-
 // ************************ Private Methods and Members ***********************
 
 private:

@@ -26,7 +26,6 @@
 #include "Cell.h"
 #include "BoundaryPatch.h"
 #include "Mesh.h"
-#include "BoundaryData.h"
 #include "BoundaryConditions.h"
 #include "Field.h"
 #include "HaloExchange.h"
@@ -144,10 +143,9 @@ Scalar RANS::boundaryTurbulentViscosity
     if (face.isBoundary())
     {
         const BoundaryPatch& patch = face.patch()->get();
-        const BoundaryData& bc =
-            bcManager.fieldBC(patch.patchName(), Field::nut);
 
-        if (bc.type() == BCType::nutWallFunction)
+        if (bcManager.boundaryType(patch.name(), Field::nut)
+            .isWallModelled())
         {
             return nutWall_[face.idx()];
         }
@@ -371,8 +369,7 @@ void RANS::updateYPlusLam(Scalar kappa, Scalar E)
 void RANS::initializeWallFunctionGeometry
 (
     const BoundaryConditions& bcManager,
-    Field wallFunctionField,
-    BCType wallFunctionType
+    Field wallFunctionField
 )
 {
     const Count numCells = mesh_.numOwnedCells();
@@ -394,9 +391,9 @@ void RANS::initializeWallFunctionGeometry
         const BoundaryPatch& patch = face.patch()->get();
         if (patch.type() != PatchType::wall) continue;
 
-        const BoundaryData& bc =
-            bcManager.fieldBC(patch.patchName(), wallFunctionField);
-        if (bc.type() != wallFunctionType) continue;
+        const BoundaryType& bc =
+            bcManager.boundaryType(patch.name(), wallFunctionField);
+        if (!bc.isWallModelled()) continue;
 
         wallFunctionFaceIndices_.push_back(faceIdx);
 

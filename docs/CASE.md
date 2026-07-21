@@ -35,6 +35,13 @@ The solver uses case files for configuration. This allows runtime parameter chan
 ./Turblyze customCase          # Uses custom case file
 ```
 
+**Parallel execution**: The same binary runs in parallel under MPI, with no case-file changes. The mesh is decomposed at runtime with METIS, and the linear systems are solved with PETSc Krylov solvers:
+
+```bash
+mpirun -np 4 ./Turblyze              # Uses default defaultCase
+mpirun -np 4 ./Turblyze customCase   # Uses custom case file
+```
+
 ## File Syntax
 
 ### Basic Syntax
@@ -192,20 +199,22 @@ boundaryConditions
   conditions for `k`, `omega`, and `nut` on wall patches. They must be
   configured as a complete triplet on a given wall patch (all three) or
   omitted entirely; a partial set is a fatal configuration error.
-- `fixedGradient`: **⚠️ Not selectable from case files**: the
-  `BCType::fixedGradient` storage and evaluation paths exist in the solver, but
-  `BCLoader` does not parse it.
+- `fixedGradient`: Fixed normal gradient at the boundary (requires
+  `gradient`). The face value is reconstructed as `phi_f = phi_P + gradient *
+  dn`, and the diffusive flux is the prescribed `Gamma_f * gradient * |Sf|`.
+  On a velocity patch `gradient` is a vector; on a scalar field it is a
+  scalar. On `p` it additionally drives the explicit boundary flux
+  correction (fixed-flux pressure behaviour).
   ```cpp
-  // Example syntax (NOT FUNCTIONAL):
-  // k { walls  { type fixedGradient; gradient 100; } }
-  // p { outlet { type fixedGradient; gradient 0.5; } }
+  // k { walls  { type fixedGradient; gradient 100;       } }
+  // U { inlet  { type fixedGradient; gradient (0 0 5);   } }
+  // p { outlet { type fixedGradient; gradient 0.5;       } }
   ```
 
-**Note**: Using `fixedGradient`, or any unrecognized type, in a case file is a
-fatal configuration error. `BCLoader` aborts with
+**Note**: Using an unrecognized type in a case file is a fatal configuration
+error. `BCLoader` aborts with
 `Unknown boundary condition type '...' for field '...' on patch '...'. Valid types: ...`
-rather than falling back silently. Case-file support for `fixedGradient` is
-planned for future work.
+rather than falling back silently.
 
 **Calculated values:** For `k` and `omega` boundary conditions, `value`
 can be set to `calculated` instead of a numeric value. The solver will
@@ -514,7 +523,8 @@ output
 ```
 
 **Notes**:
-- Output format is always VTKHDF (format version 2.4; read with ParaView 6.1. The configured filename writes the volume
+- Output format is always VTKHDF (format version 2.4; read with ParaView 6.1
+  or newer). The configured filename writes the volume
   `<name>.vtkhdf` (UnstructuredGrid); a sibling `<name>_boundary.vtkhdf`
   (PolyData) is also written for all boundary patches. A known legacy
   extension on `filename` (`.vtu`, `.vtp`, `.pvd`, `.vtkhdf`) is stripped

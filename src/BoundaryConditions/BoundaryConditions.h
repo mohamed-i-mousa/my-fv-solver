@@ -7,14 +7,7 @@
 
  ------------------------------------------------------------------------------
  * @file BoundaryConditions.h
- * @brief Manages boundary conditions for the CFD solver
- *
- * @details This class provides functionality to set up, store, and apply
- * boundary conditions for different fields on mesh patches. It supports
- * various boundary condition types including fixed values, gradients, and
- * special conditions like no-slip.
- *
- * @class BoundaryConditions
+ * @brief Manages and owns boundary conditions for the CFD solver
  *****************************************************************************/
 
 #pragma once
@@ -22,18 +15,21 @@
 // ********************************** Headers *********************************
 
 // Standard library headers
+#include <array>
 #include <map>
+#include <memory>
+#include <vector>
 
 // Project headers
 #include "Scalar.h"
 #include "MeshContainers.h"
 #include "Face.h"
 #include "BoundaryPatch.h"
-#include "BoundaryData.h"
 #include "CellData.h"
 #include "Field.h"
 #include "Integer.h"
 #include "StringTypes.h"
+#include "BoundaryType.h"
 
 // ************************* class BoundaryConditions *************************
 
@@ -41,68 +37,32 @@ class BoundaryConditions
 {
 public:
 
-    using PatchBoundaryDataMap =
-        std::map<Name, std::map<Field, BoundaryData>>;
+    using BoundaryTypeMap =
+        std::map<Name, std::map<Field, std::unique_ptr<BoundaryType>>>;
 
 // ****************************** Setter Methods ******************************
 
     /// Add a boundary patch from mesh reader
     void addPatch(BoundaryPatch patch);
 
-    /// Set generic boundary condition
-    void setBC
+    /// Register a boundary condition object for a field on a patch
+    void setBoundaryType
     (
         const Name& patchName,
         Field field,
-        BoundaryData bcData
-    )
-    {
-        patchBoundaryData_[patchName][field] = std::move(bcData);
-    }
-
-    /// Set fixed scalar value boundary condition
-    void setFixedValue
-    (
-        const Name& patchName,
-        Field field,
-        Scalar value
+        std::unique_ptr<BoundaryType> bc
     );
 
-    /// Set fixed scalar gradient boundary condition
-    void setFixedGradient
-    (
-        const Name& patchName,
-        Field field,
-        Scalar gradient
-    );
+    /// Seal registration and build the per-face trait flag arrays
+    void finalize();
 
-    /// Set zero gradient boundary condition
-    void setZeroGradient
+    /// Snapshot owner-cell velocity per boundary face so single-component
+    /// consumers can reconstruct the symmetry mirror (rank-local)
+    void snapshotBoundaryVelocity
     (
-        const Name& patchName,
-        Field field
-    );
-
-    /// Set no-slip boundary condition
-    void setNoSlip
-    (
-        const Name& patchName,
-        Field field
-    );
-
-    /// Set symmetry-plane boundary condition
-    void setSymmetry
-    (
-        const Name& patchName,
-        Field field
-    );
-
-    /// Set wall function boundary condition type
-    void setWallFunctionType
-    (
-        const Name& patchName,
-        Field field,
-        BCType wallType
+        const ScalarField& Ux,
+        const ScalarField& Uy,
+        const ScalarField& Uz
     );
 
 // ***************************** Accessor Methods *****************************
@@ -122,26 +82,80 @@ public:
         return patches_.size();
     }
 
-    /// True when a boundary condition is registered for the field/patch
-    [[nodiscard]] bool hasFieldBC
-    (
-        const Name& patchName,
-        Field field
-    ) const;
+    /// Compact boundary index of a boundary face (FatalError on interior)
+    [[nodiscard]] Index boundaryIdx(Index faceIdx) const;
 
-    /// Get boundary condition for a field on a patch
-    [[nodiscard]] const BoundaryData& fieldBC
-    (
-        const Name& patchName,
-        Field field
-    ) const;
-
-    /// Calculate boundary face value for scalar field
-    [[nodiscard]] Scalar boundaryFaceValue
+    /// Whether a boundary condition is registered for the field at the face
+    [[nodiscard]] bool isRegistered
     (
         Field field,
-        const ScalarField& phi,
-        const Face& boundaryFace
+        Index boundaryIdx
+    ) const noexcept
+    {
+        return boundaryTypeAt_[fieldSlot(field)][boundaryIdx] != nullptr;
+    }
+
+    /// The boundary condition object for a field at a compact boundary face
+    [[nodiscard]] const BoundaryType& boundaryType
+    (
+        Field field,
+        Index boundaryIdx
+    ) const;
+
+    /// Over-relaxed orthogonal diffusion metric of a boundary face
+    [[nodiscard]] Scalar diffMetric(Index boundaryIdx) const noexcept
+    {
+        return diffMetric_[boundaryIdx];
+    }
+
+    /// Owner-to-face normal distance of a boundary face
+    [[nodiscard]] Scalar normalDistance(Index boundaryIdx) const noexcept
+    {
+        return normalDistance_[boundaryIdx];
+    }
+
+    /// Unit outward normal of a boundary face
+    [[nodiscard]] const Vector& normal(Index boundaryIdx) const noexcept
+    {
+        return normals_[boundaryIdx];
+    }
+
+    /// Owner-cell velocity snapshot of a boundary face
+    [[nodiscard]] const Vector& ownerVelocity(Index boundaryIdx) const noexcept
+    {
+        return ownerVelocity_[boundaryIdx];
+    }
+
+    /// Whether the face's value stays out of the velocity limiter hull
+    [[nodiscard]] bool excludedFromVelocityHull(Index faceIdx) const noexcept
+    {
+        return velocityHullExcluded_[faceIdx] != 0;
+    }
+
+    /// Whether the face carries an identically zero mass flux
+    [[nodiscard]] bool constrainsZeroFlux(Index faceIdx) const noexcept
+    {
+        return fluxConstrained_[faceIdx] != 0;
+    }
+
+    /// Whether the face flux receives the explicit p'-gradient correction
+    [[nodiscard]] bool correctsBoundaryFlux(Index faceIdx) const noexcept
+    {
+        return correctsFlux_[faceIdx] != 0;
+    }
+
+    /// Whether a boundary condition object is registered for the field/patch
+    [[nodiscard]] bool hasBoundaryType
+    (
+        const Name& patchName,
+        Field field
+    ) const noexcept;
+
+    /// Get the boundary condition object for a field on a patch
+    [[nodiscard]] const BoundaryType& boundaryType
+    (
+        const Name& patchName,
+        Field field
     ) const;
 
     /// Link boundary faces to their owning patches
@@ -153,16 +167,58 @@ public:
     /// Print summary of all boundary conditions
     void printSummary() const;
 
+// ****************************** Private Methods *****************************
+
+private:
+
+    /// Coefficient-array slot of a field
+    [[nodiscard]] static Count fieldSlot(Field field) noexcept
+    {
+        return static_cast<Count>(field);
+    }
+
 // ****************************** Private Members *****************************
 
 private:
 
-    /// Nested map: patch name → field → boundary data
-    PatchBoundaryDataMap patchBoundaryData_;
+    /// Number of solver fields with boundary-coefficient storage
+    static constexpr Count numFields_ = static_cast<Count>(Field::nut) + 1;
+
+    /// Sentinel marking a face or patch outside the compact boundary range
+    static constexpr Index noBoundaryIdx_ = static_cast<Index>(-1);
+
+    /// Nested map: patch name → field → boundary condition object
+    BoundaryTypeMap boundaryTypes_;
+
+    /// Per-field boundary type per compact boundary face (nullptr if none)
+    std::array<std::vector<const BoundaryType*>, numFields_> boundaryTypeAt_;
+
+    /// Shared boundary geometry cache (compact-indexed)
+    IndexList geomOwnerCells_;
+    std::vector<Vector> normals_;
+    ScalarList diffMetric_;
+    ScalarList normalDistance_;
+
+    /// Owner-cell velocity snapshot per compact boundary face (symmetry)
+    std::vector<Vector> ownerVelocity_;
+
+    /// Global face index → compact boundary index (sentinel for interior)
+    IndexList boundaryIdx_;
+
+    /// Compact slice start per patch (sentinel for processor patches)
+    IndexList patchStart_;
+
+    /// Per-face trait flags (global face indexed, built by finalize())
+    std::vector<char> fluxConstrained_;
+    std::vector<char> correctsFlux_;
+    std::vector<char> velocityHullExcluded_;
 
     /// All boundary patches
     PatchList patches_;
 
     /// True after linkFaces() to prevent addPatch() after linking
     bool linked_ = false;
+
+    /// True after finalize() to seal registration
+    bool finalized_ = false;
 };

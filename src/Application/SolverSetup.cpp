@@ -132,7 +132,7 @@ void SolverSetup::configure
 (
     SolverModules& modules,
     const Mesh& mesh,
-    const BoundaryConditions& boundaryConditions,
+    BoundaryConditions& boundaryConditions,
     const CaseConfiguration& config
 )
 {

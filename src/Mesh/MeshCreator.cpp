@@ -239,7 +239,7 @@ Mesh buildSubmesh(SubmeshData block, bool debug)
             block.patchFirstFace[p],
             block.patchLastFace[p]
         );
-        patch.setPatchName(block.patchNames[p]);
+        patch.setName(block.patchNames[p]);
         patch.setType(static_cast<PatchType>(block.patchTypes[p]));
         patches.push_back(std::move(patch));
     }
@@ -254,7 +254,7 @@ Mesh buildSubmesh(SubmeshData block, bool debug)
             block.procFirstFace[p],
             block.procLastFace[p]
         );
-        patch.setPatchName
+        patch.setName
         (
             "processor" + std::to_string(Comm::myProcessorNum())
           + "to" + std::to_string(block.procNeighborRanks[p])

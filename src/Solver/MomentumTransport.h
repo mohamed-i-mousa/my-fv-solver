@@ -71,7 +71,7 @@ public:
     MomentumTransport
     (
         const Mesh& mesh,
-        const BoundaryConditions& bc,
+        BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         TurbulenceModel& turbulence,
@@ -104,7 +104,7 @@ public:
     (
         const Name& algorithm,
         const Mesh& mesh,
-        const BoundaryConditions& bc,
+        BoundaryConditions& bc,
         const TimeScheme& timeScheme,
         const GradientScheme& gradScheme,
         const ConvectionScheme& momentumConvectionScheme,
@@ -217,8 +217,12 @@ protected:
         return totalOwnedCells_;
     }
 
-    /// Boundary-condition manager
+    /// Boundary-condition manager (mutable: the solver drives the snapshot)
     [[nodiscard]] const BoundaryConditions& bcManager() const noexcept
+    {
+        return bcManager_;
+    }
+    [[nodiscard]] BoundaryConditions& bcManager() noexcept
     {
         return bcManager_;
     }
@@ -322,8 +326,8 @@ private:
     /// Mesh view (nodes, faces, cells)
     const Mesh& mesh_;
 
-    /// Reference to BCs
-    const BoundaryConditions& bcManager_;
+    /// Reference to BCs (mutable: coefficient re-evaluation)
+    BoundaryConditions& bcManager_;
 
     /// Time-derivative discretization scheme
     const TimeScheme& timeScheme_;

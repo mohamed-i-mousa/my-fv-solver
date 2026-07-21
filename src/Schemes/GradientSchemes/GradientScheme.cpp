@@ -137,13 +137,20 @@ void GradientScheme::limitGradient
             const Face& f = mesh_.faces()[faceIdx];
             if (!f.isBoundary()) continue;
 
-            if (isVelocity && f.patch()->get().type() == PatchType::symmetry)
+            if (isVelocity && bcManager_.excludedFromVelocityHull(f.idx()))
             {
                 continue;
             }
 
+            const Index bIdx = bcManager_.boundaryIdx(f.idx());
             const Scalar phiBound =
-                bcManager_.boundaryFaceValue(field, phi, f);
+                bcManager_.boundaryType(field, bIdx).faceValue
+                (
+                    phi[f.ownerCell()],
+                    bcManager_.normalDistance(bIdx),
+                    bcManager_.normal(bIdx),
+                    bcManager_.ownerVelocity(bIdx)
+                );
             phiMin = std::min(phiMin, phiBound);
             phiMax = std::max(phiMax, phiBound);
         }
@@ -158,7 +165,7 @@ void GradientScheme::limitGradient
             if
             (
                 isVelocity && f.isBoundary()
-             && f.patch()->get().type() == PatchType::symmetry
+             && bcManager_.excludedFromVelocityHull(f.idx())
             )
             {
                 continue;
@@ -230,62 +237,31 @@ Vector GradientScheme::boundaryFaceGradient
     const Face& boundaryFace
 ) const
 {
-    const BoundaryPatch& patch = boundaryFace.patch()->get();
-
-    const BoundaryData& bc =
-        bcManager_.fieldBC(patch.patchName(), field);
-
     const Vector tangentialGradient =
         cellGradient
       - dot(cellGradient, boundaryFace.normal())
       * boundaryFace.normal();
 
-    using enum BCType;
-    switch (bc.type())
-    {
-        case noSlip:
-        case fixedValue:
-        {
-            const Scalar boundaryValue =
-                (bc.type() == fixedValue)
-              ? bc.fixedScalarValue()
-              : S(0.0);
+    // Normal gradient recovered from the boundary condition's face value
+    const Index bIdx = bcManager_.boundaryIdx(boundaryFace.idx());
+    const Scalar boundaryValue =
+        bcManager_.boundaryType(field, bIdx).faceValue
+        (
+            phi[boundaryFace.ownerCell()],
+            bcManager_.normalDistance(bIdx),
+            bcManager_.normal(bIdx),
+            bcManager_.ownerVelocity(bIdx)
+        );
+    const Scalar cellValue = phi[boundaryFace.ownerCell()];
+    const Scalar dn = dot(boundaryFace.dPf(), boundaryFace.normal());
+    const Scalar dPfMag = boundaryFace.dPfMag();
 
-            const Scalar cellValue = phi[boundaryFace.ownerCell()];
-            const Scalar dn = dot(boundaryFace.dPf(), boundaryFace.normal());
-            const Scalar dPfMag = boundaryFace.dPfMag();
+    // Stabilization: clamp dn to minNormalFraction_ * ||dPf||
+    const Scalar dnStabilized =
+        std::max(dn, minNormalFraction_ * dPfMag);
 
-            // Stabilization: clamp dn to minNormalFraction_ * ||dPf||
-            const Scalar dnStabilized =
-                std::max(dn, minNormalFraction_ * dPfMag);
+    const Scalar normalGradient =
+        (boundaryValue - cellValue) / dnStabilized;
 
-            // ∂φ/∂n = (φ_boundary - φ_cell) / dnStabilized
-            const Scalar normalGradient =
-                (boundaryValue - cellValue) / dnStabilized;
-
-            return tangentialGradient + normalGradient * boundaryFace.normal();
-        }
-
-        case kWallFunction:
-        case nutWallFunction:
-        case omegaWallFunction:
-        case symmetry:
-        case zeroGradient:
-        {
-            // Zero normal gradient: retain only tangential
-            return tangentialGradient;
-        }
-
-        case fixedGradient:
-        {
-            const Scalar specifiedGradient = bc.fixedScalarGradient();
-
-            // Project onto the tangent, then add the normal gradient
-            return
-                tangentialGradient + specifiedGradient * boundaryFace.normal();
-        }
-
-        default:
-            return cellGradient;
-    }
+    return tangentialGradient + normalGradient * boundaryFace.normal();
 }

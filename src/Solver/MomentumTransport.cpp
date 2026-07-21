@@ -38,7 +38,7 @@
 MomentumTransport::MomentumTransport
 (
     const Mesh& mesh,
-    const BoundaryConditions& bc,
+    BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
     TurbulenceModel& turbulence,
@@ -80,7 +80,7 @@ std::unique_ptr<MomentumTransport> MomentumTransport::create
 (
     const Name& algorithm,
     const Mesh& mesh,
-    const BoundaryConditions& bc,
+    BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
     const ConvectionScheme& momentumConvectionScheme,
@@ -334,6 +334,9 @@ void MomentumTransport::updatePrevStepDerivatives(TransientFields& prevStep)
 
 void MomentumTransport::updateVelocityGradients()
 {
+    // Boundary velocity snapshot must match the velocity the stencils read
+    bcManager_.snapshotBoundaryVelocity(Ux_, Uy_, Uz_);
+
     const Count numOwnedCells = mesh_.numOwnedCells();
 
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
@@ -345,16 +348,6 @@ void MomentumTransport::updateVelocityGradients()
         gradUz_[cellIdx] =
             gradientScheme_.cellGradient(Field::Uz, Uz_, cellIdx);
     }
-
-    gradientScheme_.updateSymmetryVelocityGradient
-    (
-        Ux_,
-        Uy_,
-        Uz_,
-        gradUx_,
-        gradUy_,
-        gradUz_
-    );
 
     gradientScheme_.limitGradient(Field::Ux, Ux_, gradUx_);
     gradientScheme_.limitGradient(Field::Uy, Uy_, gradUy_);

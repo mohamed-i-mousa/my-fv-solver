@@ -215,7 +215,7 @@ void HDF5BoundaryData::writeGeometry()
             {
                 FatalError
                 (
-                    "Boundary patch '" + patch.patchName()
+                    "Boundary patch '" + patch.name()
                   + "' references face " + std::to_string(faceIdx)
                   + ", but the mesh has only "
                   + std::to_string(allFaces.size()) + " faces."
@@ -228,7 +228,7 @@ void HDF5BoundaryData::writeGeometry()
             {
                 FatalError
                 (
-                    "Boundary patch '" + patch.patchName()
+                    "Boundary patch '" + patch.name()
                   + "' references internal face "
                   + std::to_string(faceIdx) + "."
                 );

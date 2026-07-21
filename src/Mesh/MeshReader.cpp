@@ -1047,7 +1047,7 @@ void MeshReader::parseBoundariesSection
     {
         if (zoneIdx == boundaryPatches_[i].zoneIdx())
         {
-            boundaryPatches_[i].setPatchName(patchName);
+            boundaryPatches_[i].setName(patchName);
 
             boundaryPatches_[i].setType(mapFluentBCToEnum(bcType));
         }

@@ -119,7 +119,7 @@ AeroForces computeForces
 
     for (const BoundaryPatch& meshPatch : mesh.patches())
     {
-        if (meshPatch.patchName() == config.forcesPatch)
+        if (meshPatch.name() == config.forcesPatch)
         {
             patch = &meshPatch;
             break;
@@ -165,8 +165,15 @@ AeroForces computeForces
             const Vector& normal = face.normal();
 
             // Pressure force from the kinematic pressure
+            const Index bIdx = bcManager.boundaryIdx(face.idx());
             const Scalar pressureFace =
-                bcManager.boundaryFaceValue(Field::p, pressure, face);
+                bcManager.boundaryType(Field::p, bIdx).faceValue
+                (
+                    pressure[cellIdx],
+                    bcManager.normalDistance(bIdx),
+                    bcManager.normal(bIdx),
+                    bcManager.ownerVelocity(bIdx)
+                );
             const Vector pressureContribution =
                 (config.rho * pressureFace * face.projectedArea()) * normal;
             pressureForceSum += pressureContribution;

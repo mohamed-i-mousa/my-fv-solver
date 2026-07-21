@@ -27,7 +27,7 @@
 PISO::PISO
 (
     const Mesh& mesh,
-    const BoundaryConditions& bc,
+    BoundaryConditions& bc,
     const TimeScheme& timeScheme,
     const GradientScheme& gradScheme,
     const ConvectionScheme& momentumConvectionScheme,
@@ -118,7 +118,6 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
 {
     assembleMomentum();
 
-    const VelocityComponents velocity{Ux(), Uy(), Uz()};
 
     TransportEquation equationUx
     {
@@ -139,7 +138,6 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
                     },
         .GammaFace      = nuEffFace(),
         .source         = UxSource(),
-        .velocity       = velocity,
         .gradPhi        = gradUx(),
         .gradScheme     = gradientScheme()
     };
@@ -166,7 +164,6 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
                     },
         .GammaFace      = nuEffFace(),
         .source         = UySource(),
-        .velocity       = velocity,
         .gradPhi        = gradUy(),
         .gradScheme     = gradientScheme()
     };
@@ -193,7 +190,6 @@ void PISO::solveMomentumExplicit(const TransientFields* prevStep)
                     },
         .GammaFace      = nuEffFace(),
         .source         = UzSource(),
-        .velocity       = velocity,
         .gradPhi        = gradUz(),
         .gradScheme     = gradientScheme()
     };

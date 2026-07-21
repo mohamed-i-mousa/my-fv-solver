@@ -407,7 +407,7 @@ SubmeshData MeshDecomposer::extractSubmesh
 
         const BoundaryPatch& patch = patches[patchIdx];
 
-        block.patchNames.push_back(patch.patchName());
+        block.patchNames.push_back(patch.name());
         block.patchZoneIds.push_back(patch.zoneIdx());
         block.patchTypes.push_back(static_cast<Index>(patch.type()));
         block.patchFirstFace.push_back(includedFaces.size());

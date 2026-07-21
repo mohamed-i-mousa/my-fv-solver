@@ -317,7 +317,7 @@ linearSolvers
     {
         solver          BiCGSTAB;       // Bi-Conjugate Gradient Stabilized
         preconditioner  Jacobi;         // Diagonal — parallel-friendly
-        tolerance       1e-6;           // Eigen |r|/|b| tolerance
+        tolerance       1e-6;           // PETSc relative residual |r|/|b|
         maxIter         100;            // Maximum iterations
     }
 

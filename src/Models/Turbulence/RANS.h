@@ -45,7 +45,6 @@ class ConvectionScheme;
 class LinearSolver;
 class Matrix;
 class Face;
-enum class BCType;
 enum class Field;
 
 // ******************************** class RANS ********************************
@@ -353,12 +352,12 @@ protected:
     /// Compute y+ crossover via fixed-point iteration
     void updateYPlusLam(Scalar kappa, Scalar E);
 
-    /// Build wall-function face lists and area weights
+    /// Build wall-function face lists and area weights from the wall patches
+    /// whose boundary condition on the given field is wall-modelled
     void initializeWallFunctionGeometry
     (
         const BoundaryConditions& bcManager,
-        Field wallFunctionField,
-        BCType wallFunctionType
+        Field wallFunctionField
     );
 
     /// Model-specific Cμ^0.25 used by the wall functions

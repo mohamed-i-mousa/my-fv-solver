@@ -15,9 +15,6 @@
 // Implementation header
 #include "BoundaryConditions.h"
 
-// Project headers
-#include "Reduce.h"
-
 // Standard library headers
 #include <iostream>
 #include <utility>
@@ -25,6 +22,29 @@
 
 // Project headers
 #include "ErrorHandler.h"
+#include "Reduce.h"
+
+// ***************************** Internal Helpers *****************************
+
+namespace
+{
+
+/// Registered boundary condition object for a field, or nullptr
+const BoundaryType* findBoundaryType
+(
+    const std::map<Field, std::unique_ptr<BoundaryType>>& fieldMap,
+    Field field
+)
+{
+    const auto fieldIterator = fieldMap.find(field);
+
+    return
+        fieldIterator != fieldMap.end()
+      ? fieldIterator->second.get()
+      : nullptr;
+}
+
+} // namespace
 
 // ****************************** Setter Methods ******************************
 
@@ -42,78 +62,24 @@ void BoundaryConditions::addPatch(BoundaryPatch patch)
 }
 
 
-void BoundaryConditions::setFixedValue
+void BoundaryConditions::setBoundaryType
 (
     const Name& patchName,
     Field field,
-    Scalar value
+    std::unique_ptr<BoundaryType> bc
 )
 {
-    BoundaryData bcData;
-    bcData.setFixedValue(value);
-    setBC(patchName, field, std::move(bcData));
-}
+    if (finalized_)
+    {
+        FatalError
+        (
+            "Cannot register boundary condition for field '"
+          + Name(fieldToString(field)) + "' on patch '" + patchName
+          + "' after finalize()."
+        );
+    }
 
-
-void BoundaryConditions::setFixedGradient
-(
-    const Name& patchName,
-    Field field,
-    Scalar gradient
-)
-{
-    BoundaryData bcData;
-    bcData.setFixedGradient(gradient);
-    setBC(patchName, field, std::move(bcData));
-}
-
-
-void BoundaryConditions::setZeroGradient
-(
-    const Name& patchName,
-    Field field
-)
-{
-    BoundaryData bcData;
-    bcData.setZeroGradient();
-    setBC(patchName, field, std::move(bcData));
-}
-
-
-void BoundaryConditions::setNoSlip
-(
-    const Name& patchName,
-    Field field
-)
-{
-    BoundaryData bcData;
-    bcData.setNoSlip();
-    setBC(patchName, field, std::move(bcData));
-}
-
-
-void BoundaryConditions::setSymmetry
-(
-    const Name& patchName,
-    Field field
-)
-{
-    BoundaryData bcData;
-    bcData.setSymmetry();
-    setBC(patchName, field, std::move(bcData));
-}
-
-
-void BoundaryConditions::setWallFunctionType
-(
-    const Name& patchName,
-    Field field,
-    BCType wallType
-)
-{
-    BoundaryData bcData;
-    bcData.setWallFunctionType(wallType);
-    setBC(patchName, field, std::move(bcData));
+    boundaryTypes_[patchName][field] = std::move(bc);
 }
 
 // ***************************** Accessor Methods *****************************
@@ -122,7 +88,7 @@ const BoundaryPatch& BoundaryConditions::patch(const Name& patchName) const
 {
     for (const auto& patch : patches_)
     {
-        if (patch.patchName() == patchName)
+        if (patch.name() == patchName)
         {
             return patch;
         }
@@ -132,113 +98,81 @@ const BoundaryPatch& BoundaryConditions::patch(const Name& patchName) const
 }
 
 
-bool BoundaryConditions::hasFieldBC
+bool BoundaryConditions::hasBoundaryType
 (
     const Name& patchName,
     Field field
-) const
+) const noexcept
 {
-    const auto patchIterator = patchBoundaryData_.find(patchName);
+    const auto patchIterator = boundaryTypes_.find(patchName);
 
-    return patchIterator != patchBoundaryData_.end()
+    return patchIterator != boundaryTypes_.end()
         && patchIterator->second.contains(field);
 }
 
 
-const BoundaryData& BoundaryConditions::fieldBC
+const BoundaryType& BoundaryConditions::boundaryType
 (
     const Name& patchName,
     Field field
 ) const
 {
-    const auto patchIterator = patchBoundaryData_.find(patchName);
+    const auto patchIterator = boundaryTypes_.find(patchName);
 
-    if (patchIterator != patchBoundaryData_.end())
+    if (patchIterator != boundaryTypes_.end())
     {
-        const auto& fieldMap = patchIterator->second;
+        const auto fieldIterator = patchIterator->second.find(field);
 
-        const auto fieldIterator = fieldMap.find(field);
-
-        if (fieldIterator != fieldMap.end())
+        if (fieldIterator != patchIterator->second.end())
         {
-            return fieldIterator->second;
+            return *fieldIterator->second;
         }
     }
 
     FatalError
     (
         "Boundary condition not found for patch " + patchName
-        + " and field " + Name(fieldToString(field))
+      + " and field " + Name(fieldToString(field))
     );
 }
 
 
-Scalar BoundaryConditions::boundaryFaceValue
-(
-    Field field,
-    const ScalarField& phi,
-    const Face& boundaryFace
-) const
+Index BoundaryConditions::boundaryIdx(Index faceIdx) const
 {
-    if (!boundaryFace.patch().has_value())
+    const Index compactIdx = boundaryIdx_[faceIdx];
+
+    if (compactIdx == noBoundaryIdx_)
     {
         FatalError
         (
-            "Face " + std::to_string(boundaryFace.idx())
-            + " has no linked patch. "
-              "Ensure linkFaces() is called before solving."
+            "Face " + std::to_string(faceIdx)
+          + " is not a physical boundary face."
         );
     }
 
-    const BoundaryPatch& patch = boundaryFace.patch()->get();
-    const BoundaryData& bc = fieldBC(patch.patchName(), field);
+    return compactIdx;
+}
 
-    using enum BCType;
-    switch (bc.type())
+
+const BoundaryType& BoundaryConditions::boundaryType
+(
+    Field field,
+    Index boundaryIdx
+) const
+{
+    const BoundaryType* type = boundaryTypeAt_[fieldSlot(field)][boundaryIdx];
+
+    if (type == nullptr)
     {
-        case noSlip:
-        {
-            return S(0.0);
-        }
-        
-        case fixedValue:
-        {
-            // Fixed value: φf = φb
-            return bc.fixedScalarValue();
-        }
-
-        case kWallFunction:
-        case omegaWallFunction:
-        case nutWallFunction:
-        case symmetry:
-        case zeroGradient:
-        {
-            // Zero normal gradient: φf = φP
-            return phi[boundaryFace.ownerCell()];
-        }
-
-        case fixedGradient:
-        {
-            // Fixed gradient: φf = φP + grad * distance
-            const Scalar dn = dot(boundaryFace.dPf(), boundaryFace.normal());
-            
-            return
-                phi[boundaryFace.ownerCell()]
-              + bc.fixedScalarGradient() * dn;
-        }
-
-        case undefined:
-        default:
-        {
-            FatalError
-            (
-                "Corrupted BCType value for face "
-              + std::to_string(boundaryFace.idx())
-              + " in patch " + patch.patchName()
-            );
-        }
-
+        FatalError
+        (
+            "No boundary condition registered for field '"
+          + Name(fieldToString(field))
+          + "' at boundary face " + std::to_string(boundaryIdx) + "."
+        );
     }
+
+    return *type;
 }
 
 
@@ -250,7 +184,7 @@ void BoundaryConditions::linkFaces(FaceList& faces)
         {
             FatalError
             (
-                "Boundary patch '" + patch.patchName()
+                "Boundary patch '" + patch.name()
               + "' has an inverted face range ["
               + std::to_string(patch.firstFaceIdx()) + ", "
               + std::to_string(patch.lastFaceIdx()) + "]."
@@ -261,7 +195,7 @@ void BoundaryConditions::linkFaces(FaceList& faces)
         {
             FatalError
             (
-                "Boundary patch '" + patch.patchName()
+                "Boundary patch '" + patch.name()
               + "' references face index "
               + std::to_string(patch.lastFaceIdx())
               + " outside the valid range [0, "
@@ -281,6 +215,200 @@ void BoundaryConditions::linkFaces(FaceList& faces)
     }
 
     linked_ = true;
+
+    // Compact boundary indexing over physical patches; processor patches are
+    // inter-rank cuts whose faces carry a neighbor cell, not boundary physics
+    boundaryIdx_.assign(faces.size(), noBoundaryIdx_);
+    patchStart_.assign(patches_.size(), noBoundaryIdx_);
+
+    Count numBoundaryFaces = 0;
+
+    for (Index patchIdx = 0; patchIdx < patches_.size(); ++patchIdx)
+    {
+        if (patches_[patchIdx].type() == PatchType::processor)
+        {
+            continue;
+        }
+
+        patchStart_[patchIdx] = numBoundaryFaces;
+        numBoundaryFaces += patches_[patchIdx].numFaces();
+    }
+
+    geomOwnerCells_.resize(numBoundaryFaces);
+    normals_.resize(numBoundaryFaces);
+    diffMetric_.resize(numBoundaryFaces);
+    normalDistance_.resize(numBoundaryFaces);
+    ownerVelocity_.resize(numBoundaryFaces);
+
+    for (Index patchIdx = 0; patchIdx < patches_.size(); ++patchIdx)
+    {
+        if (patchStart_[patchIdx] == noBoundaryIdx_)
+        {
+            continue;
+        }
+
+        Index compactIdx = patchStart_[patchIdx];
+
+        for
+        (
+            Index faceIdx = patches_[patchIdx].firstFaceIdx();
+            faceIdx <= patches_[patchIdx].lastFaceIdx();
+            ++faceIdx, ++compactIdx
+        )
+        {
+            const Face& face = faces[faceIdx];
+
+            if (!face.isBoundary())
+            {
+                FatalError
+                (
+                    "Face " + std::to_string(faceIdx)
+                  + " on physical patch '"
+                  + patches_[patchIdx].name()
+                  + "' has a neighbor cell."
+                );
+            }
+
+            boundaryIdx_[faceIdx] = compactIdx;
+
+            // Over-relaxed orthogonal metric, per unit diffusivity and area
+            const Vector Sf = face.normal() * face.projectedArea();
+            const Vector ePf = normalized(face.dPf());
+            const Vector Ef = (dot(Sf, Sf) / dot(Sf, ePf)) * ePf;
+
+            geomOwnerCells_[compactIdx] = face.ownerCell();
+            normals_[compactIdx] = face.normal();
+            diffMetric_[compactIdx] =
+                magnitude(Ef)
+              / (face.projectedArea() * (face.dPfMag() + vSmallValue));
+            normalDistance_[compactIdx] = dot(face.dPf(), face.normal());
+        }
+    }
+
+    for (Index slot = 0; slot < numFields_; ++slot)
+    {
+        boundaryTypeAt_[slot].assign(numBoundaryFaces, nullptr);
+    }
+
+    fluxConstrained_.assign(faces.size(), 0);
+    correctsFlux_.assign(faces.size(), 0);
+    velocityHullExcluded_.assign(faces.size(), 0);
+}
+
+
+void BoundaryConditions::finalize()
+{
+    if (!linked_)
+    {
+        FatalError("BoundaryConditions::finalize called before linkFaces.");
+    }
+
+    if (finalized_)
+    {
+        FatalError("BoundaryConditions::finalize called twice.");
+    }
+
+    for (Index patchIdx = 0; patchIdx < patches_.size(); ++patchIdx)
+    {
+        if (patchStart_[patchIdx] == noBoundaryIdx_)
+        {
+            continue;
+        }
+
+        const BoundaryPatch& patch = patches_[patchIdx];
+        const auto patchIterator = boundaryTypes_.find(patch.name());
+
+        if (patchIterator == boundaryTypes_.end())
+        {
+            continue;
+        }
+
+        const auto& fieldMap = patchIterator->second;
+
+        // Record the type pointer for every registered (field, face) pair
+        for (const auto& fieldBCPair : fieldMap)
+        {
+            const Count slot = fieldSlot(fieldBCPair.first);
+            std::vector<const BoundaryType*>& fieldTypeAt =
+                boundaryTypeAt_[slot];
+
+            for (Index i = 0; i < patch.numFaces(); ++i)
+            {
+                fieldTypeAt[patchStart_[patchIdx] + i] =
+                    fieldBCPair.second.get();
+            }
+        }
+
+        // Per-face trait flags; the velocity flags demand component agreement
+        const BoundaryType* UxType = findBoundaryType(fieldMap, Field::Ux);
+        const BoundaryType* UyType = findBoundaryType(fieldMap, Field::Uy);
+        const BoundaryType* UzType = findBoundaryType(fieldMap, Field::Uz);
+
+        if ((UxType != nullptr) != (UyType != nullptr)
+         || (UxType != nullptr) != (UzType != nullptr)
+         || (UxType != nullptr
+          && (UxType->constrainsZeroFlux() != UyType->constrainsZeroFlux()
+           || UxType->constrainsZeroFlux() != UzType->constrainsZeroFlux()
+           || UxType->contributesToLimiterHull()
+           != UyType->contributesToLimiterHull()
+           || UxType->contributesToLimiterHull()
+           != UzType->contributesToLimiterHull())))
+        {
+            FatalError
+            (
+                "Velocity component boundary conditions disagree on patch '"
+              + patch.name() + "'."
+            );
+        }
+
+        const BoundaryType* pType = findBoundaryType(fieldMap, Field::p);
+
+        const bool zeroFlux = UxType != nullptr && UxType->constrainsZeroFlux();
+        const bool hullExcluded =
+            UxType != nullptr && !UxType->contributesToLimiterHull();
+        const bool fluxCorrected =
+            pType != nullptr && pType->correctsBoundaryFlux();
+
+        for
+        (
+            Index faceIdx = patch.firstFaceIdx();
+            faceIdx <= patch.lastFaceIdx();
+            ++faceIdx
+        )
+        {
+            fluxConstrained_[faceIdx] = zeroFlux ? 1 : 0;
+            velocityHullExcluded_[faceIdx] = hullExcluded ? 1 : 0;
+            correctsFlux_[faceIdx] = fluxCorrected ? 1 : 0;
+        }
+    }
+
+    finalized_ = true;
+}
+
+
+void BoundaryConditions::snapshotBoundaryVelocity
+(
+    const ScalarField& Ux,
+    const ScalarField& Uy,
+    const ScalarField& Uz
+)
+{
+    if (!finalized_)
+    {
+        FatalError
+        (
+            "BoundaryConditions::snapshotBoundaryVelocity called before "
+            "finalize."
+        );
+    }
+
+    // The symmetry mirror needs the owner velocity of the just-solved
+    // components; single-component consumers read it back per boundary face
+    for (Index c = 0; c < ownerVelocity_.size(); ++c)
+    {
+        const Index owner = geomOwnerCells_[c];
+        ownerVelocity_[c] = Vector{Ux[owner], Uy[owner], Uz[owner]};
+    }
 }
 
 
@@ -291,11 +419,11 @@ void BoundaryConditions::validatePatchNames() const
 
     for (const auto& patch : patches_)
     {
-        validNames.insert(patch.patchName());
+        validNames.insert(patch.name());
     }
 
     // A missing patch is an error only when NO rank has it
-    for (const auto& entry : patchBoundaryData_)
+    for (const auto& entry : boundaryTypes_)
     {
         if (globalOr(validNames.contains(entry.first)))
         {
@@ -349,7 +477,7 @@ void BoundaryConditions::printSummary() const
 
         std::cout
             << "  Mesh Patch Name         : "
-            << meshPatch.patchName() << '\n';
+            << meshPatch.name() << '\n';
 
         std::cout
             << "  Zone ID                 : "
@@ -357,71 +485,28 @@ void BoundaryConditions::printSummary() const
 
         std::cout
             << "  Number of Faces         : "
-            << meshPatch.numBoundaryFaces() << '\n';
+            << meshPatch.numFaces() << '\n';
 
-        const auto patchBCIterator =
-            patchBoundaryData_.find(meshPatch.patchName());
+        const auto patchIterator =
+            boundaryTypes_.find(meshPatch.name());
 
         if
         (
-            patchBCIterator != patchBoundaryData_.end()
-         && !patchBCIterator->second.empty()
+            patchIterator != boundaryTypes_.end()
+         && !patchIterator->second.empty()
         )
         {
             std::cout
                 << "  Configured Physical BCs :" << '\n';
 
-            for (const auto& fieldBCPair : patchBCIterator->second)
+            for (const auto& fieldBCPair : patchIterator->second)
             {
-                const Field field = fieldBCPair.first;
-                const BoundaryData& fbc = fieldBCPair.second;
-
                 std::cout
-                    << "      Field '" << fieldToString(field)
-                    << "': Type: "
-                    << bcTypeToString(fbc.type());
+                    << "      Field '"
+                    << fieldToString(fieldBCPair.first)
+                    << "': Type: ";
 
-                using enum BCType;
-                switch (fbc.type())
-                {
-                    case fixedValue:
-                    case noSlip:
-                        std::cout
-                            << ", Value: "
-                            << fbc.fixedScalarValue();
-                        break;
-
-                    case fixedGradient:
-                        std::cout
-                            << ", Gradient: "
-                            << fbc.fixedScalarGradient();
-                        break;
-
-                    case zeroGradient:
-                        std::cout
-                            << " (implies zero gradient)";
-                        break;
-
-                    case kWallFunction:
-                    case omegaWallFunction:
-                    case nutWallFunction:
-                        std::cout
-                            << " (wall function)";
-                        break;
-
-                    case symmetry:
-                        std::cout
-                            << " (symmetry plane)";
-                        break;
-
-                    case processor:
-                        std::cout
-                            << " (inter-rank cut)";
-                        break;
-
-                    case undefined:
-                        break;
-                }
+                fieldBCPair.second->write(std::cout);
 
                 std::cout
                     << '\n';

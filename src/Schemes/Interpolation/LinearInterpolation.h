@@ -10,8 +10,8 @@
  * @brief Linear interpolation of a cell-centered field to internal faces
  *
  * @details Distance-weighted linear interpolation of CellData<T> from owner
- * and neighbour cell centres to the shared face. For Boundary-face values,
- * use BoundaryConditions::boundaryFaceValue before calling this function.
+ * and neighbour cell centres to the shared face. For boundary-face values,
+ * use the patch's BoundaryType::faceValue before calling this function.
  *****************************************************************************/
 
 #pragma once

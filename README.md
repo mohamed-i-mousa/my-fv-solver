@@ -59,9 +59,11 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
   `src/Parallel/`
 - **METIS**: mesh partitioning for the runtime domain decomposition
 - **HDF5 (parallel/MPI build)**: C library used to write the VTKHDF output.
-  The VTKHDF writers do collective MPI-IO into one shared file per grid, so a
-  **serial HDF5 build fails the configure step with a fatal error**. Install
-  the MPI-enabled package, or point `HDF5_ROOT` at a parallel installation.
+  The VTKHDF writers do collective MPI-IO into one shared file per grid, so the
+  build **strongly prefers a parallel (MPI-enabled) HDF5**. A serial-only HDF5
+  satisfies the configure step but the parallel writes then **fail or misbehave
+  at runtime**, so install the MPI-enabled package, or point `HDF5_ROOT` /
+  `HDF5_PREFER_PARALLEL` at a parallel installation.
 
 #### Installation on Ubuntu/Debian:
 ```bash
@@ -73,7 +75,7 @@ sudo apt install build-essential cmake pkg-config libeigen3-dev libopenmpi-dev p
 brew install cmake pkg-config eigen open-mpi petsc metis hdf5-mpi
 ```
 
-On macOS, the serial `hdf5` formula and `hdf5-mpi` conflict: if a serial `hdf5` is linked, unlink it (`brew unlink hdf5 && brew link hdf5-mpi`) before configuring, otherwise CMake finds the serial build and stops.
+On macOS, the serial `hdf5` formula and `hdf5-mpi` conflict: if a serial `hdf5` is linked, unlink it (`brew unlink hdf5 && brew link hdf5-mpi`) before configuring, otherwise a serial HDF5 is picked up and the parallel writes fail at runtime.
 
 
 ## Building the Solver
@@ -245,10 +247,12 @@ OpenFOAM convention:
 - **`src/Primitives/`**: Core scalar/vector/tensor types, logging, errors
 - **`src/Mesh/`**: Geometric entities, topology, mesh I/O, mesh checking
 - **`src/Fields/`**: Typed cell and face field containers
-- **`src/BoundaryConditions/`**: Patch-based boundary condition storage,
-  evaluation, and case loading
+- **`src/BoundaryConditions/`**: Boundary-type storage, evaluation, and
+  case loading
 - **`src/Schemes/`**: Gradient, interpolation, and convection schemes
 - **`src/LinearSystem/`**: Matrix assembly, transport equations, linear solvers
+- **`src/Parallel/`**: MPI runtime, METIS mesh decomposition, ghost-cell halo
+  exchange, and collective reductions
 - **`src/Solver/`**: Pressure-velocity coupling (SIMPLE and PISO algorithms)
 - **`src/Models/`**: Physical models
   - **`src/Models/Turbulence/`**: Turbulence modeling

@@ -38,7 +38,7 @@ following the OpenFOAM convention.
 - **`src/Fields/`**: typed field containers and field identity used by all layers
   - `CellData.h`, `FaceData.h`, `Field.h/.cpp`
 - **`src/BoundaryConditions/`**: patch metadata and physical BC configuration
-  - `BoundaryData.h/.cpp`, `BoundaryConditions.h/.cpp`,
+  - `BoundaryConditions.h/.cpp`, `BoundaryTypes/` (one class per BC type),
     `BCLoader.h/.cpp`
 - **`src/Schemes/`**: discretization schemes, grouped by family
   - `ConvectionSchemes/`: `ConvectionScheme.h/.cpp` (abstract base + runtime selection) plus one
@@ -164,56 +164,65 @@ Notes:
 ### Architecture
 **Classes**:
 - `BoundaryPatch`: Mesh patch metadata (name, Fluent type, `zoneIdx`, first/last face indices)
-- `BoundaryData`: Type-safe storage with robust value/gradient handling
-- `BoundaryConditions`: Manager class with comprehensive BC operations
+- `BoundaryType` (`src/BoundaryConditions/BoundaryTypes/`): abstract base of one
+  polymorphic boundary condition per (patch, field) pair; one derived class
+  per type: `FixedValue` (+ `NoSlip`), `FixedGradient`,
+  `ZeroGradient` (+ `WallFunction` marker), `Symmetry`
+- `BoundaryConditions`: owner of the cold `BoundaryType` registry, the hot
+  per-field coefficient arrays, the shared boundary-geometry cache, and the
+  per-face trait flag arrays
 
-### BoundaryData Implementation
-**Supported BC Types**:
-- `fixedValue`: Dirichlet boundary conditions
-- `fixedGradient`: Neumann boundary conditions
-- `zeroGradient`: Natural boundary conditions
-- `noSlip`: Special case for velocity (each component fixed to 0)
-- `symmetry`: Symmetry-plane condition, mesh-derived from `PatchType::symmetry` (never a case-file type; enforces zero normal flux with tangential-only gradients)
-- `kWallFunction`: Wall function for turbulent kinetic energy
-- `omegaWallFunction`: Wall function for specific dissipation rate
-- `nutWallFunction`: Wall function for turbulent viscosity
+### The coefficient contract
+Every boundary condition linearizes its physics into two channels, written
+patch-wise by `BoundaryType::updateCoeffs()` into flat compact-boundary-indexed
+arrays (`BoundaryCoeffs`):
 
-**Value Storage**:
-- Scalar-only: one `scalarValue_`, one `scalarGradient_`; there is no
-  vector storage (velocity BCs are registered per component)
-- Validated getters: `fixedScalarValue()`, `fixedScalarGradient()`
+- **value channel**: `φf = a·φP + b` — consumed by `boundaryFaceValue()`
+  (gradient stencils, Rhie-Chow face velocities, forces) and by the
+  convection contribution of `Matrix::assembleBoundaryFace()`
+- **gradient channel**: diffusive flux `diag += -Γf·|Sf|·c`,
+  `rhs += Γf·|Sf|·d` — consumed by `Matrix::assembleBoundaryFace()`
 
-### BoundaryConditions Manager
-**Data Structure**: `patchBoundaryData[patchName][field] = BoundaryData`, where `field` is the `Field` enum (`src/Fields/Field.h`: `Field::{Ux, Uy, Uz, p, pCorr, k, omega, nut}`). Field identity is a compiler-checked enum, not a string key.
+Per class: `FixedValue(v)`: `a=0, b=v, c=-dm, d=v·dm` (`dm` is the
+orthogonal diffusion metric `|Ef|/(|Sf|·|dPf|)`); `FixedGradient(g)`:
+`a=1, b=g·dn, c=0, d=g`; `ZeroGradient` and the wall-function markers:
+`a=1, b=0, c=0, d=0`; `Symmetry` on velocity component `i`:
+`a=1-nᵢ², b=-nᵢ·UnCross, c=-nᵢ²·dm, d=-nᵢ·UnCross·dm` (the mirror value
+`Uf = UP - (UP·n)n` and its implicit normal-diffusion coupling), scalars
+zero-gradient. Hot loops read only these arrays and the trait flags — no
+per-face type dispatch or map lookups.
 
-**Key Features**:
+**Trait queries** replace scattered type tests: `fixesValue()` (pressure
+anchor detection), `constrainsZeroFlux()` (Rhie-Chow flux zeroing at
+symmetry), `correctsBoundaryFlux()` (boundary p'-gradient flux correction),
+`isWallModelled()` (turbulence wall-function activation),
+`contributesToLimiterHull()` (Barth-Jespersen hull membership), and
+`pressureCorrectionCompanion()` (the p' BC implied by a p BC, enforced at
+load time).
+
+**Evaluation cadence**: `BoundaryConditions::updateCoeffs(Ux, Uy, Uz)` is
+called from the `Segregated` constructor, at the top of each momentum
+component's build in `solveMomentum` (so symmetry cross-terms see the
+just-solved previous component, Gauss-Seidel style), and at the top of
+`updateVelocityGradients` (which also covers PISO's explicit PRIME sweep via
+`assembleMomentum`). Only `Symmetry` on velocity reads `U`; the call is
+rank-local and boundary-only.
+
+**Key features**:
 1. **Direct Patch Lookup**: `Face::patch()` returns an `OptionalRef<BoundaryPatch>` linked at startup via `BoundaryConditions::linkFaces()`
-2. **Per-Component Velocity BCs**: velocity has no vector BC type: it is registered as three independent scalar BCs under `Field::Ux/Uy/Uz`. `BCLoader` splits the case file's `U` vector at registration (`setFixedValue(patch, Field::Ux, value.x())`, etc.)
-3. **Robust Retrieval**: `fieldBC()` with comprehensive error handling
-4. **Boundary Value Calculation**: `boundaryFaceValue()` resolves a face value for any field: every field (`Ux`, `Uy`, `Uz`, `p`, `pCorr`, `k`, `omega`, `nut`) is scalar
-
-### BC Evaluation Logic
-**Scalar Boundary Values**:
-- **fixedValue**: `φf = φBoundary`
-- **zeroGradient**: `φf = φOwner`  
-- **fixedGradient**: `φf = φOwner + gradient × dn`
-  where `dn = dot(dPf, faceNormal)`
-- **noSlip**: `φf = 0` (velocity components `Ux`/`Uy`/`Uz`)
-- **symmetry**: `φf = φOwner` (zero normal gradient for scalars, grouped with
-  the wall functions in generic scalar face-value lookups); velocity components
-  additionally get a zero-normal-flux constraint applied during matrix assembly.
-- **wall functions**: `kWallFunction`, `omegaWallFunction`, and
-  `nutWallFunction` evaluate as owner-cell values in generic scalar face
-  value lookups; model-specific wall values are handled inside `kOmegaSST`.
+2. **Per-Component Velocity BCs**: velocity has no vector BC type: it is registered as three independent scalar BCs under `Field::Ux/Uy/Uz`; `BoundaryType::create()` picks the component from the case file's `U` vector
+3. **Registration**: `BCLoader` parses each `boundaryConditions` sub-section and calls `BoundaryType::create(typeName, field, patchSection)`; `setBoundaryType()` stores the object; `finalize()` seals the registry and builds the trait flag arrays; `symmetry` is mesh-derived (`PatchType::symmetry`) and never case-file selectable
+4. **Boundary Value Calculation**: `boundaryFaceValue()` resolves `a·φP + b` for any field: every field (`Ux`, `Uy`, `Uz`, `p`, `pCorr`, `k`, `omega`, `nut`) is scalar
 
 **Error handling**:
-- Missing patch/field BC entries in `fieldBC()` are fatal configuration
-  errors.
+- A missing (patch, field) registration is a fatal error at first
+  evaluation (`boundaryFaceValue`, matrix assembly, or `boundaryType()`),
+  matching the historical `fieldBC()` behavior; there is no zero-gradient
+  fallback.
+- An unknown type token is a fatal error at load time, validated against
+  `BoundaryType::availableTypes(field)`.
 - Boundary faces must be linked to patches before solving; unlinked faces are
   fatal errors.
-- `Matrix::assembleBoundaryFace()` has a defensive warning path for
-  `BCType::undefined`, applying zero-gradient only for that specific
-  unexpected enum state.
 
 
 ## Numerical schemes
@@ -687,18 +696,22 @@ for the lifetime of the time loop:
 ## Linear solvers
 
 `LinearSolver` is an abstract base class for sparse iterative solvers.
-`EigenLinearSolver<T>` contains the shared Eigen-backed solve path, while
-concrete `BiCGSTAB` and `PCG` classes provide algorithm identity. Use
-`BiCGSTAB` for non-symmetric momentum/turbulence systems and `PCG` for the
-pressure-correction system:
+The single concrete `PetscLinearSolver` owns one PETSc `KSP` configured at
+construction; there are no separate `BiCGSTAB`/`PCG` classes. `create()`
+maps the selectable name string to a KSP type: `"BiCGSTAB"` to `KSPBCGS`
+for non-symmetric momentum/turbulence systems and `"PCG"` to `KSPCG` for
+the symmetric positive definite pressure-correction system:
 - Per-field solver instances with independent convergence parameters.
 - Configurable relative residual tolerance and max iterations.
 - `solve(x, A, b)` updates the supplied solution vector in place and caches
   diagnostics in `lastPerformance()` (iterations + final residual).
-- Factorization failures emit a `Warning` and reset diagnostics to `0`
-  iterations and `NaN` residual. Non-convergence after `solveWithGuess()`
-  is recorded silently into `lastPerformance().converged = false`; callers
-  read the flag to decide how to react.
+- A non-finite solution (detected across all ranks via `globalOr`) emits a
+  master-gated `Warning` and rolls the field back to the previous iterate.
+  Convergence is read from PETSc's `KSPGetConvergedReason()` — a positive
+  reason means converged, a negative one diverged — and recorded into
+  `lastPerformance().converged` (`!anyNonFinite && reason > 0`); iterations
+  and final residual come from `KSPGetIterationNumber` / `KSPGetResidualNorm`.
+  Callers read the flag to decide how to react.
 
 
 ## Precision and numerical tolerances
@@ -758,12 +771,12 @@ std::unique_ptr<MomentumTransport> solver;  // declared last, destroyed first
 
 Used by: `SolverModules`.
 
-### Pattern 3: Eigen iterative solver member (rule of five, copy/move deleted)
+### Pattern 3: PETSc KSP-owning solver member (rule of five, copy/move deleted)
 
-Eigen's `BiCGSTAB` and `ConjugateGradient` hold a `generic_matrix_wrapper` that
-stores a `Ref<>` pointing to a dummy member, so the default move leaves that `Ref<>`
-dangling. Solver wrappers are therefore owned through `std::unique_ptr`, with
-copy and move operations deleted.
+`PetscLinearSolver` owns a PETSc `KSP` (a raw resource handle released in the
+destructor), so a compiler-generated copy or move would alias or leave a
+dangling handle. Solver instances are therefore owned through `std::unique_ptr`,
+with copy and move operations deleted.
 
 ```cpp
 /// Copy and move - deleted; instances are owned through unique_ptr
@@ -783,7 +796,7 @@ Classes with only value or standard-library members (e.g. `std::vector`, `Name`,
 `Scalar`) that are fully copyable and movable by the compiler.
 Declare nothing; the compiler generates correct defaults.
 
-Used by: `Face`, `Cell`, `BoundaryData`, `BoundaryPatch`, `CellData<T>`, `FaceData<T>`.
+Used by: `Face`, `Cell`, `BoundaryPatch`, `CellData<T>`, `FaceData<T>`.
 
 ### Runtime ownership boundaries
 
@@ -866,16 +879,28 @@ construction).
    `numericalSchemes.gradient` in `docs/CASE.md`.
 
 ### Add a new boundary condition
-1) **Extend enums**: Add new type to `BCType` enum in `BoundaryData.h`
-2) **Update BoundaryData**: Add setters/getters for new BC type
-3) **Extend evaluation**: Update `BoundaryConditions::boundaryFaceValue()` and `GradientScheme::boundaryFaceGradient()`
-4) **Matrix integration**: Update boundary handling in `Matrix::buildMatrix()`
-5) **Case file parsing**: Add parsing support in `BCLoader`
+1) Create `src/BoundaryConditions/BoundaryTypes/MyType.h/.cpp` with
+   `class MyType final : public BoundaryType`. The constructor takes `Field`
+   plus the type's own parameters — there is no shared payload struct.
+2) Implement `typeName()`, `write()`, and `updateCoeffs()` writing the
+   value channel `a`/`b` and gradient channel `c`/`d` for every face of the
+   patch slice (see the coefficient contract above; e.g. a Robin blend
+   `f·φ + (1-f)·∂φ/∂n` is `a = 1-f, b = f·v + (1-f)·g·dn, c = -f·dm,
+   d = f·v·dm + (1-f)·g`).
+3) Override traits only where warranted: `fixesValue()` for
+   Dirichlet-dominant types (wires the pressure-anchor check
+   automatically), `correctsBoundaryFlux()` for flux-corrected pressure
+   types, and `pressureCorrectionCompanion()` if the type is selectable on
+   `p` (skipping it fails loudly at load time).
+4) Add one `if (typeName == "...")` branch to `BoundaryType::create()` that
+   parses the type's parameters from the patch section, and the token to
+   `BoundaryType::availableTypes(field)` for each permitted field.
+5) Add the `.cpp` to `CMakeLists.txt` and document the type in
+   `docs/CASE.md`.
 
-Follow the existing `fixedValue` and `fixedGradient` pattern: add a
-lower-camel `BCType` enumerator, store any needed scalar payload in
-`BoundaryData`, register it through `BoundaryConditions`, and handle it in the
-three evaluation/assembly call sites listed above.
+Nothing else: `Matrix`, the gradient schemes, `Segregated`, the turbulence
+models, and `Forces` consume only the coefficient arrays and trait flags,
+so no file outside `src/BoundaryConditions/` changes.
 
 ### Add a new velocity-coupling algorithm
 1) Derive from `Segregated` for a pressure-correction (segregated) algorithm,
@@ -923,8 +948,8 @@ study under `validation/` (each has a `runGuide.md` with reproduction steps).
 Use `BoundaryConditions::printSummary()` in debug mode and focused temporary
 checks to verify:
 1. **Patch Registration**: patch names, zones, and face ranges from `MeshReader`
-2. **BC Storage**: scalar values/gradients in `BoundaryData`
-3. **Field Lookup**: `fieldBC()` with `Field::{Ux, Uy, Uz, p, pCorr, k, omega, nut}`
+2. **BC Storage**: each type prints its own parameters via `BoundaryType::write()`
+3. **Field Lookup**: `boundaryType()` with `Field::{Ux, Uy, Uz, p, pCorr, k, omega, nut}`
 4. **Per-Component Velocity**: `BCLoader` registers `Ux`/`Uy`/`Uz`
    independently for case-file `U`
 5. **Boundary Values**: `boundaryFaceValue()` for supported scalar BC types

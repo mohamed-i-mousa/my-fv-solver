@@ -39,15 +39,6 @@ find_library(METIS_LIBRARY metis REQUIRED)
 set(HDF5_PREFER_PARALLEL ON)
 find_package(HDF5 REQUIRED COMPONENTS C)
 
-# Module-mode FindHDF5 reports HDF5_IS_PARALLEL; the hdf5 CMake config
-# package reports HDF5_PROVIDES_PARALLEL instead — accept either
-if(NOT HDF5_IS_PARALLEL AND NOT HDF5_PROVIDES_PARALLEL)
-    message(FATAL_ERROR
-        "Turblyze requires a parallel (MPI) HDF5 build; a serial build was "
-        "found. Install hdf5-mpi (e.g. 'brew install hdf5-mpi') or point "
-        "HDF5_ROOT at a parallel HDF5 installation.")
-endif()
-
 # --- List your source files ---
 add_executable(${PROJECT_NAME}
     src/main.cpp
@@ -60,9 +51,15 @@ add_executable(${PROJECT_NAME}
     src/Mesh/MeshCreator.cpp
     src/Mesh/MeshChecker.cpp
     src/Fields/Field.cpp
-    src/BoundaryConditions/BoundaryData.cpp
     src/BoundaryConditions/BoundaryConditions.cpp
     src/BoundaryConditions/BCLoader.cpp
+    src/BoundaryConditions/BoundaryTypes/BoundaryType.cpp
+    src/BoundaryConditions/BoundaryTypes/FixedValue.cpp
+    src/BoundaryConditions/BoundaryTypes/NoSlip.cpp
+    src/BoundaryConditions/BoundaryTypes/FixedGradient.cpp
+    src/BoundaryConditions/BoundaryTypes/ZeroGradient.cpp
+    src/BoundaryConditions/BoundaryTypes/WallFunction.cpp
+    src/BoundaryConditions/BoundaryTypes/Symmetry.cpp
     src/Schemes/GradientSchemes/GradientScheme.cpp
     src/Schemes/GradientSchemes/LeastSquares.cpp
     src/Schemes/ConvectionSchemes/ConvectionScheme.cpp
@@ -106,6 +103,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/Primitives/
     src/Fields/
     src/BoundaryConditions/
+    src/BoundaryConditions/BoundaryTypes/
     src/Schemes/
     src/Schemes/Interpolation/
     src/Schemes/GradientSchemes/
