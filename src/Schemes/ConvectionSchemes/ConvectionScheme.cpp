@@ -12,13 +12,14 @@
 
 // ********************************** Headers *********************************
 
+// Implementation header
 #include "ConvectionScheme.h"
 
 // Project headers
-#include "CentralDifferenceScheme.h"
 #include "RuntimeSelection.h"
-#include "SecondOrderUpwindScheme.h"
 #include "UpwindScheme.h"
+#include "SecondOrderUpwindScheme.h"
+#include "CentralDifferenceScheme.h"
 
 // **************************** Runtime Selection ****************************
 

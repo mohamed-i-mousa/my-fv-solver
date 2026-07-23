@@ -18,9 +18,9 @@
 
 // ********************************** Headers *********************************
 
+#include "ErrorHandler.h"
 #include "Face.h"
 #include "CellData.h"
-#include "ErrorHandler.h"
 
 // ************************** Interpolation Functions *************************
 

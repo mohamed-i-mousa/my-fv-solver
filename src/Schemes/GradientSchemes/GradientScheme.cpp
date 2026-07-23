@@ -20,8 +20,8 @@
 
 // Project headers
 #include "ErrorHandler.h"
-#include "LeastSquares.h"
 #include "RuntimeSelection.h"
+#include "LeastSquares.h"
 
 // ************************* Special Member Functions *************************
 

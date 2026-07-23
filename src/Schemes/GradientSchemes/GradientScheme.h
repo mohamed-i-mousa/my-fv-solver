@@ -31,10 +31,10 @@
 #include <memory>
 
 // Project headers
+#include "StringTypes.h"
 #include "Scalar.h"
 #include "Vector.h"
 #include "Integer.h"
-#include "StringTypes.h"
 #include "Mesh.h"
 #include "BoundaryConditions.h"
 #include "CellData.h"

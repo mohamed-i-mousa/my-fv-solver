@@ -16,10 +16,10 @@
 #include "TimeScheme.h"
 
 // Project headers
-#include "CrankNicolson.h"
-#include "ImplicitEuler.h"
 #include "RuntimeSelection.h"
 #include "SteadyState.h"
+#include "ImplicitEuler.h"
+#include "CrankNicolson.h"
 
 // **************************** Runtime Selection ****************************
 

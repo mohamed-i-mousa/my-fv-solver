@@ -9,10 +9,10 @@
  * @file DerivedFields.h
  * @brief Cell-centered derived scalar fields for post-processing
  *
- * @details Pure field-math utilities, no VTK dependencies. Produces scalar
- * fields (magnitudes, Q-criterion, strain rate) from velocity or gradient
- * vector fields. Intended for use ahead of VTK export so consumers can
- * write the derived quantities into `.vtu` files.
+ * @details Field math utilities. Produces scalar fields (magnitudes,
+ * Q-criterion, strain rate) from velocity or gradient vector fields. 
+ * Intended for use ahead of VTK export so it can write the derived
+ * quantities into output files.
  *****************************************************************************/
 
 #pragma once

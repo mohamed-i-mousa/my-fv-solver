@@ -23,8 +23,8 @@
 #include <memory>
 
 // Project headers
-#include "Scalar.h"
 #include "StringTypes.h"
+#include "Scalar.h"
 #include "Vector.h"
 #include "Face.h"
 #include "CellData.h"
