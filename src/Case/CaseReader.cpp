@@ -161,6 +161,45 @@ void CaseReader::parseSection
 }
 
 
+bool CaseReader::skipComment(std::istream& is)
+{
+    const auto next = is.peek();
+
+    if (next == '/')
+    {
+        // Single-line comment
+        is.get(); // consume second '/'
+        Token line;
+        std::getline(is, line);
+        currentLine_++;
+        return true;
+    }
+
+    if (next == '*')
+    {
+        // Multi-line comment
+        is.get(); // consume '*'
+        char c;
+        char prev = '\0';
+        while (is.get(c))
+        {
+            if (c == '\n')
+            {
+                currentLine_++;
+            }
+            if (prev == '*' && c == '/')
+            {
+                break;
+            }
+            prev = c;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+
 void CaseReader::skipCommentsAndWhitespace(std::istream& is)
 {
     char c;
@@ -176,37 +215,9 @@ void CaseReader::skipCommentsAndWhitespace(std::istream& is)
             continue;
         }
 
-        if (c == '/')
+        if (c == '/' && skipComment(is))
         {
-            const auto next = is.peek();
-            if (next == '/')
-            {
-                // Single-line comment
-                is.get(); // consume second '/'
-                Token line;
-                std::getline(is, line);
-                currentLine_++;
-                continue;
-            }
-            else if (next == '*')
-            {
-                // Multi-line comment
-                is.get(); // consume '*'
-                char prev = '\0';
-                while (is.get(c))
-                {
-                    if (c == '\n')
-                    {
-                        currentLine_++;
-                    }
-                    if (prev == '*' && c == '/')
-                    {
-                        break;
-                    }
-                    prev = c;
-                }
-                continue;
-            }
+            continue;
         }
 
         // Not whitespace or comment, put character back
@@ -251,14 +262,7 @@ Token CaseReader::readToken(std::istream& is)
          || c == ')'
         )
         {
-            if (c == '\n')
-            {
-                currentLine_++;
-            }
-            if (!std::isspace(c))
-            {
-                is.putback(c);
-            }
+            is.putback(c);
             break;
         }
         t += c;
@@ -282,7 +286,7 @@ Token CaseReader::parseValue
         value = "(";
         char c;
         int parenDepth = 1;
-        while (is.get(c) && parenDepth > 0)
+        while (parenDepth > 0 && is.get(c))
         {
             if (c == '\n')
             {
@@ -318,8 +322,7 @@ Token CaseReader::parseValue
     }
     else
     {
-        // Read until semicolon
-        skipCommentsAndWhitespace(is);
+        // Read until the semicolon. Interior separators are preserved
         char c;
         while (is.get(c))
         {
@@ -327,18 +330,26 @@ Token CaseReader::parseValue
             {
                 currentLine_++;
             }
+
             if (c == ';')
             {
                 break;
             }
-            if (!std::isspace(c))
+
+            // '/' opens a comment only at a word boundary, not mid-path
+            const bool atWordStart = value.empty() || value.back() == ' ';
+            const bool isComment = c == '/' && atWordStart && skipComment(is);
+
+            if (std::isspace(c) || isComment)
             {
-                value += c;
+                if (!value.empty() && value.back() != ' ')
+                {
+                    value += ' ';
+                }
+                continue;
             }
-            else if (!value.empty() && value.back() != ' ')
-            {
-                value += ' ';
-            }
+
+            value += c;
         }
     }
 

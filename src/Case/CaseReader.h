@@ -128,6 +128,9 @@ private:
         char terminator = '\0'
     );
 
+    /// Consume a comment when '/' opens one; true when one was consumed
+    bool skipComment(std::istream& is);
+
     /// Skip comments and whitespace
     void skipCommentsAndWhitespace(std::istream& is);
 
