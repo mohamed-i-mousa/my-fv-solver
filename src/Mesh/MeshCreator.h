@@ -26,4 +26,7 @@ namespace MeshCreator
 /// Read, prepare, and optionally quality-check the configured mesh
 [[nodiscard]] Mesh create(const CaseConfiguration& config);
 
+/// Partition the master's complete mesh and rebuild this rank's submesh
+[[nodiscard]] Mesh decomposeAndDistribute(Mesh completeMesh, bool debug);
+
 } // namespace MeshCreator

@@ -107,9 +107,8 @@ Mesh readCompleteMesh(const CaseConfiguration& config)
     return mesh;
 }
 
-
 /// Rebuild one rank's Mesh from its flat submesh block
-Mesh buildSubmesh(SubmeshData block, bool debug)
+[[nodiscard]] Mesh buildSubmesh(SubmeshData block, bool debug)
 {
     const Count numFaces = block.faceOwner.size();
     const Count numGhosts = block.ghostVolumes.size();
@@ -300,6 +299,39 @@ Mesh buildSubmesh(SubmeshData block, bool debug)
 namespace MeshCreator
 {
 
+Mesh decomposeAndDistribute(Mesh completeMesh, bool debug)
+{
+    std::vector<SubmeshData> blocks;
+
+    if (Comm::master())
+    {
+        {
+            const MeshDecomposer decomposer
+            (
+                completeMesh,
+                Comm::numProcessors()
+            );
+
+            blocks = decomposer.decompose();
+        }
+
+        // The complete mesh is gone; the local submesh takes its place
+        completeMesh = Mesh();
+        Mesh::resetCounts();
+    }
+
+    SubmeshData block = MeshDistributor::distribute(std::move(blocks));
+
+    const Count totalCellCount = block.totalCellCount;
+
+    Mesh mesh = buildSubmesh(std::move(block), debug);
+
+    DecompositionChecker::check(mesh, totalCellCount);
+
+    return mesh;
+}
+
+
 Mesh create(const CaseConfiguration& config)
 {
     std::cout << '\n';
@@ -311,38 +343,16 @@ Mesh create(const CaseConfiguration& config)
     }
 
     // The master rank reads and partitions, then ships the submeshes
-    std::vector<SubmeshData> blocks;
+    Mesh completeMesh = Comm::master() ? readCompleteMesh(config) : Mesh();
 
     if (Comm::master())
     {
-        {
-            const Mesh completeMesh = readCompleteMesh(config);
-            const MeshDecomposer decomposer
-            (
-                completeMesh,
-                Comm::numProcessors()
-            );
-
-            std::cout
-                << "Decomposing into " << Comm::numProcessors()
-                << " submeshes (METIS)." << '\n';
-
-            blocks = decomposer.decompose();
-        }
-
-        // The complete mesh is gone; the local submesh takes its place
-        Mesh::resetCounts();
+        std::cout
+            << "Decomposing into " << Comm::numProcessors()
+            << " submeshes (METIS)." << '\n';
     }
 
-    SubmeshData block = MeshDistributor::distribute(std::move(blocks));
-
-    const Count totalCellCount = block.totalCellCount;
-
-    Mesh mesh = buildSubmesh(std::move(block), config.debug);
-
-    DecompositionChecker::check(mesh, totalCellCount);
-
-    return mesh;
+    return decomposeAndDistribute(std::move(completeMesh), config.debug);
 }
 
 } // namespace MeshCreator
