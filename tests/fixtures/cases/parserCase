@@ -1,0 +1,78 @@
+// ****************************************************************************
+// SPDX-FileCopyrightText: 2025-2026 Mohamed Mousa
+// SPDX-License-Identifier: Apache-2.0
+// ****************************************************************************
+//
+// Fixture case file for the CaseReader and BoundaryType-factory unit tests.
+// Every value here is pinned by tests/unit/Case/CaseReaderTests.cpp and
+// tests/unit/Case/BoundaryFactoryTests.cpp 
+// Do not edit without updating those tests.
+
+scalars
+{
+    rho             1.225;          // Scalar
+    mu              1.7894e-5;      // Scalar in scientific notation
+    iterations      42;             // Count
+    offset          -3;             // int, negative
+    enabled         true;           // bool, true-family
+    verbose         off;            // bool, false-family
+    model           kOmegaSST;      // Token
+    velocity        (1 2 3);        // Vector
+}
+
+multiWord
+{
+    spacedPath      /tmp/Mobile Documents/sphere.msh;    // Path with a space
+    options         -pressure_pc_type icc -momentum_ksp_view;
+    collapsed       one     two;                 // Whitespace run collapses
+    commented       value /* dropped */ ;        // Comment before the ';'
+    lineCommented   value // dropped
+                    ;
+    doubledSlash    /tmp/My Meshes//v2/sphere.msh;   // Mid-word '//' stays
+    starPath        My Meshes/*v2*/sphere.msh;       // Mid-word '/*' stays
+}
+
+vectorEdge
+{
+    adjacent        (4 5 6)after 9;   // No separator after the ')'
+}
+
+nested
+{
+    inner
+    {
+        depth           2;
+        value           7.5;
+    }
+}
+
+boundaryTypes
+{
+    fixedVelocity
+    {
+        type            fixedValue;
+        value           (1 2 3);
+    }
+
+    fixedScalar
+    {
+        type            fixedValue;
+        value           2.5;
+    }
+
+    gradientScalar
+    {
+        type            fixedGradient;
+        gradient        0.5;
+    }
+
+    slipWall
+    {
+        type            zeroGradient;
+    }
+
+    solidWall
+    {
+        type            noSlip;
+    }
+}

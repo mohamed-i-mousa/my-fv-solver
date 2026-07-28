@@ -58,6 +58,9 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
   (the `CXX` component); initialized through PETSc and called directly in
   `src/Parallel/`
 - **METIS**: mesh partitioning for the runtime domain decomposition
+- **Catch2 v3** (tests only): the CTest suite links Catch2; required only when
+  `BUILD_TESTING` is on (the default). Not needed to build or run the solver —
+  configure with `-DBUILD_TESTING=OFF` to drop the dependency. See [Testing](#testing).
 - **HDF5 (parallel/MPI build)**: C library used to write the VTKHDF output.
   The VTKHDF writers do collective MPI-IO into one shared file per grid, so the
   build **strongly prefers a parallel (MPI-enabled) HDF5**. A serial-only HDF5
@@ -67,13 +70,18 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 
 #### Installation on Ubuntu/Debian:
 ```bash
-sudo apt install build-essential cmake pkg-config libeigen3-dev libopenmpi-dev petsc-dev libmetis-dev libhdf5-openmpi-dev
+sudo apt install build-essential cmake pkg-config libeigen3-dev libopenmpi-dev petsc-dev libmetis-dev libhdf5-openmpi-dev catch2
 ```
 
 #### Installation on MacOS:
 ```bash
-brew install cmake pkg-config eigen open-mpi petsc metis hdf5-mpi
+brew install cmake pkg-config eigen open-mpi petsc metis hdf5-mpi catch2
 ```
+
+(`catch2` is only needed to build the tests; omit it and configure with
+`-DBUILD_TESTING=OFF` for a solver-only build. The suite requires Catch2 **v3**
+via `find_package(Catch2 3)` — on distributions that still ship v2, install v3
+separately or build with `-DBUILD_TESTING=OFF`.)
 
 On macOS, the serial `hdf5` formula and `hdf5-mpi` conflict: if a serial `hdf5` is linked, unlink it (`brew unlink hdf5 && brew link hdf5-mpi`) before configuring, otherwise a serial HDF5 is picked up and the parallel writes fail at runtime.
 
@@ -99,6 +107,64 @@ Pass these at configure time, e.g.
 |---------------------------------|---------|-----------------------------------------------------|
 | `TURBLYZE_USE_DOUBLE_PRECISION` | `ON`    | Double-precision `Scalar`; turn `OFF` for single precision. The solver prints the active mode at runtime via `SCALAR_MODE`. |
 | `TURBLYZE_NATIVE_ARCH`          | `ON`    | Adds `-march=native` in Release. Turn `OFF` for portable / cluster-deployable binaries. |
+| `BUILD_TESTING`                 | `ON`    | Build the Catch2 test suite (needs Catch2 v3). Turn `OFF` for a solver-only build with no test dependency. |
+| `TURBLYZE_REGRESSION_CD_PIN`    | Apple M4 value | Pinned sphere Cd for the `regression` test; machine-local under `-march=native`, re-pin per CPU. See [Testing](#testing). |
+| `TURBLYZE_REGRESSION_CD_TOL`    | `1e-4`  | Relative tolerance for the pinned sphere Cd. |
+
+## Testing
+
+The test suite uses [Catch2 v3](https://github.com/catchorg/Catch2) and CTest;
+it is built whenever `BUILD_TESTING` is on (the default). Build, then run:
+
+```bash
+cmake -S . -B build.nosync -DCMAKE_BUILD_TYPE=Release
+cmake --build build.nosync -j
+ctest --test-dir build.nosync --output-on-failure
+```
+
+Three binaries back four CTest labels:
+
+- **`turblyze_unit_tests`** — serial unit tests (primitives, schemes, mesh
+  geometry, boundary-condition linearizations and factory, least-squares
+  gradients and the Barth-Jespersen limiter, case-file parsing, runtime
+  selection), one CTest entry per test case, label `serial`. Never initializes
+  MPI.
+- **`turblyze_mpi_tests`** — MPI + PETSc tests launched under `mpirun` at 1, 2,
+  and 4 ranks: global reductions and their rank-count invariance, global
+  indexing, halo exchange on a decomposed fixture, matrix assembly /
+  relaxation / constraint / Jacobi update, a small diffusion solve with both
+  Krylov solvers, and a standalone k-omega SST construction and solve. Label
+  `mpi`. Every case runs at all three rank counts, on a box decomposed through
+  the production METIS path; only the halo-exchange cases `SKIP`, at np = 1,
+  where there is no cut to exchange across.
+- **`turblyze_abort_probe`** — a subprocess that deterministically triggers a
+  `FatalError`; the `death`-labelled tests assert it prints `FATAL ERROR` and
+  aborts (a control run exits cleanly).
+
+A fourth label, `regression`, runs the solver itself: a fixed-iteration steady
+sphere case at Re = 300 whose total drag coefficient is pinned (tolerance
+`1e-4`). It takes ~35 s and is excluded from the fast gate. The pin is only
+reproducible in the configuration it was measured in, so the test registers
+itself only for a double-precision Release build with `TURBLYZE_NATIVE_ARCH`
+on, and only when the (unshipped) `inputFiles/sphere.msh` is present. Because
+`-march=native` ties the pin to the build host's CPU (the default value comes
+from an Apple M4), other machines re-pin with
+`-DTURBLYZE_REGRESSION_CD_PIN=<value>` (and, if needed,
+`-DTURBLYZE_REGRESSION_CD_TOL=<value>`) from column 4 of the `Cd` line in
+`regressionOut/reg_forces.txt`.
+
+Run a subset by label:
+
+```bash
+ctest --test-dir build.nosync -L serial       # no MPI launcher involved
+ctest --test-dir build.nosync -L mpi          # np = 1, 2, 4
+ctest --test-dir build.nosync -L death        # FatalError subprocess probes
+ctest --test-dir build.nosync -LE regression  # everything except the slow run
+```
+
+On macOS the `mpi` tests set the `HWLOC_SYNTHETIC` environment variable per
+test (prte segfaults there without it), so `mpirun` needs no extra environment
+in your shell; other platforms keep the real hardware topology.
 
 ## Running Simulations
 

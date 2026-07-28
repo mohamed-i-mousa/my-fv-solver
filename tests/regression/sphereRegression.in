@@ -1,0 +1,383 @@
+// ****************************************************************************
+// SPDX-FileCopyrightText: 2025-2026 Mohamed Mousa
+// SPDX-License-Identifier: Apache-2.0
+// ****************************************************************************
+
+// ============================================================================
+// Mesh Configuration
+// ============================================================================
+mesh
+{
+    file            @TURBLYZE_SPHERE_MESH@;
+    checkQuality    false;
+}
+
+// ============================================================================
+// Physical Properties
+// ============================================================================
+physicalProperties
+{
+    rho             1.225;          // Density [kg/m^3]
+    mu              1.7894e-5;      // Dynamic viscosity [Pa.s]
+}
+
+// ============================================================================
+// Initial Conditions
+// ============================================================================
+initialConditions
+{
+    U               (0 0 -0.043821);    // Initial velocity [m/s]
+    p               0;                  // Initial pressure [Pa]
+}
+
+// ============================================================================
+// Boundary Conditions
+// ============================================================================
+boundaryConditions
+{
+    U
+    {
+        inlet
+        {
+            type        fixedValue;
+            value       (0 0 -0.043821);
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        noSlip; 
+        }
+
+        wall1           
+        { 
+            type        noSlip; 
+        }
+
+        wall2           
+        { 
+            type        noSlip; 
+        }
+        
+        wall3           
+        { 
+            type        noSlip; 
+        }
+        
+        wall4           
+        { 
+            type        noSlip; 
+        }
+    }
+
+    p   // kinematic Pressure [m2/s2]
+    {
+        inlet
+        {
+            type        zeroGradient;
+        }
+
+        outlet
+        {
+            type        fixedValue;
+            value       0;
+        }
+
+        sphere           
+        { 
+            type        zeroGradient; 
+        }
+
+        wall1           
+        { 
+            type        zeroGradient; 
+        }
+       
+        wall2           
+        { 
+            type        zeroGradient; 
+        }
+        
+        wall3           
+        { 
+            type        zeroGradient; 
+        }
+      
+        wall4           
+        { 
+            type        zeroGradient; 
+        }
+    }
+
+    k   // Turbulent kinetic energy [m^2/s^2]
+    {
+        inlet
+        {
+            type        fixedValue;
+            value       calculated;
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        kWallFunction; 
+        }
+
+        wall1           
+        { 
+            type        kWallFunction; 
+        }
+        
+        wall2           
+        { 
+            type        kWallFunction; 
+        }
+        
+        wall3           
+        { 
+            type        kWallFunction; 
+        }
+        
+        wall4          
+        { 
+            type        kWallFunction; 
+        }
+    }
+
+    omega   // Specific dissipation rate [1/s]
+    {
+        inlet
+        {
+            type        fixedValue;
+            value       calculated;
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        omegaWallFunction; 
+        }
+
+        wall1           
+        { 
+            type        omegaWallFunction; 
+        }
+        
+        wall2           
+        { 
+            type        omegaWallFunction; 
+        }
+        
+        wall3           
+        { 
+            type        omegaWallFunction; 
+        }
+        
+        wall4           
+        { 
+            type        omegaWallFunction; 
+        }
+    }
+
+    nut // Turbulent kinematic viscosity [m^2/s]
+    {
+        inlet
+        {
+            type        zeroGradient;
+        }
+
+        outlet
+        {
+            type        zeroGradient;
+        }
+
+        sphere           
+        { 
+            type        nutWallFunction; 
+        }
+
+        wall1           
+        { 
+            type        nutWallFunction; 
+        }
+        
+        wall2           
+        { 
+            type        nutWallFunction; 
+        }
+        
+        wall3           
+        { 
+            type        nutWallFunction; 
+        }
+        
+        wall4           
+        { 
+            type        nutWallFunction; 
+        }
+    }
+}
+
+// ============================================================================
+// Velocity Coupling
+// ============================================================================
+velocityCoupling
+{
+    // Options: SIMPLE, PISO
+    algorithm           SIMPLE;
+}
+
+// ============================================================================
+// Time Control
+// ============================================================================
+time
+{
+    // Options: steadyState, implicitEuler, CrankNicolson
+    timeScheme          steadyState;
+
+    timeStep            0.1;        // Time step size [s]
+    totalTime           1;          // Total simulated time [s]
+    writingIntervals    1;          // Write output every N steps (>= 1)
+    nOuterCorrectors    1;          // Outer correctors per step (PISO, >= 1)
+    // CrankNicolsonCoeff   0.5;    // Crank-Nicolson coefficient [0, 1]
+}
+
+// ============================================================================
+// Numerical Schemes
+// ============================================================================
+numericalSchemes
+{
+    // Options: leastSquares
+    gradient        leastSquares;
+
+    // Options: Upwind, CentralDifference, SecondOrderUpwind
+    convection
+    {
+        default     Upwind;
+        U           SecondOrderUpwind;
+        k           Upwind;
+        omega       Upwind;
+    }
+}
+
+// ============================================================================
+// SIMPLE Algorithm Settings
+// ============================================================================
+SIMPLE
+{
+    numIterations               40;        // Maximum iterations
+    convergenceTolerance        1e-14;       // Convergence criterion
+    nNonOrthogonalCorrectors    0;          // p' corrector re-solves
+
+    relaxationFactors
+    {
+        U                   0.7;        // Velocity under-relaxation
+        p                   0.3;        // Pressure under-relaxation
+        k                   0.5;        // TKE under-relaxation
+        omega               0.5;        // Omega under-relaxation
+    }
+}
+
+// ============================================================================
+// PISO Algorithm Settings
+// ============================================================================
+PISO
+{
+    convergenceTolerance        1e-14;       // Convergence criterion
+    nNonOrthogonalCorrectors    0;          // p' corrector re-solves
+    nPrimeCorrectors    2;                  // Explicit PRIME correctors
+
+    relaxationFactors
+    {
+        U                   0.7;        // Velocity under-relaxation
+        p                   0.3;        // Pressure under-relaxation
+        k                   1.0;        // TKE under-relaxation
+        omega               1.0;        // Omega under-relaxation
+    }
+}
+
+// ============================================================================
+// Linear Solvers
+// ============================================================================
+linearSolvers
+{
+    U   // Momentum equations
+    {
+        solver          BiCGSTAB;       // Bi-Conjugate Gradient Stabilized
+        preconditioner  Jacobi;         // Diagonal — parallel-friendly
+        tolerance       1e-6;           // PETSc relative residual |r|/|b|
+        maxIter         100;            // Maximum iterations
+    }
+
+    p   // Pressure correction equation
+    {
+        solver          PCG;            // Preconditioned Conjugate Gradient
+        preconditioner  Jacobi;         // Diagonal — parallel-friendly
+        tolerance       1e-6;
+        maxIter         100;
+    }
+
+    k   // Turbulent kinetic energy
+    {
+        solver          BiCGSTAB;
+        preconditioner  Jacobi;
+        tolerance       1e-8;
+        maxIter         100;
+    }
+
+    omega   // Specific dissipation rate
+    {
+        solver          BiCGSTAB;
+        preconditioner  Jacobi;
+        tolerance       1e-15;
+        maxIter         100;
+    }
+}
+
+// ============================================================================
+// Turbulence Modeling
+// ============================================================================
+turbulence
+{
+    model               kOmegaSST;      // Options: Laminar, kOmegaSST
+    turbulenceIntensity 0.05;           // Turbulence intensity (5%)
+    hydraulicDiameter   0.01;           // Hydraulic diameter [m]
+}
+
+// ============================================================================
+// Aerodynamic Forces
+// ============================================================================
+forces
+{
+    enabled             true;          // Enable aerodynamic force calculation
+    patch               sphere;        // Wall patch to integrate loads over
+    dragDirection       (0 0 -1);      // Drag direction (freestream)
+    liftDirection       (0 1 0);       // Lift direction
+    referenceVelocity   (0 0 -0.043821);   // Reference velocity [m/s]
+    referenceArea       0.00785375;    // Reference (frontal) area [m^2]
+}
+
+// ============================================================================
+// Output Configuration
+// ============================================================================
+output
+{
+    filename        regressionOut/reg.vtkhdf;
+    debug           false;      // Enable verbose console output
+}
+
+// ============================================================================
+// End of Case Setup
+// ============================================================================

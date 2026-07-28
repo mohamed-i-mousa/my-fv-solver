@@ -87,6 +87,11 @@ mesh
 }
 ```
 
+The path is resolved relative to the working directory the solver is launched
+from, and may be absolute. Interior spaces are preserved, so a path such as
+`/Users/me/My Meshes/sphere.msh` works unquoted; runs of whitespace collapse to
+a single space.
+
 ### 2. physicalProperties
 Defines fluid properties.
 
