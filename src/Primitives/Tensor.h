@@ -57,35 +57,6 @@ public:
         zx_(zx), zy_(zy), zz_(zz)
     {}
 
-// ****************************** Setter Methods ******************************
-
-    /// Set component (0,0)
-    void setXX(Scalar value) noexcept { xx_ = value; }
-
-    /// Set component (0,1)
-    void setXY(Scalar value) noexcept { xy_ = value; }
-
-    /// Set component (0,2)
-    void setXZ(Scalar value) noexcept { xz_ = value; }
-
-    /// Set component (1,0)
-    void setYX(Scalar value) noexcept { yx_ = value; }
-
-    /// Set component (1,1)
-    void setYY(Scalar value) noexcept { yy_ = value; }
-
-    /// Set component (1,2)
-    void setYZ(Scalar value) noexcept { yz_ = value; }
-
-    /// Set component (2,0)
-    void setZX(Scalar value) noexcept { zx_ = value; }
-
-    /// Set component (2,1)
-    void setZY(Scalar value) noexcept { zy_ = value; }
-
-    /// Set component (2,2)
-    void setZZ(Scalar value) noexcept { zz_ = value; }
-
 // ***************************** Accessor Methods *****************************
 
     /// Get component (0,0)
@@ -114,21 +85,6 @@ public:
 
     /// Get component (2,2)
     [[nodiscard]] Scalar zz() const noexcept { return zz_; }
-
-    /// Get row i of the tensor
-    [[nodiscard]] Vector row(Index i) const noexcept
-    {
-        switch (i)
-        {
-            case 0: return Vector{xx_, xy_, xz_};
-            case 1: return Vector{yx_, yy_, yz_};
-            case 2: return Vector{zx_, zy_, zz_};
-        }
-
-        FatalError("Tensor::row index out of range");
-
-        return Vector{};
-    }
 
     /// Get column j of the tensor
     [[nodiscard]] Vector col(Index j) const noexcept
