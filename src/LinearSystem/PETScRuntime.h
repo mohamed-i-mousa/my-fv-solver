@@ -64,10 +64,10 @@ static_assert
     "PetscInt must be 32-bit: rebuild PETSc without --with-64-bit-indices"
 );
 
-// ******************************* PETSC_CHECK ********************************
+// ******************************** CheckPETSc ********************************
 
 /// Verify a PETSc call, aborting with a FatalError on failure
-#define PETSC_CHECK(call)                                                     \
+#define CheckPETSc(call)                                                      \
     do                                                                        \
     {                                                                         \
         const PetscErrorCode petscErrorCode = (call);                         \

@@ -543,7 +543,7 @@ void Segregated::solvePressureCorrection()
     if (pCorrNeedsNullSpace_)
     {
         MatNullSpace constantNullSpace = nullptr;
-        PETSC_CHECK
+        CheckPETSc
         (
             MatNullSpaceCreate
             (
@@ -554,11 +554,11 @@ void Segregated::solvePressureCorrection()
                 &constantNullSpace
             )
         );
-        PETSC_CHECK
+        CheckPETSc
         (
             MatSetNullSpace(matrixConstruct_.matrixA(), constantNullSpace)
         );
-        PETSC_CHECK(MatNullSpaceDestroy(&constantNullSpace));
+        CheckPETSc(MatNullSpaceDestroy(&constantNullSpace));
     }
 
     for
@@ -608,7 +608,7 @@ void Segregated::solvePressureCorrection()
 
     if (pCorrNeedsNullSpace_)
     {
-        PETSC_CHECK(MatSetNullSpace(matrixConstruct_.matrixA(), nullptr));
+        CheckPETSc(MatSetNullSpace(matrixConstruct_.matrixA(), nullptr));
     }
 }
 
