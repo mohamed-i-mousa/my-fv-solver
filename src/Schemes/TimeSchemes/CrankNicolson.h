@@ -9,17 +9,24 @@
  * @file CrankNicolson.h
  * @brief Second-order Crank-Nicolson time scheme
  *
- * @details Crank-Nicolson is implemented in the form that keeps
- * the spatial operator fully implicit and carries a per-cell
- * previous-time-step derivative (ddtPrevStep) between steps. With
- * coefft = 1 + CrankNicolsonCoeff (CrankNicolsonCoeff in [0, 1]):
- *   diag   += coefft * V/dt
- *   source += coefft * V/dt * phi^n + CrankNicolsonCoeff * ddtPrevStep
- *   ddtPrevStep_new =
- *      coefft * V/dt * (phi^{n+1} - phi^n) - CrankNicolsonCoeff * ddtPrevStep
- * Because the stored ddtPrevStep equals the previous spatial residual,
- * CrankNicolsonCoeff = 1 yields true second-order Crank-Nicolson and
- * CrankNicolsonCoeff = 0 degenerates to backward Euler.
+ * @details Crank-Nicolson is implemented in a form that keeps the spatial
+ * term fully implicit by carrying a per-cell previous time step derivative
+ * (ddtPrevStep) between steps.
+ *
+ * For blending coefficient c = CrankNicolsonCoeff in [0, 1]
+ * (where theta = 1 / (1 + c)):
+ *   (1 + c) * V/dt * (phi^{n+1} - phi^n) = ddt^{n+1} + c * ddt^n
+ *
+ * Discretization terms:
+ *   diag   += (1 + c) * V/dt
+ *   source += (1 + c) * V/dt * phi^n + c * ddtPrevStep
+ *   ddtPrevStep_new = (1 + c) * V/dt * (phi^{n+1} - phi^n) - c * ddtPrevStep
+ *
+ * Key Special Cases (CrankNicolsonCoeff):
+ *   - c = 1.0 (theta = 0.50): Pure 2nd-order Crank-Nicolson scheme.
+ *   - c = 0.9 (theta ≈ 0.53): Off-centered Crank-Nicolson
+ *                             (damps high-frequency oscillations).
+ *   - c = 0.0 (theta = 1.00): Degenerates to 1st-order Implicit Euler.
  *****************************************************************************/
 
 #pragma once
