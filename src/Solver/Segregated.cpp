@@ -378,16 +378,6 @@ void Segregated::buildFaceDiagonal()
         {
             const Index boundaryIdx = bcManager().boundaryIdx(face.idx());
 
-            if (!bcManager().isRegistered(Field::pCorr, boundaryIdx))
-            {
-                FatalError
-                (
-                    "Boundary condition not found for patch "
-                  + face.patch()->get().name()
-                  + " and field " + Name(fieldToString(Field::pCorr))
-                );
-            }
-
             // Dirichlet p' couples pressure and velocity through the face; a
             // zero-gradient or symmetry plane decouples them
             DUf_[faceIdx] =

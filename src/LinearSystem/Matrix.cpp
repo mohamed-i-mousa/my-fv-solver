@@ -543,16 +543,6 @@ void Matrix::assembleBoundaryFace
     const Index ownerIdx = face.ownerCell();
     const Index boundaryIdx = bcManager_.boundaryIdx(face.idx());
 
-    if (!bcManager_.isRegistered(equation.field, boundaryIdx))
-    {
-        FatalError
-        (
-            "Boundary condition not found for patch "
-          + face.patch()->get().name()
-          + " and field " + Name(fieldToString(equation.field))
-        );
-    }
-
     const Scalar GammaSf =
         equation.GammaFace[face.idx()] * face.projectedArea();
 

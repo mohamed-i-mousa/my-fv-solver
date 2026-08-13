@@ -85,16 +85,6 @@ public:
     /// Compact boundary index of a boundary face (FatalError on interior)
     [[nodiscard]] Index boundaryIdx(Index faceIdx) const;
 
-    /// Whether a boundary condition is registered for the field at the face
-    [[nodiscard]] bool isRegistered
-    (
-        Field field,
-        Index boundaryIdx
-    ) const noexcept
-    {
-        return boundaryTypeAt_[fieldSlot(field)][boundaryIdx] != nullptr;
-    }
-
     /// The boundary condition object for a field at a compact boundary face
     [[nodiscard]] const BoundaryType& boundaryType
     (
