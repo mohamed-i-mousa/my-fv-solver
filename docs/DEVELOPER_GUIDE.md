@@ -265,35 +265,18 @@ override `cellGradient`, and add one branch to the factory.
    then FullPivLU fallback. Degenerate cells get a zero inverse and a warning.
 
 #### Face Gradient Computation (`faceGradient`)
-**Method**: Corrected interpolation of cell gradients
+**Method**: Corrected interpolation of cell gradients for internal and processor-halo faces
 
 **Algorithm**:
-1. **Boundary Check**: Use `boundaryFaceGradient()` for boundary faces
-2. **Distance Calculation**: `d_PN = centroid_N - centroid_P`
-3. **Average Gradient**: Distance-weighted interpolation via `averageFaceGradient()`
-4. **Consistency Correction**: `correction = (φ_N - φ_P)/|d_PN| - (∇φ_avg · e_PN)`
-5. **Final Result**: `∇φ_f = ∇φ_avg + correction × e_PN`
+1. **Distance Calculation**: `d_PN = centroid_N - centroid_P`
+2. **Average Gradient**: Distance-weighted interpolation via `averageFaceGradient()`
+3. **Consistency Correction**: `correction = (φ_N - φ_P)/|d_PN| - (∇φ_avg · e_PN)`
+4. **Final Result**: `∇φ_f = ∇φ_avg + correction × e_PN`
 
 **Face Gradient Averaging (`averageFaceGradient`)**:
 - **Weights**: `g_P = d_Nf/(d_Pf + d_Nf)`, `g_N = d_Pf/(d_Pf + d_Nf)`
 - **Formula**: `∇φ_f = g_P × ∇φ_P + g_N × ∇φ_N`
 - **Physical meaning**: Closer cell has more influence
-
-#### Boundary Face Gradients (`boundaryFaceGradient`)
-**Approach**: Normal/tangential decomposition
-
-**fixedValue BC**:
-1. Calculate normal gradient:
-   `∂φ/∂n = (φ_boundary - φ_cell)/max(d_n, minNormalFraction_ |d_Pf|)`
-2. Extract tangential components: `∇φ_tan = ∇φ_cell - (∇φ_cell·n)n`
-3. Combine: `∇φ_f = ∇φ_tan + (∂φ/∂n)n`
-
-**zeroGradient/wall-function BCs**: retain only the tangential cell-gradient
-component, giving zero normal gradient.
-
-**fixedGradient BC**: 
-1. Extract tangential: `∇φ_tan = ∇φ_cell - (∇φ_cell·n)n`
-2. Apply normal gradient: `∇φ_f = ∇φ_tan + gradient_specified×n`
 
 ### Convection schemes (`ConvectionScheme`)
 

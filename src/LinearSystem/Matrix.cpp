@@ -490,7 +490,6 @@ void Matrix::assembleInternalFace
     const Vector gradPhif =
         equation.gradScheme.faceGradient
         (
-            equation.field,
             equation.phi,
             gradPhiP,
             gradPhiN,

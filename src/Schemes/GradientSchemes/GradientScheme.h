@@ -20,7 +20,6 @@
  * - Face-centered gradient interpolation with orthogonal correction
  * - Cell-based gradient limiting (Barth-Jespersen)
  * - Distance-weighted averaging for internal face gradients
- * - Boundary condition handling for face gradients
  *****************************************************************************/
 
 #pragma once
@@ -85,7 +84,6 @@ public:
     /// Interpolate gradient at a single face
     [[nodiscard]] Vector faceGradient
     (
-        Field field,
         const ScalarField& phi,
         const Vector& gradPhiP,
         const Vector& gradPhiN,
@@ -143,15 +141,6 @@ private:
         const Vector& gradPhiN
     ) const;
 
-    /// Calculate boundary face gradient based on BC type
-    Vector boundaryFaceGradient
-    (
-        Field field,
-        const ScalarField& phi,
-        const Vector& cellGradient,
-        const Face& face
-    ) const;
-
 // ****************************** Private Members *****************************
 
 private:
@@ -161,8 +150,4 @@ private:
 
     /// Reference to boundary conditions manager
     const BoundaryConditions& bcManager_;
-
-    /// Minimum fraction of ||dPf|| used as normal distance to a boundary face
-    /// Prevents gradient amplification beyond ~87 degrees of non-orthogonality
-    static constexpr Scalar minNormalFraction_ = S(0.05);
 };

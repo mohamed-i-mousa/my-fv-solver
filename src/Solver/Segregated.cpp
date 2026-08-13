@@ -462,7 +462,6 @@ void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
         const Vector gradPf =
             gradientScheme().faceGradient
             (
-                Field::p,
                 pressure(),
                 gradP_[P],
                 gradP_[N],
@@ -691,7 +690,6 @@ void Segregated::correctFlowRate()
         const Vector gradPCorrf =
             gradientScheme().faceGradient
             (
-                Field::pCorr,
                 pCorr_,
                 gradPCorr_[ownerIdx],
                 gradPCorr_[neighborIdx],

@@ -67,7 +67,6 @@ NameList GradientScheme::availableSchemes()
 
 Vector GradientScheme::faceGradient
 (
-    Field field,
     const ScalarField& phi,
     const Vector& gradPhiP,
     const Vector& gradPhiN,
@@ -76,19 +75,6 @@ Vector GradientScheme::faceGradient
 {
     const Face& f = mesh_.faces()[faceIndex];
     const Index P = f.ownerCell();
-
-    if (f.isBoundary())
-    {
-        return
-            boundaryFaceGradient
-            (
-                field,
-                phi,
-                gradPhiP,
-                f
-            );
-    }
-
     const Index N = f.neighborCell().value();
     const Vector dPN =
         mesh_.cells()[N].centroid() - mesh_.cells()[P].centroid();
@@ -226,42 +212,4 @@ Vector GradientScheme::averageFaceGradient
     const Scalar gN = dPf / (totalDist + vSmallValue);
 
     return gP * gradPhiP + gN * gradPhiN;
-}
-
-
-Vector GradientScheme::boundaryFaceGradient
-(
-    Field field,
-    const ScalarField& phi,
-    const Vector& cellGradient,
-    const Face& boundaryFace
-) const
-{
-    const Vector tangentialGradient =
-        cellGradient
-      - dot(cellGradient, boundaryFace.normal())
-      * boundaryFace.normal();
-
-    // Normal gradient recovered from the boundary condition's face value
-    const Index bIdx = bcManager_.boundaryIdx(boundaryFace.idx());
-    const Scalar boundaryValue =
-        bcManager_.boundaryType(field, bIdx).faceValue
-        (
-            phi[boundaryFace.ownerCell()],
-            bcManager_.normalDistance(bIdx),
-            bcManager_.normal(bIdx),
-            bcManager_.ownerVelocity(bIdx)
-        );
-    const Scalar cellValue = phi[boundaryFace.ownerCell()];
-    const Scalar dn = dot(boundaryFace.dPf(), boundaryFace.normal());
-    const Scalar dPfMag = boundaryFace.dPfMag();
-
-    // Stabilization: clamp dn to minNormalFraction_ * ||dPf||
-    const Scalar dnStabilized =
-        std::max(dn, minNormalFraction_ * dPfMag);
-
-    const Scalar normalGradient =
-        (boundaryValue - cellValue) / dnStabilized;
-
-    return tangentialGradient + normalGradient * boundaryFace.normal();
 }
