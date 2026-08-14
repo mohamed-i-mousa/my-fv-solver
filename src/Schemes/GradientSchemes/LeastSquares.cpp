@@ -54,11 +54,6 @@ Vector LeastSquares::cellGradient
     // Part 1: Internal neighbor cells contribution to ATb
     for (Index neighborIdx : cell.neighborCellIndices())
     {
-        if (neighborIdx >= mesh().numCells())
-        {
-            FatalError("Invalid neighbor ID - mesh topology corrupted");
-        }
-
         const Cell& neighbor = mesh().cells()[neighborIdx];
         const Vector r = neighbor.centroid() - cell.centroid();
 
