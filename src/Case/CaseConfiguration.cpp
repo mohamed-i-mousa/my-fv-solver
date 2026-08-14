@@ -571,6 +571,9 @@ CaseConfiguration loadConfiguration(const CaseReader& reader)
         FatalError("turbulence.hydraulicDiameter must be positive.");
     }
 
+    config.roughWall =
+        turbulence.lookupOrDefault<bool>("roughWall", false);
+
     config.initialK = S(0.0);
     config.initialOmega = S(0.0);
 

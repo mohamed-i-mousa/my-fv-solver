@@ -199,6 +199,7 @@ void SolverSetup::configure
                 config.initialOmega,
                 config.alphaK,
                 config.alphaOmega,
+                config.roughWall,
                 config.debug
             );
     }

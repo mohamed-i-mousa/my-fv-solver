@@ -175,6 +175,9 @@ struct CaseConfiguration
     /// Hydraulic diameter for calculated inlet/default values
     Scalar hydraulicDiameter;
 
+    /// Enable SST F3 rough-wall blending
+    bool roughWall;
+
     /// Enable aerodynamic force calculation on a wall patch
     bool forcesEnabled;
 

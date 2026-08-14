@@ -468,6 +468,7 @@ turbulence
     model               kOmegaSST;  // Required: Laminar or kOmegaSST
     turbulenceIntensity 0.05;       // Optional: default 0.05 (5%)
     hydraulicDiameter   0.01;       // Optional: default 0.01 [m]
+    roughWall           false;      // Optional: default false
 }
 ```
 
@@ -479,6 +480,10 @@ turbulence
   initial values for `k` and `omega` when they are not explicitly
   specified in `initialConditions` (see [initialConditions](#3-initialconditions)).
   They are ignored when `model` is `Laminar`.
+- `roughWall` enables the SST $F_3$ rough-wall blending function. When
+  `true`, the eddy-viscosity limiter ($F_2$) is damped inside the
+  roughness sublayer to prevent artificial suppression of $\nu_t$ on
+  aerodynamically rough surfaces. Leave `false` (default) for smooth-wall simulations. This skips the $F_3$ computation entirely.
 - k-omega SST model constants are hardcoded in
   `src/Models/Turbulence/kOmegaSST.h`
   and cannot be changed via case file

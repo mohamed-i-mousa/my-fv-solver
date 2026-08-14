@@ -48,6 +48,7 @@ kOmegaSST::kOmegaSST
     Scalar initialOmega,
     Scalar alphaK,
     Scalar alphaOmega,
+    bool roughWall,
     bool debug
 )
 :
@@ -68,6 +69,7 @@ kOmegaSST::kOmegaSST
         debug
     }
 {
+    useF3_ = roughWall;
     // Compute yPlusLam and wall-function geometry
     updateYPlusLam(coeffs_.kappa, coeffs_.E);
     updateWallDistance();
@@ -152,8 +154,8 @@ void kOmegaSST::solve
     // Compute blending functions
     const ScalarField f1 = blendingF1(CDkOmega);
     const ScalarField f2 = blendingF2();
-    const ScalarField f3 = blendingF3();
-    const ScalarField f23 = blendingF23(f2, f3);
+    const ScalarField f23 =
+        useF3_ ? blendingF23(f2, blendingF3()) : f2;
 
     // Compute omega production
     ScalarField POmega = omegaProduction(f1, strainRateMag);

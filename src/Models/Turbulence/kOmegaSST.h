@@ -69,6 +69,7 @@ public:
         Scalar initialOmega,
         Scalar alphaK,
         Scalar alphaOmega,
+        bool roughWall,
         bool debug
     );
 
@@ -174,8 +175,8 @@ private:
 
 // SST-specific parameters
 
-    /// Optional SST F3 switch
-    bool useF3_ = false;
+    /// SST F3 rough-wall blending
+    bool useF3_;
 
     /// Maximum turbulent-to-laminar viscosity ratio for omega bound
     Scalar maxViscosityRatio_ = S(1e5);

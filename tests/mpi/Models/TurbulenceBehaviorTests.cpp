@@ -165,6 +165,7 @@ TEST_CASE
         initialOmega,
         S(0.7),          // alphaK
         S(0.7),          // alphaOmega
+        false,           // roughWall
         false            // debug
     );
 

@@ -48,6 +48,7 @@ std::unique_ptr<TurbulenceModel> TurbulenceModel::create
     Scalar initialOmega,
     Scalar alphaK,
     Scalar alphaOmega,
+    bool roughWall,
     bool debug
 )
 {
@@ -74,6 +75,7 @@ std::unique_ptr<TurbulenceModel> TurbulenceModel::create
             initialOmega,
             alphaK,
             alphaOmega,
+            roughWall,
             debug
         );
     }

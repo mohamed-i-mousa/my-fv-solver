@@ -96,6 +96,7 @@ public:
         Scalar initialOmega,
         Scalar alphaK,
         Scalar alphaOmega,
+        bool roughWall,
         bool debug
     );
 
