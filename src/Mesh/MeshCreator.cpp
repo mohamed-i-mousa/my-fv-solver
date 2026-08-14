@@ -59,7 +59,7 @@ void prepareGeometry(Mesh& mesh, bool debug)
 
     for (Index cellIdx = 0; cellIdx < numOwnedCells; ++cellIdx)
     {
-        cells[cellIdx].geometricProperties(faces, faceIntegrals);
+        cells[cellIdx].geometricProperties(faceIntegrals);
     }
     if (debug)
     {

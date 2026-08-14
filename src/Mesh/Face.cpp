@@ -52,7 +52,6 @@ FaceIntegrals Face::geometricProperties
     const NodeList& allNodes
 )
 {
-    geometricPropertiesCalculated_ = false;
     const Count numNodes = nodeIndices_.size();
 
     for (Index nodeIdx : nodeIndices_)
@@ -112,7 +111,6 @@ FaceIntegrals Face::geometricProperties
 
         integrals.volume = dot(centroid_, crossProd) / S(2.0);
 
-        geometricPropertiesCalculated_ = true;
     }
     // CASE 2: Face is "Polygon" (numNodes > 3)
     else
@@ -178,8 +176,6 @@ FaceIntegrals Face::geometricProperties
         centroid_ = weightedCentroidSum / (weightedAreaSum + vSmallValue);
 
         normal_ = normalized(normalSum);
-
-        geometricPropertiesCalculated_ = true;
     }
 
     return integrals;
@@ -199,7 +195,6 @@ void Face::distances(const CellList& allCells)
         dNf_ = dNfVec;
         dNfMag_ = magnitude(dNfVec);
     }
-    distancePropertiesCalculated_ = true;
 }
 
 // *************************** Non-Member Functions ***************************
@@ -215,45 +210,36 @@ std::ostream& operator<<(std::ostream& os, const Face& f)
             << (nodeIdx == nodes.size() - 1 ? "" : ", ");
     }
 
-    os  <<  "], Owner: " << f.ownerCell() << ", Neighbor: "
-        <<  (
-                f.isBoundary() ? "Boundary"
-              : std::to_string(f.neighborCell().value())
-            );
+os  <<  "], Owner: " << f.ownerCell() << ", Neighbor: "
+    <<  (
+            f.isBoundary() ? "Boundary"
+            : std::to_string(f.neighborCell().value())
+        );
 
-    if (f.geometricPropertiesCalculated())
+
+    // Buffer locally so the fixed/precision change never reaches os
+    std::ostringstream geometry;
+    geometry
+        << std::fixed << std::setprecision(6)
+        << ", Centroid: " << f.centroid()
+        << ", Area: "   << f.projectedArea()
+        << ", Normal: " << f.normal();
+
+    os  << geometry.str();
+
+
+    // Buffer locally so the fixed/precision change never reaches os
+    std::ostringstream distances;
+    distances
+        << std::fixed << std::setprecision(6)
+        << ", dPfMag: " << f.dPfMag();
+
+    if (f.dNfMag().has_value())
     {
-        // Buffer locally so the fixed/precision change never reaches os
-        std::ostringstream geometry;
-        geometry
-            << std::fixed << std::setprecision(6)
-            << ", Centroid: " << f.centroid()
-            << ", Area: "   << f.projectedArea()
-            << ", Normal: " << f.normal();
-
-        os  << geometry.str();
-    }
-    else
-    {
-        os  << ", Geometry: N/A";
-    }
-
-    if (f.distancesCalculated())
-    {
-        // Buffer locally so the fixed/precision change never reaches os
-        std::ostringstream distances;
-        distances
-            << std::fixed << std::setprecision(6)
-            << ", dPfMag: " << f.dPfMag();
-
-        if (f.dNfMag().has_value())
-        {
-            distances << ", dNfMag: " << f.dNfMag().value();
-        }
-
-        os  << distances.str();
+        distances << ", dNfMag: " << f.dNfMag().value();
     }
 
+    os  << distances.str();
     os  << ')';
 
     return os;

@@ -96,7 +96,6 @@ public:
     {
         centroid_ = centroid;
         volume_ = volume;
-        geometricPropertiesCalculated_ = true;
     }
 
 // ***************************** Accessor Methods *****************************
@@ -139,16 +138,9 @@ public:
 
 // ************************ Geometric Property Methods ************************
 
-    /// Check if geometric properties calculated
-    [[nodiscard]] bool geometricPropertiesCalculated() const noexcept
-    {
-        return geometricPropertiesCalculated_;
-    }
-
     /// Calculate cell volume and centroid
     void geometricProperties
     (
-        const FaceList& allFaces,
         const std::vector<FaceIntegrals>& allFaceIntegrals
     );
 
@@ -173,10 +165,6 @@ private:
 
     /// Cell volume
     Scalar volume_ = S(0.0);
-
-    /// Flag indicating if geometry has been calculated
-    bool geometricPropertiesCalculated_ = false;
-
 };
 
 // *************************** Non-Member Functions ***************************

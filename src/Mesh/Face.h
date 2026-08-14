@@ -228,23 +228,11 @@ public:
 
 // ************************ Geometric Property Methods ************************
 
-    /// Check if geometric properties calculated
-    [[nodiscard]] bool geometricPropertiesCalculated() const noexcept
-    {
-        return geometricPropertiesCalculated_;
-    }
-
     /// Calculate Face centroid, normal, area, and second moment integral
     [[nodiscard]] FaceIntegrals geometricProperties
     (
         const NodeList& allNodes
     );
-
-    /// Check if distance properties calculated
-    [[nodiscard]] bool distancesCalculated() const noexcept
-    {
-        return distancePropertiesCalculated_;
-    }
 
     /// Calculate distance properties of the face
     void distances(const CellList& allCells);
@@ -289,15 +277,8 @@ private:
     /// Magnitude of d_Nf
     OptionalScalar dNfMag_;
 
-    /// Flag indicating if geometric properties calculated
-    bool geometricPropertiesCalculated_ = false;
-
-    /// Flag indicating if distance properties calculated
-    bool distancePropertiesCalculated_ = false;
-
     /// Owning boundary patch (nullopt for internal or unlinked faces)
     OptionalRef<BoundaryPatch> patch_;
-
 };
 
 // *************************** Non-Member Functions ***************************

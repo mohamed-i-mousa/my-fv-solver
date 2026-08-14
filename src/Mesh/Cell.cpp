@@ -28,11 +28,9 @@
 
 void Cell::geometricProperties
 (
-    const FaceList& allFaces,
     const std::vector<FaceIntegrals>& allFaceIntegrals
 )
 {
-    geometricPropertiesCalculated_ = false;
     volume_ = S(0.0);
     centroid_ = Vector{};
     Vector centroidSum;
@@ -40,19 +38,6 @@ void Cell::geometricProperties
     for (Index faceIdx = 0; faceIdx < faceIndices_.size(); ++faceIdx)
     {
         const Index faceIndex = faceIndices_[faceIdx];
-        const Face& face = allFaces[faceIndex];
-
-        if(!face.geometricPropertiesCalculated())
-        {
-            FatalError
-            (
-                "Cell " + std::to_string(idx_)
-              + " calculation: Geometric properties for "
-                "bounding Face " + std::to_string(face.idx())
-              + " were not calculated."
-            );
-        }
-
         const Scalar faceSign = S(faceSigns_[faceIdx]);
         const FaceIntegrals& integrals = allFaceIntegrals[faceIndex];
 
@@ -77,7 +62,6 @@ void Cell::geometricProperties
     }
 
     centroid_ = centroidSum / (S(2.0) * volume_);
-    geometricPropertiesCalculated_ = true;
 }
 
 // *************************** Non-Member Functions ***************************
@@ -104,23 +88,15 @@ std::ostream& operator<<(std::ostream& os, const Cell& c)
 
     os  << ']';
 
-    if (c.geometricPropertiesCalculated())
-    {
-        // Buffer locally so the fixed/precision change never reaches os
-        std::ostringstream geometry;
-        geometry
-            << std::fixed
-            << std::setprecision(6)
-            << ", Volume: " << c.volume()
-            << ", Centroid: " << c.centroid();
+    // Buffer locally so the fixed/precision change never reaches os
+    std::ostringstream geometry;
+    geometry
+        << std::fixed
+        << std::setprecision(6)
+        << ", Volume: " << c.volume()
+        << ", Centroid: " << c.centroid();
 
-        os  << geometry.str();
-    }
-    else
-    {
-        os  << ", Geometry: N/A";
-    }
-
+    os  << geometry.str();
     os  << ')';
 
     return os;

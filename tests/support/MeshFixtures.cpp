@@ -413,7 +413,7 @@ Mesh makeHexBoxMesh
 
     for (Index cellIdx = 0; cellIdx < mesh.numOwnedCells(); ++cellIdx)
     {
-        mesh.cells()[cellIdx].geometricProperties(mesh.faces(), faceIntegrals);
+        mesh.cells()[cellIdx].geometricProperties(faceIntegrals);
     }
 
     for (Index faceIdx = 0; faceIdx < mesh.numFaces(); ++faceIdx)
