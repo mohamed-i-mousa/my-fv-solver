@@ -110,9 +110,6 @@ public:
     /// Get all section names
     NameList sectionNames() const;
 
-    /// Print case file contents for debugging
-    void print(Count indent = 0) const;
-
 // ****************************** Private Methods *****************************
 
 private:

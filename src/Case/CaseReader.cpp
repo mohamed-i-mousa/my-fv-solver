@@ -56,32 +56,6 @@ NameList CaseReader::sectionNames() const
     return sectionList;
 }
 
-// ****************************** Public Methods ******************************
-
-void CaseReader::print(Count indent) const
-{
-    const Message indentStr(indent * 4, ' ');
-
-    // Print entries
-    for (const auto& [key, value] : entries_)
-    {
-        std::cout
-            << indentStr << key << ": " << value << '\n';
-    }
-
-    // Print sections
-    for (const auto& [sectionName, section] : sections_)
-    {
-        std::cout
-            << indentStr << sectionName << " {" << '\n';
-
-        section.print(indent + 1);
-
-        std::cout
-            << indentStr << '}' << '\n';
-    }
-}
-
 // ****************************** Private Methods *****************************
 
 void CaseReader::parseFile(const FilePath& filename)
