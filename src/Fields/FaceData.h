@@ -25,7 +25,6 @@
 #include <algorithm>
 #include <vector>
 #include <concepts>
-#include <iostream>
 
 // Project headers
 #include "Scalar.h"
@@ -120,35 +119,6 @@ public:
     const T& operator[](Index faceIndex) const noexcept
     {
         return internalField_[faceIndex];
-    }
-
-// ****************************** Helper Methods ******************************
-
-    /// Print field summary for debugging
-    void printSummary(Count itemsToShow) const
-    {
-        std::cout
-            << "FaceData (Size: " << internalField_.size() << ")\n";
-
-        const Count count = std::min(internalField_.size(), itemsToShow);
-
-        for
-        (
-            Index faceIdx = 0;
-            faceIdx < count;
-            ++faceIdx
-        )
-        {
-            std::cout
-                << "  Face " << faceIdx << ": " << internalField_[faceIdx]
-                << '\n';
-        }
-
-        if (internalField_.size() > itemsToShow)
-        {
-            std::cout
-                << "  ...\n";
-        }
     }
 
 // ****************************** Private Members *****************************

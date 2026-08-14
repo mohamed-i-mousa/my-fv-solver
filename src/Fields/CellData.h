@@ -25,7 +25,6 @@
 #include <algorithm>
 #include <vector>
 #include <concepts>
-#include <iostream>
 
 // Project headers
 #include "Scalar.h"
@@ -130,35 +129,6 @@ public:
     const T& operator[](Index cellIndex) const noexcept
     {
         return internalField_[cellIndex];
-    }
-
-// ****************************** Helper Methods ******************************
-
-    /// Print field summary for debugging
-    void printSummary(Count itemsToShow) const
-    {
-        std::cout
-            << "CellData (Size: " << internalField_.size() << ")\n";
-
-        const Count count = std::min(internalField_.size(), itemsToShow);
-
-        for
-        (
-            Index cellIdx = 0;
-            cellIdx < count;
-            ++cellIdx
-        )
-        {
-            std::cout
-                << "  Cell " << cellIdx << ": " << internalField_[cellIdx]
-                << '\n';
-        }
-
-        if (internalField_.size() > itemsToShow)
-        {
-            std::cout
-                << "  ...\n";
-        }
     }
 
 // ****************************** Private Members *****************************
