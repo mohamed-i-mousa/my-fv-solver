@@ -18,7 +18,6 @@
 
 // ********************************** Headers *********************************
 
-#include "ErrorHandler.h"
 #include "Face.h"
 #include "CellData.h"
 
@@ -32,15 +31,6 @@ template<CellFieldType T>
     const CellData<T>& field
 )
 {
-    if (targetFace.isBoundary())
-    {
-        FatalError
-        (
-            "interpolateToFace must not be called on boundary "
-            "faces; resolve BC values at the call site"
-        );
-    }
-
     const Index P = targetFace.ownerCell();
     const Index N = targetFace.neighborCell().value();
 
