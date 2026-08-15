@@ -589,37 +589,23 @@ ScalarField kOmegaSST::omegaProduction
 }
 
 
-ScalarField kOmegaSST::computeGammaK(const ScalarField& f1) const
+ScalarField kOmegaSST::Gamma
+(
+    const ScalarField& f1,
+    Scalar sigma1,
+    Scalar sigma2
+) const
 {
     const Count numCells = mesh().numOwnedCells();
-    ScalarField GammaK;
+    ScalarField Gamma;
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        const Scalar sigmaK =
-            blend(f1[cellIdx], coeffs_.sigmaK1, coeffs_.sigmaK2);
-
-        GammaK[cellIdx] = nu() + sigmaK * nut()[cellIdx];
+        const Scalar sigma = blend(f1[cellIdx], sigma1, sigma2);
+        Gamma[cellIdx] = nu() + sigma * nut()[cellIdx];
     }
 
-    return GammaK;
-}
-
-
-ScalarField kOmegaSST::computeGammaOmega(const ScalarField& f1) const
-{
-    const Count numCells = mesh().numOwnedCells();
-    ScalarField GammaOmega;
-
-    for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
-    {
-        const Scalar sigmaOmega =
-            blend(f1[cellIdx], coeffs_.sigmaOmega1, coeffs_.sigmaOmega2);
-
-        GammaOmega[cellIdx] = nu() + sigmaOmega * nut()[cellIdx];
-    }
-
-    return GammaOmega;
+    return Gamma;
 }
 
 
@@ -666,7 +652,8 @@ void kOmegaSST::solveOmegaEquation
 )
 {
     const Count numCells = mesh().numOwnedCells();
-    ScalarField GammaOmega = computeGammaOmega(f1);
+    ScalarField GammaOmega =
+        Gamma(f1, coeffs_.sigmaOmega1, coeffs_.sigmaOmega2);
     exchangeHalos(mesh(), {&GammaOmega});
     cellToFaceDiffusion(GammaOmega, gammaOmegaFace_);
 
@@ -792,7 +779,8 @@ void kOmegaSST::solveKEquation
 )
 {
     const Count numCells = mesh().numOwnedCells();
-    ScalarField GammaK = computeGammaK(f1);
+    ScalarField GammaK =
+        Gamma(f1, coeffs_.sigmaK1, coeffs_.sigmaK2);
     exchangeHalos(mesh(), {&GammaK});
     cellToFaceDiffusion(GammaK, gammaKFace_);
 

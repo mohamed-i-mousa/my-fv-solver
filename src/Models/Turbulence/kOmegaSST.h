@@ -297,13 +297,15 @@ private:
         const ScalarField& strainRateMag
     ) const;
 
-    /// Compute k equation effective diffusivity
-    [[nodiscard]] ScalarField computeGammaK(const ScalarField& f1) const;
+    /// Compute effective diffusivity field: Gamma = nu + sigma * nut
+    [[nodiscard]] ScalarField Gamma
+    (
+        const ScalarField& f1,
+        Scalar sigma1,
+        Scalar sigma2
+    ) const;
 
-    /// Compute omega equation effective diffusivity
-    [[nodiscard]] ScalarField computeGammaOmega(const ScalarField& f1) const;
-
-    /// Limit Pk/POmega in place using f1/f23/strainRateMag
+    /// Limit Pk/POmega
     void limitProduction
     (
         const ScalarField& f1,
