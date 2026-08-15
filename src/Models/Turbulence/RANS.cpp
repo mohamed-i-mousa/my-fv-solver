@@ -493,20 +493,20 @@ void RANS::updateYPlus()
 }
 
 
-ScalarField RANS::computeStrainRateMagnitude(const TensorField& gradU) const
+ScalarField RANS::strainRateSquared(const TensorField& gradU) const
 {
     const Count numCells = mesh_.numOwnedCells();
 
-    ScalarField strainRateMag;
+    ScalarField strainRateSq;
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        // S = sqrt(2 * S_ij * S_ij), S_ij = 0.5*(du_i/dx_j + du_j/dx_i)
+        // S² = 2 S_ij S_ij, where S_ij = 0.5*(du_i/dx_j + du_j/dx_i)
         const Scalar symmMagSq = gradU[cellIdx].symm().magnitudeSquared();
-        strainRateMag[cellIdx] = std::sqrt(S(2.0) * symmMagSq);
+        strainRateSq[cellIdx] = S(2.0) * symmMagSq;
     }
 
-    return strainRateMag;
+    return strainRateSq;
 }
 
 

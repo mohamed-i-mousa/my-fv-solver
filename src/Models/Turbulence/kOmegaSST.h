@@ -262,7 +262,7 @@ private:
     /// Compute k production term
     [[nodiscard]] ScalarField kProduction
     (
-        const ScalarField& strainRateMag
+        const ScalarField& strainRateSq
     ) const;
 
     /// Compute cross-diffusion term
@@ -294,7 +294,7 @@ private:
     [[nodiscard]] ScalarField omegaProduction
     (
         const ScalarField& f1,
-        const ScalarField& strainRateMag
+        const ScalarField& strainRateSq
     ) const;
 
     /// Compute effective diffusivity field: Gamma = nu + sigma * nut
@@ -310,7 +310,7 @@ private:
     (
         const ScalarField& f1,
         const ScalarField& f23,
-        const ScalarField& strainRateMag,
+        const ScalarField& strainRateSq,
         ScalarField& Pk,
         ScalarField& POmega
     ) const;
@@ -349,6 +349,6 @@ private:
     [[nodiscard]] ScalarField computeTurbulentViscosity
     (
         const ScalarField& f23,
-        const ScalarField& strainRateMag
+        const ScalarField& strainRateSq
     ) const;
 };

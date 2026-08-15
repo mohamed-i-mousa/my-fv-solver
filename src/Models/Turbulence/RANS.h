@@ -366,8 +366,8 @@ protected:
     /// Update y+ field on wall-function faces
     void updateYPlus();
 
-    /// Compute strain-rate magnitude: ||S|| = sqrt(2 S_ij S_ij)
-    [[nodiscard]] ScalarField computeStrainRateMagnitude
+    /// Compute strain-rate squared: S² = 2 S_ij S_ij
+    [[nodiscard]] ScalarField strainRateSquared
     (
         const TensorField& gradU
     ) const;

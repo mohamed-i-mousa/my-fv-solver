@@ -125,11 +125,11 @@ void kOmegaSST::solve
     updateYPlus();
 
     // Compute geometric quantities
-    const ScalarField strainRateMag = computeStrainRateMagnitude(gradU);
+    const ScalarField strainRateSq = strainRateSquared(gradU);
     const ScalarField divU = velocityDivergence(flowRateFace);
 
     // Compute k Production
-    ScalarField Pk = kProduction(strainRateMag);
+    ScalarField Pk = kProduction(strainRateSq);
 
     // Update wall-function boundary values for omega
     updateOmegaWallValues();
@@ -158,10 +158,10 @@ void kOmegaSST::solve
         useF3_ ? blendingF23(f2, blendingF3()) : f2;
 
     // Compute omega production
-    ScalarField POmega = omegaProduction(f1, strainRateMag);
+    ScalarField POmega = omegaProduction(f1, strainRateSq);
 
     // Apply SST production limiters
-    limitProduction(f1, f23, strainRateMag, Pk, POmega);
+    limitProduction(f1, f23, strainRateSq, Pk, POmega);
 
     // Solve omega transport equation
     solveOmegaEquation(flowRateFace, divU, f1, CDkOmega, POmega, gradOmega);
@@ -175,7 +175,7 @@ void kOmegaSST::solve
     exchangeHalos(mesh(), {&k(), &omega_});
 
     // Update turbulent viscosity with SST limiter
-    nut() = computeTurbulentViscosity(f23, strainRateMag);
+    nut() = computeTurbulentViscosity(f23, strainRateSq);
 
     // Update wall-function nut on wall faces
     updateNutWall();
@@ -402,7 +402,7 @@ void kOmegaSST::overrideWallCellProduction
 
 ScalarField kOmegaSST::kProduction
 (
-    const ScalarField& strainRateMag
+    const ScalarField& strainRateSq
 ) const
 {
     const Count numCells = mesh().numOwnedCells();
@@ -410,11 +410,8 @@ ScalarField kOmegaSST::kProduction
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        const Scalar S2 =
-            strainRateMag[cellIdx] * strainRateMag[cellIdx];
-
         // k production = nut * S² (unlimited)
-        Pk[cellIdx] = nut()[cellIdx] * S2;
+        Pk[cellIdx] = nut()[cellIdx] * strainRateSq[cellIdx];
     }
 
     return Pk;
@@ -569,7 +566,7 @@ ScalarField kOmegaSST::blendingF23
 ScalarField kOmegaSST::omegaProduction
 (
     const ScalarField& f1,
-    const ScalarField& strainRateMag
+    const ScalarField& strainRateSq
 ) const
 {
     const Count numCells = mesh().numOwnedCells();
@@ -577,12 +574,10 @@ ScalarField kOmegaSST::omegaProduction
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
-        const Scalar S2 =
-            strainRateMag[cellIdx] * strainRateMag[cellIdx];
-
-        // omega production = gamma * GbyNut (unlimited)
+        // omega production = gamma * S² (unlimited)
         POmega[cellIdx] =
-            blend(f1[cellIdx], coeffs_.gamma1, coeffs_.gamma2) * S2;
+            blend(f1[cellIdx], coeffs_.gamma1, coeffs_.gamma2)
+          * strainRateSq[cellIdx];
     }
 
     return POmega;
@@ -613,7 +608,7 @@ void kOmegaSST::limitProduction
 (
     const ScalarField& f1,
     const ScalarField& f23,
-    const ScalarField& strainRateMag,
+    const ScalarField& strainRateSq,
     ScalarField& Pk,
     ScalarField& POmega
 ) const
@@ -628,13 +623,14 @@ void kOmegaSST::limitProduction
         Pk[cellIdx] = std::min(Pk[cellIdx], kLimit);
 
         // Limit omega production (Menter 2003 SST)
+        const Scalar strainRate = std::sqrt(strainRateSq[cellIdx]);
         const Scalar omegaLimit =
             (coeffs_.c1 / coeffs_.a1) * coeffs_.betaStar * omega_[cellIdx]
           * blend(f1[cellIdx], coeffs_.gamma1, coeffs_.gamma2)
           * std::max
             (
                 coeffs_.a1 * omega_[cellIdx],
-                f23[cellIdx] * strainRateMag[cellIdx]
+                f23[cellIdx] * strainRate
             );
         POmega[cellIdx] = std::min(POmega[cellIdx], omegaLimit);
     }
@@ -864,22 +860,23 @@ void kOmegaSST::boundK()
 ScalarField kOmegaSST::computeTurbulentViscosity
 (
     const ScalarField& f23,
-    const ScalarField& strainRateMag
+    const ScalarField& strainRateSq
 ) const
 {
     // SST turbulent viscosity:
-    // nut = a1*k / max(a1*omega, b1*F23*sqrt(S2))
+    // nut = a1*k / max(a1*omega, F23*sqrt(S2))
     const Count numCells = mesh().numOwnedCells();
     ScalarField nut;
 
     for (Index cellIdx = 0; cellIdx < numCells; ++cellIdx)
     {
+        const Scalar strainRate = std::sqrt(strainRateSq[cellIdx]);
         nut[cellIdx] =
             (coeffs_.a1 * k()[cellIdx])
           / std::max
             (
                 coeffs_.a1 * omega_[cellIdx],
-                f23[cellIdx] * strainRateMag[cellIdx]
+                f23[cellIdx] * strainRate
             );
     }
 
