@@ -52,11 +52,6 @@ std::unique_ptr<TurbulenceModel> TurbulenceModel::create
     bool debug
 )
 {
-    if (isLaminar(modelName))
-    {
-        return std::make_unique<Laminar>(mesh, nu);
-    }
-
     if (modelName == "kOmegaSST")
     {
         return std::make_unique<kOmegaSST>
