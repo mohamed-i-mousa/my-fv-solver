@@ -119,18 +119,6 @@ void Logger::keyValue(const Message& label, Scalar value, const Message& unit)
 }
 
 
-void Logger::keyValue(const Message& label, int value)
-{
-    std::ostringstream row;
-
-    row
-        << "    " << std::left  << std::setw(24) << label
-        << "  " << std::right << std::setw(12) << value;
-
-    std::cout << row.str() << '\n';
-}
-
-
 void Logger::keyValue(const Message& label, Count value)
 {
     std::ostringstream row;

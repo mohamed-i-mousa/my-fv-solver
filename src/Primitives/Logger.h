@@ -56,9 +56,6 @@ namespace Logger
     /// Print one indented label-value row with a fixed-point value and unit
     void keyValue(const Message& label, Scalar value, const Message& unit);
 
-    /// Print one indented label-value row with an int value
-    void keyValue(const Message& label, int value);
-
     /// Print one indented label-value row with a Count value
     void keyValue(const Message& label, Count value);
 
