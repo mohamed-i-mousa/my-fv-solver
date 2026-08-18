@@ -189,7 +189,7 @@ void Segregated::updateEffectiveViscosity()
             // Turbulent models may provide wall-function boundary nut.
             nuEffFace_[faceIdx] =
                 nu()
-              + turbulence().boundaryTurbulentViscosity(face, bcManager());
+              + turbulence().boundaryTurbulentViscosity(face);
         }
         else
         {
@@ -471,7 +471,7 @@ void Segregated::updateRhieChowFlowRate(const TransientFields* prevStep)
           * (RhieChowFlowRatePrevIter_[faceIdx] - dot(UfPrevIter, Sf));
 
         // prevStep is non-null exactly on the transient path
-        if (timeScheme().isTransient() && prevStep != nullptr)
+        if (prevStep != nullptr)
         {
             const Vector UfPrevStepLinear
             (

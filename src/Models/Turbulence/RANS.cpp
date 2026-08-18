@@ -75,11 +75,6 @@ RANS::~RANS() noexcept = default;
 
 void RANS::beginTimeStep()
 {
-    if (!timeScheme_.isTransient())
-    {
-        return;
-    }
-
     // Snapshot the converged previous-step fields as phi^n
     kPrevStep_ = k_;
     dissipationPrevStep_ = dissipation();
@@ -88,11 +83,6 @@ void RANS::beginTimeStep()
 
 void RANS::updatePrevStepDerivatives()
 {
-    if (!timeScheme_.isTransient())
-    {
-        return;
-    }
-
     const ScalarField& dissipationNew = dissipation();
     const Count numCells = mesh_.numOwnedCells();
 
@@ -134,24 +124,16 @@ Scalar RANS::inletK
 
 // ***************************** Accessor Methods *****************************
 
-Scalar RANS::boundaryTurbulentViscosity
-(
-    const Face& face,
-    const BoundaryConditions& bcManager
-) const
+Scalar RANS::boundaryTurbulentViscosity(const Face& face) const
 {
-    if (face.isBoundary())
-    {
-        const BoundaryPatch& patch = face.patch()->get();
+    const BoundaryPatch& patch = face.patch()->get();
 
-        if (bcManager.boundaryType(patch.name(), Field::nut)
-            .isWallModelled())
-        {
-            return nutWall_[face.idx()];
-        }
+    if (bcManager_.boundaryType(patch.name(), Field::nut).isWallModelled())
+    {
+        return nutWall_[face.idx()];
     }
 
-    return TurbulenceModel::boundaryTurbulentViscosity(face, bcManager);
+    return TurbulenceModel::boundaryTurbulentViscosity(face);
 }
 
 

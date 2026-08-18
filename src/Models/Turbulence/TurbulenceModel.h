@@ -133,8 +133,7 @@ public:
     /// Get turbulent viscosity for a boundary face
     [[nodiscard]] virtual Scalar boundaryTurbulentViscosity
     (
-        const Face& face,
-        const BoundaryConditions&
+        const Face& face
     ) const
     {
         return turbulentViscosity()[face.ownerCell()];

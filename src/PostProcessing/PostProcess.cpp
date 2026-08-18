@@ -202,10 +202,7 @@ void appendTimeStep
 
     for (const auto& output : turbulence.cellDataOutputs())
     {
-        if (output.second != nullptr)
-        {
-            scalarFieldsToVtk[Name{output.first}] = output.second;
-        }
+        scalarFieldsToVtk[Name{output.first}] = output.second;
     }
 
     VTK::VectorFieldMap vectorFieldsToVtk;
@@ -217,10 +214,7 @@ void appendTimeStep
 
     for (const auto& output : turbulence.boundaryDataOutputs())
     {
-        if (output.second != nullptr)
-        {
-            boundaryScalarFields[Name{output.first}] = output.second;
-        }
+        boundaryScalarFields[Name{output.first}] = output.second;
     }
 
     const FaceData<Scalar> wallShearStress =

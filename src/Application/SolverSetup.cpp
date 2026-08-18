@@ -45,9 +45,6 @@ void makeConvectionSchemes
 {
     modules.defaultConvectionScheme =
         ConvectionScheme::create(config.defaultScheme);
-    modules.momentumConvectionScheme.reset();
-    modules.kConvectionScheme.reset();
-    modules.omegaConvectionScheme.reset();
 
     if (!config.momentumScheme.empty())
     {
@@ -70,7 +67,7 @@ void makeConvectionSchemes
 const ConvectionScheme& resolveConvectionScheme
 (
     const std::unique_ptr<ConvectionScheme>& specific,
-    const std::unique_ptr<ConvectionScheme>& fallback
+    const ConvectionScheme& fallback
 )
 {
     if (specific)
@@ -78,12 +75,7 @@ const ConvectionScheme& resolveConvectionScheme
         return *specific;
     }
 
-    if (!fallback)
-    {
-        FatalError("Default convection scheme must be set.");
-    }
-
-    return *fallback;
+    return fallback;
 }
 
 
@@ -184,13 +176,13 @@ void SolverSetup::configure
                 resolveConvectionScheme
                 (
                     modules.kConvectionScheme,
-                    modules.defaultConvectionScheme
+                    *modules.defaultConvectionScheme
                 ),
                 *modules.kSolver,
                 resolveConvectionScheme
                 (
                     modules.omegaConvectionScheme,
-                    modules.defaultConvectionScheme
+                    *modules.defaultConvectionScheme
                 ),
                 *modules.omegaSolver,
                 config.time.timeStep,
@@ -220,7 +212,7 @@ void SolverSetup::configure
             resolveConvectionScheme
             (
                 modules.momentumConvectionScheme,
-                modules.defaultConvectionScheme
+                *modules.defaultConvectionScheme
             ),
             *modules.momentumSolver,
             *modules.pressureSolver,

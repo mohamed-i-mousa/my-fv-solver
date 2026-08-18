@@ -123,8 +123,7 @@ public:
     /// Get turbulent viscosity for a boundary face
     [[nodiscard]] Scalar boundaryTurbulentViscosity
     (
-        const Face& face,
-        const BoundaryConditions& bcManager
+        const Face& face
     ) const override;
 
     /// Wall shear stress (tau/rho) from the wall-function state and velocity
