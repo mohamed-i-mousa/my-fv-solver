@@ -7,7 +7,7 @@
 
  ------------------------------------------------------------------------------
  * @file MPIScalarType.h
- * @brief The MPI datatype matching project's Scalar type
+ * @brief The MPI datatypes matching project primitive types
  *****************************************************************************/
 
 #pragma once
@@ -20,7 +20,15 @@
 // Project headers
 #include "Scalar.h"
 
-// ****************************** MPI Scalar Type *****************************
+// **************************** Build-Time Invariants *************************
+
+static_assert
+(
+    sizeof(Count) == 8,
+    "Count operations assume a 64-bit Count (MPI_UINT64_T)"
+);
+
+// ****************************** MPI Data Types ******************************
 
 /// MPI datatype of one Scalar
 [[nodiscard]] inline MPI_Datatype MPIScalarType()

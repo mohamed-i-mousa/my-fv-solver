@@ -22,19 +22,6 @@
 #include "MPIScalarType.h"
 #include "Comm.h"
 
-// ****************************** Internal Helpers ****************************
-
-namespace
-{
-
-static_assert
-(
-    sizeof(Count) == 8,
-    "Count reductions assume a 64-bit Count"
-);
-
-} // namespace
-
 // **************************** Global Reductions *****************************
 
 Scalar globalSum(Scalar value)

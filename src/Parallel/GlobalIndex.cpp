@@ -20,15 +20,7 @@
 
 // Project headers
 #include "Comm.h"
-
-// **************************** Build-Time Invariants **************************
-
-// Count buffers are handed to MPI as MPI_UINT64_T
-static_assert
-(
-    sizeof(Count) == 8,
-    "GlobalIndex reductions assume a 64-bit Count"
-);
+#include "MPIScalarType.h"
 
 // ************************* Special Member Functions *************************
 
