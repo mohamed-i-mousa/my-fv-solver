@@ -422,13 +422,8 @@ void RANS::initializeWallFunctionGeometry
         {
             const auto& face = mesh_.faces()[faceIdx];
             if (!face.isBoundary()) continue;
-
-            const auto& patch = face.patch();
-            if
-            (
-                patch.has_value()
-             && patch->get().type() == PatchType::wall
-            )
+            
+            if (face.patch()->get().type() == PatchType::wall)
             {
                 totalPolyWallArea[cellIdx] += face.projectedArea();
             }

@@ -101,12 +101,7 @@ public:
                 continue;
             }
 
-            const auto& patch = face.patch();
-            if
-            (
-                !patch.has_value()
-             || patch->get().type() != PatchType::wall
-            )
+            if (face.patch()->get().type() != PatchType::wall)
             {
                 continue;
             }
