@@ -133,6 +133,3 @@ private:
 
 /// Type alias for scalar face fields (e.g., mass flux)
 using FaceFluxField = FaceData<Scalar>;
-
-/// Type alias for vector face fields (e.g., gradients)
-using FaceVectorField = FaceData<Vector>;

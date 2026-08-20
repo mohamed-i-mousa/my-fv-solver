@@ -84,20 +84,6 @@ void BoundaryConditions::setBoundaryType
 
 // ***************************** Accessor Methods *****************************
 
-const BoundaryPatch& BoundaryConditions::patch(const Name& patchName) const
-{
-    for (const auto& patch : patches_)
-    {
-        if (patch.name() == patchName)
-        {
-            return patch;
-        }
-    }
-
-    FatalError("Patch " + patchName + " not found");
-}
-
-
 bool BoundaryConditions::hasBoundaryType
 (
     const Name& patchName,

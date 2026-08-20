@@ -67,21 +67,6 @@ public:
 
 // ***************************** Accessor Methods *****************************
 
-    /// Get boundary patch by name
-    [[nodiscard]] const BoundaryPatch& patch(const Name& patchName) const;
-
-    /// Get all boundary patches
-    [[nodiscard]] const PatchList& patches() const noexcept
-    {
-        return patches_;
-    }
-
-    /// Get number of patches
-    [[nodiscard]] Count numPatches() const noexcept
-    {
-        return patches_.size();
-    }
-
     /// Compact boundary index of a boundary face (FatalError on interior)
     [[nodiscard]] Index boundaryIdx(Index faceIdx) const;
 
