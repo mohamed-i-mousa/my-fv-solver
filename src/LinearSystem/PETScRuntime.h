@@ -19,17 +19,7 @@
  * comm() is the single source of the communicator every PETSc object is
  * created on. It returns the world communicator: on a single rank the
  * standard Mat/Vec types resolve to their sequential variants, and on
- * multiple ranks (multi-GPU phases) to their MPI variants, so the call
- * sites never change.
- *
- * @class PETScRuntime
- * - Constructor runs PetscInitialize, destructor runs PetscFinalize
- * - comm(): communicator for all PETSc object creation
- * - insertOptions(): forwards the case file's linearSolvers.petscOptions
- *   string into the PETSc options database (runtime solver experiments
- *   without rebuilds). Each solver reads the database through its own
- *   equation prefix — momentum_, pressure_, k_, omega_ — so an entry
- *   targets one solver, e.g. "-pressure_pc_type icc -momentum_ksp_view"
+ * multiple ranks to their MPI variants, so the call sites never change.
  *****************************************************************************/
 
 #pragma once
@@ -63,6 +53,23 @@ static_assert
     sizeof(PetscInt) == 4,
     "PetscInt must be 32-bit: rebuild PETSc without --with-64-bit-indices"
 );
+
+// *********************** PETSc Version Compatibility ************************
+
+// For Ubuntu users, the apt repos don't carry PETSc 3.22
+// In older releases, PETSC_DEFAULT served as both sentinel values.
+#ifndef PETSC_CURRENT
+#define PETSC_CURRENT PETSC_DEFAULT
+#endif
+
+#ifndef PETSC_UNLIMITED
+#define PETSC_UNLIMITED PETSC_DEFAULT
+#endif
+
+// PETSc < 3.19 compatibility
+#ifndef PETSC_SUCCESS
+#define PETSC_SUCCESS 0
+#endif
 
 // ******************************** CheckPETSc ********************************
 
