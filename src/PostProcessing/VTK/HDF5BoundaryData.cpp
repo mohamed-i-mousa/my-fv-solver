@@ -211,17 +211,6 @@ void HDF5BoundaryData::writeGeometry()
             ++faceIdx
         )
         {
-            if (faceIdx >= allFaces.size())
-            {
-                FatalError
-                (
-                    "Boundary patch '" + patch.name()
-                  + "' references face " + std::to_string(faceIdx)
-                  + ", but the mesh has only "
-                  + std::to_string(allFaces.size()) + " faces."
-                );
-            }
-
             const Face& face = allFaces[faceIdx];
 
             if (!face.isBoundary())
