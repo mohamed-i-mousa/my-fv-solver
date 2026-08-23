@@ -86,14 +86,33 @@ TEST_CASE("Time-scheme selection", "[selection]")
 
 // ***************************** Linear Solvers ******************************
 
-TEST_CASE("Linear-solver selection lists both Krylov methods", "[selection]")
+TEST_CASE("Linear-solver selection lists every supported method", "[selection]")
 {
-    // The name list is PETSc-free; constructing a solver needs a live PETSc
-    // runtime and is covered in the MPI suite instead.
-    const NameList names = LinearSolver::availableSolvers();
-    REQUIRE(names.size() == Count{2});
-    REQUIRE(contains(names, "PCG"));
-    REQUIRE(contains(names, "BiCGSTAB"));
+    const NameList solvers = LinearSolver::availableSolvers();
+    REQUIRE(contains(solvers, "BiCGSTAB"));
+    REQUIRE(contains(solvers, "PCG"));
+    REQUIRE(contains(solvers, "GMRES"));
+    REQUIRE(contains(solvers, "FGMRES"));
+    REQUIRE(contains(solvers, "TFQMR"));
+    REQUIRE(contains(solvers, "CGS"));
+    REQUIRE(contains(solvers, "MINRES"));
+    REQUIRE(contains(solvers, "Richardson"));
+    REQUIRE(contains(solvers, "Chebyshev"));
+    REQUIRE(contains(solvers, "PreOnly"));
+
+    const NameList pcs = LinearSolver::availablePreconditioners();
+    REQUIRE(contains(pcs, "Jacobi"));
+    REQUIRE(contains(pcs, "None"));
+    REQUIRE(contains(pcs, "ILU"));
+    REQUIRE(contains(pcs, "ICC"));
+    REQUIRE(contains(pcs, "SOR"));
+    REQUIRE(contains(pcs, "GaussSeidel"));
+    REQUIRE(contains(pcs, "AMG"));
+    REQUIRE(contains(pcs, "GAMG"));
+    REQUIRE(contains(pcs, "BlockJacobi"));
+    REQUIRE(contains(pcs, "ASM"));
+    REQUIRE(contains(pcs, "LU"));
+    REQUIRE(contains(pcs, "Cholesky"));
 }
 
 // **************************** Turbulence Models ****************************

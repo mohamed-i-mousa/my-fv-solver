@@ -437,13 +437,39 @@ linearSolvers
 
 Recognized keys per section:
 
-- `solver`: `BiCGSTAB` (non-symmetric matrices: U, k, omega) or `PCG`
-  (SPD matrices: p). Optional; defaults to `BiCGSTAB` for U/k/omega and `PCG`
-  for p.
-- `preconditioner`: parsed for forward compatibility but not yet consumed;
-  the PETSc solvers default to Jacobi (diagonal). Use `petscOptions` to
-  select another preconditioner per equation. Optional; defaults to
-  `Jacobi`.
+- `solver`: linear solver type. Defaults to `BiCGSTAB` for U/k/omega
+  and `PCG` for pressure. Available options:
+  - `BiCGSTAB`: Bi-Conjugate Gradient Stabilized (recommended for asymmetric
+    momentum and turbulence equations)
+  - `PCG`: Preconditioned Conjugate Gradient (recommended for
+    symmetric positive-definite pressure Poisson systems)
+  - `GMRES`: Generalized Minimal Residual
+  - `FGMRES`: Flexible GMRES (supports variable/nonlinear preconditioners)
+  - `TFQMR`: Transpose-Free Quasi-Minimal Residual
+  - `CGS`: Conjugate Gradient Squared
+  - `MINRES`: Minimal Residual method (for symmetric systems)
+  - `Richardson`: Stationary Richardson iteration
+  - `Chebyshev`: Chebyshev polynomial iteration
+  - `PreOnly`: Applies only the preconditioner (e.g. for direct LU/Cholesky
+    or pure multigrid)
+
+- `preconditioner`: system preconditioner. Defaults to `Jacobi`.
+  Available options:
+  - `Jacobi`: Point-Jacobi / diagonal scaling (cheap, highly parallel scalable)
+  - `None`: No preconditioning (Identity)
+  - `ILU`: Incomplete LU factorization (level-0 ILU; in parallel runs as
+    block-Jacobi with local ILU on each rank)
+  - `ICC`: Incomplete Cholesky factorization (for symmetric positive-definite
+    pressure systems)
+  - `SOR`: Successive Over-Relaxation / Gauss-Seidel (alias `GaussSeidel`)
+  - `AMG`: Geometric-Algebraic Multigrid (alias `GAMG`, PETSc native algebraic
+    multigrid; recommended for fast $O(N)$ convergence on large pressure Poisson
+    grids in serial and parallel)
+  - `BlockJacobi`: Block Jacobi across MPI processes
+  - `ASM`: Additive Schwarz Method (overlapping domain decomposition)
+  - `LU`: Direct sparse LU factorization
+  - `Cholesky`: Direct sparse Cholesky factorization (for symmetric systems)
+
 - `tolerance`: relative residual tolerance used by the iterative
   solvers (`|r| / |b|`, true unpreconditioned residual).
 - `maxIter`: iteration cap before the solver gives up.

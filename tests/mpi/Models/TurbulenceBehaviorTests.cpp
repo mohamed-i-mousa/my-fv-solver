@@ -139,11 +139,19 @@ TEST_CASE
     const auto omegaScheme = ConvectionScheme::create("Upwind");
     const auto kSolver = LinearSolver::create
     (
-        "PCG", TestTolerances::solverTolerance, Count{200}, "k"
+        "PCG",
+        "Jacobi",
+        TestTolerances::solverTolerance,
+        Count{200},
+        "k"
     );
     const auto omegaSolver = LinearSolver::create
     (
-        "PCG", TestTolerances::solverTolerance, Count{200}, "omega"
+        "PCG",
+        "Jacobi",
+        TestTolerances::solverTolerance,
+        Count{200},
+        "omega"
     );
 
     const Scalar initialK = S(0.375);

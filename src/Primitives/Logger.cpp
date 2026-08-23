@@ -56,18 +56,20 @@ void Logger::linearSolverConfigHeader()
 
     header
         << "    "
-        << std::left  << std::setw(11) << "Equation"
-        << std::left  << std::setw(11) << "Solver"
+        << std::left  << std::setw(10) << "Equation"
+        << std::left  << std::setw(12) << "Solver"
+        << std::left  << std::setw(16) << "Preconditioner"
         << std::left  << std::setw(12) << "Tolerance"
-        << std::right << std::setw(13) << "Max Iters"
+        << std::right << std::setw(11) << "Max Iters"
         << '\n';
 
     header
         << "    "
-        << std::left  << std::setw(11) << "--------"
-        << std::left  << std::setw(11) << "--------"
+        << std::left  << std::setw(10) << "--------"
+        << std::left  << std::setw(12) << "------"
+        << std::left  << std::setw(16) << "--------------"
         << std::left  << std::setw(12) << "----------"
-        << std::right << std::setw(13) << "---------"
+        << std::right << std::setw(11) << "---------"
         << '\n';
 
     std::cout << header.str();
@@ -78,6 +80,7 @@ void Logger::linearSolverConfigRow
 (
     const Name& equation,
     const Name& solver,
+    const Name& preconditioner,
     Scalar tolerance,
     Count maxIters
 )
@@ -85,10 +88,12 @@ void Logger::linearSolverConfigRow
     std::ostringstream row;
 
     row
-        << "    " << std::left  << std::setw(11) << equation
-        << std::left  << std::setw(11) << solver
+        << "    "
+        << std::left  << std::setw(10) << equation
+        << std::left  << std::setw(12) << solver
+        << std::left  << std::setw(16) << preconditioner
         << std::scientific << std::setprecision(6) << tolerance
-        << std::right << std::setw(13) << maxIters;
+        << std::right << std::setw(11) << maxIters;
 
     std::cout << row.str() << '\n';
 }

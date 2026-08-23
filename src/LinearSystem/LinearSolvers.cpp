@@ -25,18 +25,27 @@
 #include "Reduce.h"
 #include "RuntimeSelection.h"
 
+
 // ************************* Special Member Functions *************************
 
 PetscLinearSolver::PetscLinearSolver
 (
     Name name,
+    Name preconditioner,
     KSPType kspType,
+    PCType pcType,
     Scalar tolerance,
     Count maxIterations,
     const Name& optionsPrefix
 )
 :
-    LinearSolver(std::move(name), tolerance, maxIterations)
+    LinearSolver
+    (
+        std::move(name),
+        std::move(preconditioner),
+        tolerance,
+        maxIterations
+    )
 {
     CheckPETSc(KSPCreate(PETScRuntime::comm(), &ksp_));
     CheckPETSc(KSPSetType(ksp_, kspType));
@@ -44,13 +53,46 @@ PetscLinearSolver::PetscLinearSolver
     // Scope case-file petscOptions entries to this equation's solver
     CheckPETSc(KSPSetOptionsPrefix(ksp_, optionsPrefix.c_str()));
 
-    // Jacobi baseline, overridable through the case file's petscOptions
-    PC preconditioner = nullptr;
-    CheckPETSc(KSPGetPC(ksp_, &preconditioner));
-    CheckPETSc(PCSetType(preconditioner, PCJACOBI));
+    // Configure the requested preconditioner
+    PC pc = nullptr;
+    CheckPETSc(KSPGetPC(ksp_, &pc));
 
-    // Converge on the true residual |r|/|b|, matching the diagnostics
-    CheckPETSc(KSPSetNormType(ksp_, KSP_NORM_UNPRECONDITIONED));
+    if (LinearSolver::preconditioner() == "ILU")
+    {
+        CheckPETSc(PCSetType(pc, PCBJACOBI));
+    }
+    else if (LinearSolver::preconditioner() == "ICC")
+    {
+        CheckPETSc(PCSetType(pc, PCBJACOBI));
+        const std::string optName =
+            optionsPrefix.empty()
+          ? "-sub_pc_type"
+          : "-" + optionsPrefix + "sub_pc_type";
+        CheckPETSc(PetscOptionsSetValue(nullptr, optName.c_str(), "icc"));
+    }
+    else
+    {
+        CheckPETSc(PCSetType(pc, pcType));
+        if
+        (
+            LinearSolver::preconditioner() == "SOR"
+         || LinearSolver::preconditioner() == "GaussSeidel"
+        )
+        {
+            CheckPETSc(PCSORSetSymmetric(pc, SOR_LOCAL_SYMMETRIC_SWEEP));
+        }
+    }
+
+    // PreOnly applies the preconditioner directly without Krylov norm tracking
+    if (std::string(kspType) == KSPPREONLY)
+    {
+        CheckPETSc(KSPSetNormType(ksp_, KSP_NORM_NONE));
+    }
+    else
+    {
+        // Converge on the true residual |r|/|b|, matching the diagnostics
+        CheckPETSc(KSPSetNormType(ksp_, KSP_NORM_UNPRECONDITIONED));
+    }
 
     // The current field values seed the Krylov iteration
     CheckPETSc(KSPSetInitialGuessNonzero(ksp_, PETSC_TRUE));
@@ -175,47 +217,106 @@ void PetscLinearSolver::solve
 std::unique_ptr<LinearSolver> LinearSolver::create
 (
     const Name& solverName,
+    const Name& preconditionerName,
     Scalar tolerance,
     Count maxIterations,
     const Name& optionsPrefix
 )
 {
-    if (solverName == "BiCGSTAB")
+    // Resolve Krylov solver type
+    KSPType kspType = nullptr;
+
+    if      (solverName == "BiCGSTAB")   kspType = KSPBCGS;
+    else if (solverName == "PCG")        kspType = KSPCG;
+    else if (solverName == "GMRES")      kspType = KSPGMRES;
+    else if (solverName == "FGMRES")     kspType = KSPFGMRES;
+    else if (solverName == "TFQMR")      kspType = KSPTFQMR;
+    else if (solverName == "CGS")        kspType = KSPCGS;
+    else if (solverName == "MINRES")     kspType = KSPMINRES;
+    else if (solverName == "Richardson") kspType = KSPRICHARDSON;
+    else if (solverName == "Chebyshev")  kspType = KSPCHEBYSHEV;
+    else if (solverName == "PreOnly")    kspType = KSPPREONLY;
+    else
     {
-        return
-            std::make_unique<PetscLinearSolver>
-            (
-                solverName,
-                KSPBCGS,
-                tolerance,
-                maxIterations,
-                optionsPrefix
-            );
+        RuntimeSelection::unknownSelection
+        (
+            "linear solver",
+            solverName,
+            availableSolvers()
+        );
     }
 
-    if (solverName == "PCG")
+    // Resolve preconditioner type
+    PCType pcType = nullptr;
+
+    if      (preconditionerName == "Jacobi")      pcType = PCJACOBI;
+    else if (preconditionerName == "None")         pcType = PCNONE;
+    else if (preconditionerName == "ILU")          pcType = PCILU;
+    else if (preconditionerName == "ICC")          pcType = PCICC;
+    else if (preconditionerName == "SOR")          pcType = PCSOR;
+    else if (preconditionerName == "GaussSeidel")  pcType = PCSOR;
+    else if (preconditionerName == "AMG")          pcType = PCGAMG;
+    else if (preconditionerName == "GAMG")         pcType = PCGAMG;
+    else if (preconditionerName == "BlockJacobi")  pcType = PCBJACOBI;
+    else if (preconditionerName == "ASM")          pcType = PCASM;
+    else if (preconditionerName == "LU")           pcType = PCLU;
+    else if (preconditionerName == "Cholesky")     pcType = PCCHOLESKY;
+    else
     {
-        return
-            std::make_unique<PetscLinearSolver>
-            (
-                solverName,
-                KSPCG,
-                tolerance,
-                maxIterations,
-                optionsPrefix
-            );
+        RuntimeSelection::unknownSelection
+        (
+            "preconditioner",
+            preconditionerName,
+            availablePreconditioners()
+        );
     }
 
-    RuntimeSelection::unknownSelection
+    return std::make_unique<PetscLinearSolver>
     (
-        "linear solver",
         solverName,
-        availableSolvers()
+        preconditionerName,
+        kspType,
+        pcType,
+        tolerance,
+        maxIterations,
+        optionsPrefix
     );
 }
 
 
 NameList LinearSolver::availableSolvers()
 {
-    return {"BiCGSTAB", "PCG"};
+    return
+    {
+        "BiCGSTAB",
+        "PCG",
+        "GMRES",
+        "FGMRES",
+        "TFQMR",
+        "CGS",
+        "MINRES",
+        "Richardson",
+        "Chebyshev",
+        "PreOnly"
+    };
+}
+
+
+NameList LinearSolver::availablePreconditioners()
+{
+    return
+    {
+        "Jacobi",
+        "None",
+        "ILU",
+        "ICC",
+        "SOR",
+        "GaussSeidel",
+        "AMG",
+        "GAMG",
+        "BlockJacobi",
+        "ASM",
+        "LU",
+        "Cholesky"
+    };
 }

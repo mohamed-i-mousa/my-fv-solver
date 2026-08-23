@@ -217,7 +217,11 @@ TEST_CASE("setValues pins a cell through the solve", "[petsc]")
 
     const auto solver = LinearSolver::create
     (
-        "PCG", TestTolerances::solverTolerance, Count{200}, "constraint"
+        "PCG",
+        "Jacobi",
+        TestTolerances::solverTolerance,
+        Count{200},
+        "constraint"
     );
     solver->solve(x, matrix.matrixA(), matrix.rhsVec());
 

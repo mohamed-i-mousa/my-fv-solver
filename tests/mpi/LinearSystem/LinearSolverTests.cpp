@@ -98,7 +98,7 @@ void registerDiffusionBoundaries(BoundaryConditions& bc, Mesh& mesh)
 
 // *********************** Krylov Solvers On A Box **************************
 
-TEST_CASE("Both Krylov solvers reproduce the linear profile", "[petsc]")
+TEST_CASE("Krylov solvers reproduce the linear profile", "[petsc]")
 {
     DecomposedBoxMesh box(8, 2, 2);
 
@@ -126,7 +126,23 @@ TEST_CASE("Both Krylov solvers reproduce the linear profile", "[petsc]")
     matrix.buildMatrix(equation);
     matrix.assemble();
 
-    for (const Name& solverName : {Name("PCG"), Name("BiCGSTAB")})
+    const std::vector<std::pair<Name, Name>> configurations =
+    {
+        {"PCG", "Jacobi"},
+        {"PCG", "AMG"},
+        {"PCG", "None"},
+        {"BiCGSTAB", "Jacobi"},
+        {"BiCGSTAB", "ILU"},
+        {"BiCGSTAB", "BlockJacobi"},
+        {"BiCGSTAB", "SOR"},
+        {"BiCGSTAB", "AMG"},
+        {"GMRES", "Jacobi"},
+        {"GMRES", "ILU"},
+        {"GMRES", "BlockJacobi"},
+        {"GMRES", "AMG"}
+    };
+
+    for (const auto& [solverName, pcName] : configurations)
     {
         // A fresh zero-initialised solution vector per solver
         ScalarField solution;
@@ -134,15 +150,18 @@ TEST_CASE("Both Krylov solvers reproduce the linear profile", "[petsc]")
 
         const auto solver = LinearSolver::create
         (
-            solverName, TestTolerances::solverTolerance, Count{200}, "test"
+            solverName,
+            pcName,
+            TestTolerances::solverTolerance,
+            Count{200},
+            "test"
         );
         solver->solve(x, matrix.matrixA(), matrix.rhsVec());
 
-        // CHECK, not REQUIRE: the next iteration creates and runs another
-        // Krylov solver, and unwinding one rank out of the loop would leave
-        // the others waiting inside those collectives
+        INFO("Testing solver=" << solverName << ", preconditioner=" << pcName);
         CHECK(solver->lastPerformance().converged);
         CHECK(solver->lastPerformance().solverName == solverName);
+        CHECK(solver->preconditioner() == pcName);
 
         for
         (

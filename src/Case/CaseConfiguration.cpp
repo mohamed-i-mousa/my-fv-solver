@@ -100,6 +100,13 @@ LinearSolverSettings readSolverEntry
         "linearSolvers." + key + ".solver"
     );
 
+    validateSelection
+    (
+        defaults.preconditioner,
+        LinearSolver::availablePreconditioners(),
+        "linearSolvers." + key + ".preconditioner"
+    );
+
     if (defaults.tolerance <= S(0.0))
     {
         FatalError("linearSolvers." + key + ".tolerance must be positive.");

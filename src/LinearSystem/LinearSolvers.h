@@ -81,11 +81,13 @@ public:
     LinearSolver
     (
         Name name,
+        Name preconditioner,
         Scalar tolerance = S(1e-6),
         Count maxIterations = 1000
     )
     :
         name_{std::move(name)},
+        preconditioner_{std::move(preconditioner)},
         tolerance_{tolerance},
         maxIterations_{maxIterations}
     {}
@@ -107,7 +109,8 @@ public:
     /// Construct the solver by name; optionsPrefix scopes its petscOptions
     [[nodiscard]] static std::unique_ptr<LinearSolver> create
     (
-        const Name& name,
+        const Name& solverName,
+        const Name& preconditionerName,
         Scalar tolerance,
         Count maxIterations,
         const Name& optionsPrefix
@@ -115,6 +118,9 @@ public:
 
     /// Names of every selectable linear solver
     [[nodiscard]] static NameList availableSolvers();
+
+    /// Names of every selectable preconditioner
+    [[nodiscard]] static NameList availablePreconditioners();
 
 // ***************************** Accessor Methods *****************************
 
@@ -136,6 +142,18 @@ public:
         return lastPerformance_;
     }
 
+    /// Solver name, used in diagnostic output
+    [[nodiscard]] const Name& name() const noexcept
+    {
+        return name_;
+    }
+
+    /// Preconditioner name, used in diagnostic output
+    [[nodiscard]] const Name& preconditioner() const noexcept
+    {
+        return preconditioner_;
+    }
+
 // ******************************* Solver Method ******************************
 
     /// Solve the sparse system, writing the result in place through x
@@ -145,12 +163,6 @@ public:
         Mat A,
         Vec b
     ) = 0;
-
-    /// Solver name, used in diagnostic output
-    [[nodiscard]] const Name& name() const noexcept
-    {
-        return name_;
-    }
 
 // ***************************** Protected Methods ****************************
 
@@ -168,6 +180,9 @@ private:
 
     /// Solver name
     Name name_;
+
+    /// Preconditioner name
+    Name preconditioner_;
 
     /// Relative residual tolerance for convergence
     Scalar tolerance_;
@@ -192,11 +207,13 @@ class PetscLinearSolver final : public LinearSolver
 {
 public:
 
-    /// Construct the owned KSP with the given Krylov type
+    /// Construct the owned KSP with the given Krylov and preconditioner types
     PetscLinearSolver
     (
         Name name,
+        Name preconditioner,
         KSPType kspType,
+        PCType pcType,
         Scalar tolerance,
         Count maxIterations,
         const Name& optionsPrefix

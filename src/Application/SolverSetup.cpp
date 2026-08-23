@@ -88,6 +88,7 @@ std::unique_ptr<LinearSolver> makeLinearSolver
     return LinearSolver::create
     (
         config.solver,
+        config.preconditioner,
         config.tolerance,
         config.maxIter,
         optionsPrefix
@@ -104,7 +105,8 @@ void logLinearSolver
     Logger::linearSolverConfigRow
     (
         fieldName,
-        Name{config.solver},
+        config.solver,
+        config.preconditioner,
         config.tolerance,
         config.maxIter
     );

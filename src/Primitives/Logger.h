@@ -46,6 +46,7 @@ namespace Logger
     (
         const Name& equation,
         const Name& solver,
+        const Name& preconditioner,
         Scalar tolerance,
         Count maxIters
     );
