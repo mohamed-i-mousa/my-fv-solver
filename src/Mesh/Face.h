@@ -280,8 +280,3 @@ private:
     /// Owning boundary patch (nullopt for internal or unlinked faces)
     OptionalRef<BoundaryPatch> patch_;
 };
-
-// *************************** Non-Member Functions ***************************
-
-/// Stream output operator for Face
-std::ostream& operator<<(std::ostream& os, const Face& f);

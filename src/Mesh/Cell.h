@@ -166,8 +166,3 @@ private:
     /// Cell volume
     Scalar volume_ = S(0.0);
 };
-
-// *************************** Non-Member Functions ***************************
-
-/// Stream output operator for Cell
-std::ostream& operator<<(std::ostream& os, const Cell& c);

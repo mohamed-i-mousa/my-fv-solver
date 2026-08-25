@@ -17,9 +17,6 @@
 
 // Standard library headers
 #include <cmath>
-#include <ostream>
-#include <iomanip>
-#include <sstream>
 
 // Project headers
 #include "ErrorHandler.h"
@@ -62,42 +59,4 @@ void Cell::geometricProperties
     }
 
     centroid_ = centroidSum / (S(2.0) * volume_);
-}
-
-// *************************** Non-Member Functions ***************************
-
-std::ostream& operator<<(std::ostream& os, const Cell& c)
-{
-    os  << "Cell(ID: " << c.idx() << ", Faces: [";
-
-    const auto& faces = c.faceIndices();
-    for (Index faceIdx = 0; faceIdx < faces.size(); ++faceIdx)
-    {
-        os  << faces[faceIdx]
-            << (faceIdx == faces.size() - 1 ? "" : ", ");
-    }
-
-    os  << "], Neighbors: [";
-
-    const auto& neighbors = c.neighborCellIndices();
-    for (Index neighborIdx = 0; neighborIdx < neighbors.size(); ++neighborIdx)
-    {
-        os  << neighbors[neighborIdx]
-            << (neighborIdx == neighbors.size() - 1 ? "" : ", ");
-    }
-
-    os  << ']';
-
-    // Buffer locally so the fixed/precision change never reaches os
-    std::ostringstream geometry;
-    geometry
-        << std::fixed
-        << std::setprecision(6)
-        << ", Volume: " << c.volume()
-        << ", Centroid: " << c.centroid();
-
-    os  << geometry.str();
-    os  << ')';
-
-    return os;
 }

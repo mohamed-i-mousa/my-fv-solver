@@ -17,9 +17,6 @@
 
 // Standard library headers
 #include <cmath>
-#include <ostream>
-#include <iomanip>
-#include <sstream>
 
 // Project headers
 #include "Cell.h"
@@ -195,52 +192,4 @@ void Face::distances(const CellList& allCells)
         dNf_ = dNfVec;
         dNfMag_ = magnitude(dNfVec);
     }
-}
-
-// *************************** Non-Member Functions ***************************
-
-std::ostream& operator<<(std::ostream& os, const Face& f)
-{
-    os  << "Face(ID: " << f.idx() << ", Nodes: [";
-
-    const auto& nodes = f.nodeIndices();
-    for (Index nodeIdx = 0; nodeIdx < nodes.size(); ++nodeIdx)
-    {
-        os  << nodes[nodeIdx]
-            << (nodeIdx == nodes.size() - 1 ? "" : ", ");
-    }
-
-os  <<  "], Owner: " << f.ownerCell() << ", Neighbor: "
-    <<  (
-            f.isBoundary() ? "Boundary"
-            : std::to_string(f.neighborCell().value())
-        );
-
-
-    // Buffer locally so the fixed/precision change never reaches os
-    std::ostringstream geometry;
-    geometry
-        << std::fixed << std::setprecision(6)
-        << ", Centroid: " << f.centroid()
-        << ", Area: "   << f.projectedArea()
-        << ", Normal: " << f.normal();
-
-    os  << geometry.str();
-
-
-    // Buffer locally so the fixed/precision change never reaches os
-    std::ostringstream distances;
-    distances
-        << std::fixed << std::setprecision(6)
-        << ", dPfMag: " << f.dPfMag();
-
-    if (f.dNfMag().has_value())
-    {
-        distances << ", dNfMag: " << f.dNfMag().value();
-    }
-
-    os  << distances.str();
-    os  << ')';
-
-    return os;
 }

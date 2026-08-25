@@ -64,8 +64,6 @@ constexpr Scalar smallValue = std::numeric_limits<Scalar>::epsilon();
 
 constexpr Scalar vSmallValue = std::numeric_limits<Scalar>::min();
 
-constexpr Scalar largeValue = S(1.0) / smallValue;
-
 // ********************************* Aliases **********************************
 
 using ScalarList = std::vector<Scalar>;
