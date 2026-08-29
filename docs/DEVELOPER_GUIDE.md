@@ -97,8 +97,8 @@ following the OpenFOAM convention.
   - `CaseReader.h/.cpp`, `CaseConfiguration.h/.cpp`
 - **`src/Application/`**: top-level orchestration and solver assembly
   - `CFDApplication.h/.cpp`, `SolverSetup.h/.cpp`
-- **`src/main.cpp`**: command-line entry point, creates `CFDApplication` and
-  starts the simulation workflow
+- **`src/main.cpp`**: command-line entry point, calls `CFDApplication::run(caseFile)`
+  and starts the simulation workflow
 
 
 ## Core data structures
@@ -783,8 +783,8 @@ Used by: `Face`, `Cell`, `BoundaryPatch`, `CellData<T>`, `FaceData<T>`.
 
 ### Runtime ownership boundaries
 
-`CFDApplication` is intentionally thin: it owns only the case-file path and
-coordinates the phases in `run()`.
+`CFDApplication` is a stateless namespace coordinating the simulation phases
+in `run(caseFile)`.
 
 `CaseConfiguration` owns typed non-BC runtime input. Boundary conditions are
 kept asymmetric by design: `BCLoader` streams the raw

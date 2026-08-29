@@ -77,8 +77,7 @@ int main(int argc, char* argv[])
             << "Using default case: " << caseFile << '\n';
     }
 
-    CFDApplication app(caseFile);
-    app.run();
+    CFDApplication::run(caseFile);
 
     const auto endTime = std::chrono::high_resolution_clock::now();
 

@@ -9,9 +9,8 @@
  * @file CFDApplication.h
  * @brief Top-level application orchestrator for the CFD solver
  *
- * @details CFDApplication owns only the case-file path and coordinates the
- * simulation phases in run(). Phase-specific parsing, setup, solver assembly,
- * reporting, and export live in focused modules.
+ * @details Coordinates the simulation phases in run(). Parsing, setup,
+ * solver assembly, reporting, and export.
  *****************************************************************************/
 
 #pragma once
@@ -20,37 +19,12 @@
 
 #include "StringTypes.h"
 
-// *************************** class CFDApplication ***************************
+// ************************* namespace CFDApplication *************************
 
-class CFDApplication
+namespace CFDApplication
 {
-public:
 
-// ************************* Special Member Functions *************************
+/// Run the full simulation
+void run(const FilePath& caseFile);
 
-    /// Constructor for CFDApplication
-    explicit CFDApplication(const FilePath& caseFile);
-
-    /// Copy constructor and assignment - Not copyable
-    CFDApplication(const CFDApplication&) = delete;
-    CFDApplication& operator=(const CFDApplication&) = delete;
-
-    /// Move constructor and assignment - Not movable
-    CFDApplication(CFDApplication&&) = delete;
-    CFDApplication& operator=(CFDApplication&&) = delete;
-
-    /// Destructor
-    ~CFDApplication() noexcept;
-
-// ******************************** Solver Run ********************************
-
-    /// Run the full simulation
-    void run();
-
-// ****************************** Private Members *****************************
-
-private:
-
-    /// Path to case file
-    FilePath caseFile_;
-};
+} // namespace CFDApplication

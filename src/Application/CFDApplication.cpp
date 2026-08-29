@@ -200,24 +200,18 @@ void runTransient
 
 } // namespace
 
-// ************************* Special Member Functions *************************
+// ************************** Application Functions ***************************
 
-CFDApplication::CFDApplication(const FilePath& caseFile)
-:
-    caseFile_{caseFile}
-{}
+namespace CFDApplication
+{
 
-CFDApplication::~CFDApplication() noexcept = default;
-
-// ******************************** Solver Run ********************************
-
-void CFDApplication::run()
+void run(const FilePath& caseFile)
 {
     std::cout << '\n';
     Logger::sectionHeader("Loading Case");
 
     // Read the case file and load configuration
-    CaseReader caseReader(caseFile_);
+    CaseReader caseReader(caseFile);
     const CaseConfiguration config = CaseConfig::loadConfiguration(caseReader);
 
     // Create mesh (decomposed across ranks in a parallel run)
@@ -241,3 +235,5 @@ void CFDApplication::run()
         runTransient(modules, mesh, bcManager, config);
     }
 }
+
+} // namespace CFDApplication
