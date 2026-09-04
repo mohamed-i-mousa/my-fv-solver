@@ -6,17 +6,17 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file UpwindScheme.cpp
+ * @file Upwind.cpp
  * @brief Implementation of the first-order upwind convection scheme
  *****************************************************************************/
 
 // ********************************** Headers *********************************
 
-#include "UpwindScheme.h"
+#include "Upwind.h"
 
 // ****************************** Public Methods ******************************
 
-Scalar UpwindScheme::correction
+Scalar Upwind::correction
 (
     const Face& /*face*/,
     const ScalarField& /*phi*/,

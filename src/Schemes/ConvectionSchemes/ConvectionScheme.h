@@ -48,7 +48,7 @@ public:
     /// Default destructor
     virtual ~ConvectionScheme() = default;
 
-// **************************** Runtime Selection ****************************
+// ***************************** Runtime Selection ****************************
 
     /// Construct the convection scheme selected by name
     [[nodiscard]] static std::unique_ptr<ConvectionScheme> create

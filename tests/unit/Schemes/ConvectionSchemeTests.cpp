@@ -23,9 +23,9 @@
 #include "MeshFixtures.h"
 #include "TestTolerances.h"
 #include "ConvectionScheme.h"
-#include "UpwindScheme.h"
-#include "SecondOrderUpwindScheme.h"
-#include "CentralDifferenceScheme.h"
+#include "Upwind.h"
+#include "SecondOrderUpwind.h"
+#include "CentralDifference.h"
 #include "Mesh.h"
 #include "Face.h"
 #include "Vector.h"
@@ -72,7 +72,7 @@ TEST_CASE("Upwind correction is always zero", "[schemes]")
     const Face& face = internalFace(box.mesh());
     const ScalarField phi;
 
-    const UpwindScheme up;
+    const Upwind up;
 
     const Vector gradA(S(2.0), S(-1.0), S(3.0));
     const Vector gradB(S(-4.0), S(5.0), S(0.5));
@@ -112,7 +112,7 @@ TEST_CASE("SecondOrderUpwind uses the upwind gradient", "[schemes]")
     const Face& face = internalFace(box.mesh());
     const ScalarField phi;
 
-    const SecondOrderUpwindScheme so;
+    const SecondOrderUpwind so;
 
     const Vector gradP(S(2.0), S(0.0), S(0.0));
     const Vector gradN(S(2.0), S(0.0), S(0.0));
@@ -160,7 +160,7 @@ TEST_CASE("CentralDifference vanishes for constant phi", "[schemes]")
     phi[0] = S(4.0);
     phi[1] = S(4.0);
 
-    const CentralDifferenceScheme cd;
+    const CentralDifference cd;
 
     const Vector zero(S(0.0), S(0.0), S(0.0));
 
@@ -176,6 +176,9 @@ TEST_CASE("CentralDifference vanishes for constant phi", "[schemes]")
 TEST_CASE("Convection scheme factory", "[schemes]")
 {
     REQUIRE(ConvectionScheme::create("Upwind") != nullptr);
+    REQUIRE(ConvectionScheme::create("CentralDifference") != nullptr);
+    REQUIRE(ConvectionScheme::create("SecondOrderUpwind") != nullptr);
+    REQUIRE(ConvectionScheme::create("LUST") != nullptr);
 
     const NameList names = ConvectionScheme::availableSchemes();
 

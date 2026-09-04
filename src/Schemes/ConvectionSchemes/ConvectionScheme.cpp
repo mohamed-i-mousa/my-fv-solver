@@ -17,11 +17,11 @@
 
 // Project headers
 #include "RuntimeSelection.h"
-#include "UpwindScheme.h"
-#include "SecondOrderUpwindScheme.h"
-#include "CentralDifferenceScheme.h"
+#include "Upwind.h"
+#include "SecondOrderUpwind.h"
+#include "CentralDifference.h"
 
-// **************************** Runtime Selection ****************************
+// ***************************** Runtime Selection ****************************
 
 std::unique_ptr<ConvectionScheme> ConvectionScheme::create
 (
@@ -30,17 +30,17 @@ std::unique_ptr<ConvectionScheme> ConvectionScheme::create
 {
     if (schemeName == "Upwind")
     {
-        return std::make_unique<UpwindScheme>();
+        return std::make_unique<Upwind>();
     }
 
     if (schemeName == "CentralDifference")
     {
-        return std::make_unique<CentralDifferenceScheme>();
+        return std::make_unique<CentralDifference>();
     }
 
     if (schemeName == "SecondOrderUpwind")
     {
-        return std::make_unique<SecondOrderUpwindScheme>();
+        return std::make_unique<SecondOrderUpwind>();
     }
 
     RuntimeSelection::unknownSelection

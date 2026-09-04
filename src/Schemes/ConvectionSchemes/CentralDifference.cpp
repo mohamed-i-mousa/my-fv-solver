@@ -6,30 +6,33 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file SecondOrderUpwindScheme.cpp
- * @brief Implementation of the second-order upwind convection scheme
+ * @file CentralDifference.cpp
+ * @brief Implementation of the central difference convection scheme
  *****************************************************************************/
 
 // ********************************** Headers *********************************
 
-#include "SecondOrderUpwindScheme.h"
+#include "CentralDifference.h"
+#include "LinearInterpolation.h"
 
 // ****************************** Public Methods ******************************
 
-Scalar SecondOrderUpwindScheme::correction
+Scalar CentralDifference::correction
 (
     const Face& face,
-    const ScalarField& /*phi*/,
-    const Vector& gradPhiP,
-    const Vector& gradPhiN,
+    const ScalarField& phi,
+    const Vector& /*gradPhiP*/,
+    const Vector& /*gradPhiN*/,
     Scalar flowRate
 ) const
 {
-    // Deferred correction: flowRate * grad(phi)_upwind dot d_upwind_to_face
-    const Scalar gradientProjection =
-        (flowRate >= S(0.0))
-      ? dot(gradPhiP, face.dPf())
-      : dot(gradPhiN, face.dNf().value());
+    const Scalar phiFaceCentral = interpolateToFace(face, phi);
 
-    return flowRate * gradientProjection;
+    const Index upwindCell =
+        (flowRate >= S(0.0)) ? face.ownerCell() : face.neighborCell().value();
+
+    const Scalar phiFaceUDS = phi[upwindCell];
+
+    // Deferred correction: flowRate * (phi_central - phi_upwind)
+    return flowRate * (phiFaceCentral - phiFaceUDS);
 }

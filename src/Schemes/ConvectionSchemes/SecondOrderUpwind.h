@@ -6,11 +6,11 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file UpwindScheme.h
- * @brief First-order upwind convection scheme
+ * @file SecondOrderUpwind.h
+ * @brief Second-order upwind convection scheme
  *
- * @details The upwind scheme uses the implicit first-order upwind matrix
- * coefficients without adding a deferred correction term.
+ * @details Second-order upwind adds a deferred correction based on the upwind
+ * cell gradient reconstructed from the upwind cell center to the face.
  *****************************************************************************/
 
 #pragma once
@@ -19,9 +19,9 @@
 
 #include "ConvectionScheme.h"
 
-// **************************** class UpwindScheme ****************************
+// ************************** class SecondOrderUpwind *************************
 
-class UpwindScheme final : public ConvectionScheme
+class SecondOrderUpwind final : public ConvectionScheme
 {
 public:
 

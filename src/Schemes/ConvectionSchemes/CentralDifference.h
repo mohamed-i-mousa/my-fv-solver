@@ -6,11 +6,16 @@
                         SPDX-License-Identifier: Apache-2.0
 
  ------------------------------------------------------------------------------
- * @file CentralDifferenceScheme.h
+ * @file CentralDifference.h
  * @brief Central difference convection scheme
  *
  * @details Central difference adds a deferred correction from the implicit
  * upwind face value to the linearly interpolated face value.
+ *
+ * @class CentralDifference
+ * - Second-order central difference convection discretization
+ * - Deferred correction from implicit upwind to linearly interpolated face
+ *   values
  *****************************************************************************/
 
 #pragma once
@@ -19,9 +24,9 @@
 
 #include "ConvectionScheme.h"
 
-// *********************** class CentralDifferenceScheme **********************
+// ************************** class CentralDifference *************************
 
-class CentralDifferenceScheme final : public ConvectionScheme
+class CentralDifference final : public ConvectionScheme
 {
 public:
 
