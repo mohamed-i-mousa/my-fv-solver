@@ -106,6 +106,7 @@ add_library(turblyze_core OBJECT
     src/Schemes/ConvectionSchemes/Upwind.cpp
     src/Schemes/ConvectionSchemes/CentralDifference.cpp
     src/Schemes/ConvectionSchemes/SecondOrderUpwind.cpp
+    src/Schemes/ConvectionSchemes/LUST.cpp
     src/Schemes/TimeSchemes/TimeScheme.cpp
     src/LinearSystem/Matrix.cpp
     src/LinearSystem/LinearSolvers.cpp

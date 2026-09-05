@@ -62,6 +62,7 @@ TEST_CASE("Convection-scheme selection", "[selection]")
     REQUIRE(contains(names, "Upwind"));
     REQUIRE(contains(names, "CentralDifference"));
     REQUIRE(contains(names, "SecondOrderUpwind"));
+    REQUIRE(contains(names, "LUST"));
 
     for (const Name& name : names)
     {

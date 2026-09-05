@@ -262,7 +262,7 @@ numericalSchemes
     // Options: leastSquares
     gradient        leastSquares;
 
-    // Options: Upwind, CentralDifference, SecondOrderUpwind
+    // Options: Upwind, CentralDifference, SecondOrderUpwind, LUST
     convection
     {
         default     Upwind;

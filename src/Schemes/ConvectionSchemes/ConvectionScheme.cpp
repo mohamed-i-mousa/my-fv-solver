@@ -20,6 +20,7 @@
 #include "Upwind.h"
 #include "SecondOrderUpwind.h"
 #include "CentralDifference.h"
+#include "LUST.h"
 
 // ***************************** Runtime Selection ****************************
 
@@ -43,6 +44,11 @@ std::unique_ptr<ConvectionScheme> ConvectionScheme::create
         return std::make_unique<SecondOrderUpwind>();
     }
 
+    if (schemeName == "LUST")
+    {
+        return std::make_unique<LUST>();
+    }
+
     RuntimeSelection::unknownSelection
     (
         "convection scheme",
@@ -54,5 +60,5 @@ std::unique_ptr<ConvectionScheme> ConvectionScheme::create
 
 NameList ConvectionScheme::availableSchemes()
 {
-    return {"Upwind", "CentralDifference", "SecondOrderUpwind"};
+    return {"Upwind", "CentralDifference", "SecondOrderUpwind", "LUST"};
 }

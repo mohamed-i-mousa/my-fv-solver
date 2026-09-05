@@ -305,6 +305,7 @@ An unknown name is rejected at startup.
 - `Upwind`: First-order upwind (stable, diffusive)
 - `CentralDifference`: Second-order central difference (accurate, may oscillate)
 - `SecondOrderUpwind`: Second-order upwind (balance of accuracy and stability)
+- `LUST`: Linear-Upwind Stabilized Transport (75% CentralDifference + 25% SecondOrderUpwind; low numerical dissipation with bounded stability, recommended for LES)
 
 ### 7. velocityCoupling (Optional)
 Selects the pressure–velocity coupling algorithm. The two algorithms are tied

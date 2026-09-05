@@ -42,8 +42,8 @@ following the OpenFOAM convention.
     `BCLoader.h/.cpp`
 - **`src/Schemes/`**: discretization schemes, grouped by family
   - `ConvectionSchemes/`: `ConvectionScheme.h/.cpp` (abstract base + runtime selection) plus one
-    header/implementation pair per concrete scheme: `UpwindScheme.h/.cpp`,
-    `CentralDifferenceScheme.h/.cpp`, `SecondOrderUpwindScheme.h/.cpp`
+    header/implementation pair per concrete scheme: `Upwind.h/.cpp`,
+    `CentralDifference.h/.cpp`, `SecondOrderUpwind.h/.cpp`, `LUST.h/.cpp`
   - `GradientSchemes/`: `GradientScheme.h/.cpp` (abstract base),
     `LeastSquares.h/.cpp` (least-squares gradient scheme)
   - `Interpolation/`: `LinearInterpolation.h`
@@ -326,6 +326,14 @@ else
 
 **Properties**: Second-order upwind reconstruction using the limited cell
 gradients supplied by `GradientScheme`; there is no separate TVD flux limiter.
+
+#### Linear-Upwind Stabilized Transport (LUST)
+**Implementation**: Blended second-order scheme
+- Blends second-order central differencing (CDS) and second-order linear upwind (SOU/LUD):
+  $$\phi_f = \alpha \, \phi_{f,\text{CDS}} + (1 - \alpha) \, \phi_{f,\text{LUD}}$$
+- Standard blending factor: $\alpha = 0.75$ (75% CDS + 25% LUD).
+- **Correction Term**: $\alpha \times \text{correction}_{\text{CDS}} + (1 - \alpha) \times \text{correction}_{\text{SOU}}$
+- **Properties**: Low numerical dissipation suitable for LES while damping high-frequency dispersion errors.
 
 ### Diffusion treatment
 **Orthogonal Component**: Handled implicitly via the over-relaxed vector

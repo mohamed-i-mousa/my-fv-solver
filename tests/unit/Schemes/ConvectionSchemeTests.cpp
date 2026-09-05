@@ -26,6 +26,7 @@
 #include "Upwind.h"
 #include "SecondOrderUpwind.h"
 #include "CentralDifference.h"
+#include "LUST.h"
 #include "Mesh.h"
 #include "Face.h"
 #include "Vector.h"
@@ -64,7 +65,7 @@ namespace
 
 } // namespace
 
-// ***************************** Upwind Correction ***************************
+// ***************************** Upwind Correction ****************************
 
 TEST_CASE("Upwind correction is always zero", "[schemes]")
 {
@@ -104,7 +105,7 @@ TEST_CASE("Upwind correction is always zero", "[schemes]")
     );
 }
 
-// *************************** Second Order Upwind ***************************
+// **************************** Second Order Upwind ***************************
 
 TEST_CASE("SecondOrderUpwind uses the upwind gradient", "[schemes]")
 {
@@ -147,7 +148,7 @@ TEST_CASE("SecondOrderUpwind uses the upwind gradient", "[schemes]")
     );
 }
 
-// **************************** Central Difference ***************************
+// **************************** Central Difference ****************************
 
 TEST_CASE("CentralDifference vanishes for constant phi", "[schemes]")
 {
@@ -171,7 +172,70 @@ TEST_CASE("CentralDifference vanishes for constant phi", "[schemes]")
     );
 }
 
-// ***************************** Runtime Selection ***************************
+// *********************************** LUST ***********************************
+
+TEST_CASE("LUST blends CDS and SecondOrderUpwind", "[schemes]")
+{
+    const TestMesh box(2, 1, 1);
+    const Face& face = internalFace(box.mesh());
+
+    ScalarField phi;
+    phi[0] = S(2.0);
+    phi[1] = S(6.0);
+
+    const Vector gradP(S(3.0), S(0.0), S(0.0));
+    const Vector gradN(S(1.0), S(0.0), S(0.0));
+
+    const CentralDifference cd;
+    const SecondOrderUpwind so;
+    const LUST lustDefault; // alpha = 0.75
+    const LUST lustPureCDS(S(1.0));
+    const LUST lustPureLUD(S(0.0));
+
+    const Scalar flowPos = S(4.0);
+    const Scalar corrCD = cd.correction(face, phi, gradP, gradN, flowPos);
+    const Scalar corrSO = so.correction(face, phi, gradP, gradN, flowPos);
+    const Scalar corrLUST =
+        lustDefault.correction(face, phi, gradP, gradN, flowPos);
+
+    // Assert exact linear combination: 0.75 * CDS + 0.25 * LUD
+    const Scalar expectedLUST = S(0.75) * corrCD + S(0.25) * corrSO;
+    REQUIRE_THAT
+    (
+        corrLUST,
+        WithinRel(expectedLUST, TestTolerances::relTight)
+    );
+
+    // alpha = 1.0 matches CDS exactly
+    REQUIRE_THAT
+    (
+        lustPureCDS.correction(face, phi, gradP, gradN, flowPos),
+        WithinRel(corrCD, TestTolerances::relTight)
+    );
+
+    // alpha = 0.0 matches SecondOrderUpwind exactly
+    REQUIRE_THAT
+    (
+        lustPureLUD.correction(face, phi, gradP, gradN, flowPos),
+        WithinRel(corrSO, TestTolerances::relTight)
+    );
+
+    // Negative flow rate
+    const Scalar flowNeg = S(-4.0);
+    const Scalar corrCDNeg = cd.correction(face, phi, gradP, gradN, flowNeg);
+    const Scalar corrSONeg = so.correction(face, phi, gradP, gradN, flowNeg);
+    const Scalar corrLUSTNeg =
+        lustDefault.correction(face, phi, gradP, gradN, flowNeg);
+
+    const Scalar expectedLUSTNeg = S(0.75) * corrCDNeg + S(0.25) * corrSONeg;
+    REQUIRE_THAT
+    (
+        corrLUSTNeg,
+        WithinRel(expectedLUSTNeg, TestTolerances::relTight)
+    );
+}
+
+// ***************************** Runtime Selection ****************************
 
 TEST_CASE("Convection scheme factory", "[schemes]")
 {
@@ -185,4 +249,5 @@ TEST_CASE("Convection scheme factory", "[schemes]")
     REQUIRE(contains(names, "Upwind"));
     REQUIRE(contains(names, "CentralDifference"));
     REQUIRE(contains(names, "SecondOrderUpwind"));
+    REQUIRE(contains(names, "LUST"));
 }

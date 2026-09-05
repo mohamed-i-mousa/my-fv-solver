@@ -22,7 +22,7 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 
 - **Collocated Grid**: Uses Rhie-Chow face-velocity interpolation to prevent pressure checkerboarding
 
-- **Multiple Convection Schemes**: Upwind (UDS), Second-Order Upwind (SOU), and Central-Difference (CDS) convection schemes with deferred-correction approach to improve stability
+- **Multiple Convection Schemes**: Upwind (UDS), Second-Order Upwind (SOU), Central-Difference (CDS), and LUST (Linear-Upwind Stabilized Transport) convection schemes with deferred-correction approach to improve stability
 
 - **Gradient Reconstruction**: Weighted least-squares cell-centered gradients
 
