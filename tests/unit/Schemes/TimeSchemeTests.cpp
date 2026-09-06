@@ -129,18 +129,64 @@ TEST_CASE("crankNicolson with coeff 0 matches implicitEuler", "[schemes]")
     REQUIRE(crankFull.isTransient() == true);
 }
 
+// ************************** Second Order Implicit **************************
+
+TEST_CASE("secondOrderImplicit startup and BDF2 coefficients", "[schemes]")
+{
+    SecondOrderImplicit scheme;
+
+    REQUIRE(scheme.isTransient() == true);
+    REQUIRE(scheme.hasPrevPrevStep() == false);
+
+    // Step 1 startup (Backward Euler): V/dt = 2/0.5 = 4, source = 4 * 3 = 12
+    const TimeContribution c1 =
+        scheme.coefficients(S(2.0), S(0.5), S(3.0), S(0.0));
+
+    REQUIRE(c1.diag == S(4.0));
+    REQUIRE(c1.source == S(12.0));
+
+    // End of step 1: updateDdtPrevStep rolls phi^n (3.0) to become phi^{n-1}
+    const Scalar rolled =
+        scheme.updateDdtPrevStep(S(2.0), S(0.5), S(4.0), S(3.0), S(0.0));
+
+    REQUIRE(rolled == S(3.0));
+    REQUIRE(scheme.hasPrevPrevStep() == true);
+
+    // Step 2 (BDF2): phi^n = 4.0, phi^{n-1} = 3.0
+    //   diag   = 1.5 * V/dt = 1.5 * 4 = 6
+    //   source = V/dt * (2.0 * phi^n - 0.5 * phi^{n-1})
+    //          = 4 * (2*4 - 0.5*3) = 4 * (8 - 1.5) = 4 * 6.5 = 26
+    const TimeContribution c2 =
+        scheme.coefficients(S(2.0), S(0.5), S(4.0), S(3.0));
+
+    REQUIRE_THAT(c2.diag, WithinRel(S(6.0), TestTolerances::relTight));
+    REQUIRE_THAT(c2.source, WithinRel(S(26.0), TestTolerances::relTight));
+
+    // Reset restores startup mode
+    scheme.reset();
+    REQUIRE(scheme.hasPrevPrevStep() == false);
+    const TimeContribution cReset =
+        scheme.coefficients(S(2.0), S(0.5), S(3.0), S(0.0));
+    REQUIRE(cReset.diag == S(4.0));
+    REQUIRE(cReset.source == S(12.0));
+}
+
 // ****************************** Runtime Selection ***************************
 
-TEST_CASE("factory lists the three schemes", "[schemes]")
+TEST_CASE("factory lists the schemes including secondOrderImplicit", "[schemes]")
 {
-    const std::unique_ptr<TimeScheme> scheme =
+    const std::unique_ptr<TimeScheme> euler =
         TimeScheme::create("implicitEuler");
+    REQUIRE(euler->isTransient() == true);
 
-    REQUIRE(scheme->isTransient() == true);
+    const std::unique_ptr<TimeScheme> secondEuler =
+        TimeScheme::create("secondOrderImplicit");
+    REQUIRE(secondEuler->isTransient() == true);
 
     const NameList schemes = TimeScheme::availableSchemes();
 
     REQUIRE(contains(schemes, "steadyState"));
     REQUIRE(contains(schemes, "implicitEuler"));
     REQUIRE(contains(schemes, "CrankNicolson"));
+    REQUIRE(contains(schemes, "secondOrderImplicit"));
 }
