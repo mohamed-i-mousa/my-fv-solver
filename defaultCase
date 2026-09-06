@@ -244,7 +244,7 @@ velocityCoupling
 // ============================================================================
 time
 {
-    // Options: steadyState, implicitEuler, CrankNicolson
+    // Options: steadyState, implicitEuler, CrankNicolson, secondOrderImplicit
     timeScheme          implicitEuler;
 
     timeStep            0.1;        // Time step size [s]

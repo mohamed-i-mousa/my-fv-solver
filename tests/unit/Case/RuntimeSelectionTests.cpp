@@ -70,7 +70,7 @@ TEST_CASE("Convection-scheme selection", "[selection]")
     }
 }
 
-// ****************************** Time Schemes *******************************
+// ******************************* Time Schemes *******************************
 
 TEST_CASE("Time-scheme selection", "[selection]")
 {
@@ -78,6 +78,7 @@ TEST_CASE("Time-scheme selection", "[selection]")
     REQUIRE(contains(names, "steadyState"));
     REQUIRE(contains(names, "implicitEuler"));
     REQUIRE(contains(names, "CrankNicolson"));
+    REQUIRE(contains(names, "secondOrderImplicit"));
 
     for (const Name& name : names)
     {

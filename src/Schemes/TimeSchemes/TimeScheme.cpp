@@ -20,6 +20,7 @@
 #include "SteadyState.h"
 #include "ImplicitEuler.h"
 #include "CrankNicolson.h"
+#include "SecondOrderImplicit.h"
 
 // **************************** Runtime Selection ****************************
 
@@ -44,6 +45,11 @@ std::unique_ptr<TimeScheme> TimeScheme::create
         return std::make_unique<CrankNicolson>(CrankNicolsonCoeff);
     }
 
+    if (schemeName == "secondOrderImplicit")
+    {
+        return std::make_unique<SecondOrderImplicit>();
+    }
+
     RuntimeSelection::unknownSelection
     (
         "time scheme",
@@ -55,5 +61,11 @@ std::unique_ptr<TimeScheme> TimeScheme::create
 
 NameList TimeScheme::availableSchemes()
 {
-    return {"steadyState", "implicitEuler", "CrankNicolson"};
+    return
+    {
+        "steadyState",
+        "implicitEuler",
+        "CrankNicolson",
+        "secondOrderImplicit"
+    };
 }

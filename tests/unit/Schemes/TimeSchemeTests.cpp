@@ -25,6 +25,7 @@
 #include "SteadyState.h"
 #include "ImplicitEuler.h"
 #include "CrankNicolson.h"
+#include "SecondOrderImplicit.h"
 #include "StringTypes.h"
 #include "TestTolerances.h"
 

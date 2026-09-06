@@ -18,7 +18,7 @@ A 3D incompressible CFD solver implementing the SIMPLE algorithm with k-omega SS
 ### Core Capabilities
 - **3D Incompressible Flow**: Solves momentum equations with the pressure correction via the SIMPLE algorithm
 
-- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson time schemes using a fixed number of PISO outer correctors per step. Selected by the `time` case section; transient runs append every written step into one temporal `.vtkhdf` file (geometry stored once)
+- **Steady-state and Transient (URANS)**: Runs as a steady SIMPLE solve or runs a transient simulation with implicit Euler / Crank-Nicolson / second-order implicit time schemes using a fixed number of PISO outer correctors per step. Selected by the `time` case section; transient runs append every written step into one temporal `.vtkhdf` file (geometry stored once)
 
 - **Collocated Grid**: Uses Rhie-Chow face-velocity interpolation to prevent pressure checkerboarding
 

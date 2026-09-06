@@ -49,7 +49,7 @@ following the OpenFOAM convention.
   - `Interpolation/`: `LinearInterpolation.h`
   - `TimeSchemes/`: `TimeScheme.h/.cpp` (abstract base + runtime selection)
     plus one header per scheme: `SteadyState.h`, `ImplicitEuler.h`,
-    `CrankNicolson.h`, each reporting the d/dt contribution to the implicit
+    `CrankNicolson.h`, `SecondOrderImplicit.h`, each reporting the d/dt contribution to the implicit
     diagonal and explicit source
 - **`src/LinearSystem/`**: algebraic system assembly and solving
   - `Matrix.h/.cpp`, `LinearSolvers.h/.cpp`, `TransportEquation.h`

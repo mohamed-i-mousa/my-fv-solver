@@ -240,8 +240,8 @@ fixed number of PISO outer correctors per step.
 ```cpp
 time
 {
-    // Options: steadyState, implicitEuler, CrankNicolson
-    timeScheme          implicitEuler;
+    // Options: steadyState, implicitEuler, CrankNicolson, secondOrderImplicit
+    timeScheme          secondOrderImplicit;
 
     timeStep            0.1;        // Time step size [s]
     totalTime           10;         // Total simulated time [s]
@@ -258,6 +258,8 @@ time
   `CrankNicolsonCoeff`: `1.0` is pure Crank-Nicolson and
   `0.0` collapses to implicit Euler; values around `0.5`-`0.9` trade accuracy
   for stability.
+- `secondOrderImplicit`: Three-time-level second-order
+  backward implicit scheme. Unconditionally stable, recommended for LES. Automatically uses first-order Euler on the initial startup time step.
 
 **Notes**:
 - `timeStep` and `totalTime` are **required** and must be positive whenever a
